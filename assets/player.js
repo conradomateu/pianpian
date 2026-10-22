@@ -347,7 +347,11 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape') dds().forEach(d => d.open = false); });
     const pl = q('.pl'), trBtn = q('[data-transcript]');
     const showTranscript = on => { pl.classList.toggle('notr', !on); trBtn.classList.toggle('on', on); };
-    trBtn.onclick = () => { showTranscript(pl.classList.contains('notr')); save(); };
+    trBtn.onclick = () => {                     // the video and the buttons glide to their new place together
+      const moving = [stage, ...q('.pbar').children];
+      (window.Kit ? Kit.flip : (_, f) => f())(moving, () => showTranscript(pl.classList.contains('notr')), [stage]);
+      save();
+    };
     q('[data-vfull]').onclick = fullscreen;
     const playPause = () => v.paused ? v.play() : v.pause();
     q('[data-play]').onclick = playPause;

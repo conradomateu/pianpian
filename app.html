@@ -11,25 +11,27 @@
 <style>
 /* one screen: the library on the left (it folds away), the video and its menus on the right */
 body { overflow:hidden; }
-.shell { display:grid; grid-template-columns:auto minmax(0,1fr); height:100vh; }
+.shell { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); height:100vh; overflow:hidden; }
 .side { width:300px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:12px; padding:12px; overflow:auto; background:var(--bg); }
-.side > * { width:275px; flex-shrink:0; }            /* fixed width, so folding slides the content instead of squeezing it */
+.side > * { flex-shrink:0; }
 .side > .lib { flex-shrink:1; }
-.side-closed .side { width:0; opacity:0; padding-left:0; padding-right:0; border-right-color:transparent; overflow:hidden; pointer-events:none; }
-.side-closed .side > * { transform:translateX(-24px); }
-/* motion: on only after the first paint, so a folded library doesn't animate shut on load
-   (width is animated, not the grid columns: browsers jump between grid tracks instead of sliding) */
-.ready .side { transition:width .32s var(--ease), padding .32s var(--ease), opacity .2s ease .14s, border-color .2s ease .14s; }
-.ready.side-closed .side { transition:opacity .14s ease, border-color .14s ease, width .3s var(--ease) .08s, padding .3s var(--ease) .08s; }
+.main { grid-column:2; }
+/* folding the library: it leaves the layout at once and slides out on top, while the video side
+   glides into the freed space (Kit.flip below). Only transform and opacity animate.
+   Motion is on only after the first paint, so a folded library doesn't animate shut on load. */
+.side { will-change:transform; contain:paint; }      /* its own layer, ready before it moves: no first-frame stall */
+.side-closed .side { position:absolute; top:0; bottom:0; left:0; z-index:5; transform:translateX(-100%); opacity:0; pointer-events:none; }
+/* it moves like a solid drawer: opening shows it at once, closing keeps it opaque until it is nearly out */
+.ready .side { transition:transform .34s var(--ease), opacity .12s ease; }
+.ready.side-closed .side { transition:transform .34s var(--ease), opacity .14s ease .2s; }
 .ready .side > * { transition:transform .32s var(--ease); }
 #show { animation:pp-fade .25s ease; }
 .main { overflow:auto; padding:12px 18px 30px; min-width:0; }
-@media (max-width:900px) { body { overflow:auto; } .shell { grid-template-columns:1fr; height:auto; } .side { width:auto; border-right:0; border-bottom:1px solid var(--line); }
-  .side > * { width:auto; } .side-closed .side { display:none; } .main { overflow:visible; } }
+@media (max-width:900px) { body { overflow:auto; } .shell { grid-template-columns:1fr; height:auto; overflow:visible; } .side { width:auto; border-right:0; border-bottom:1px solid var(--line); }
+  .main { grid-column:1; overflow:visible; } .side-closed .side { display:none; } }
 
-.sidehead { display:flex; align-items:center; gap:9px; }
-.sidehead .brand { font:800 18px var(--display); letter-spacing:-.02em; margin-right:auto; }
-.sidehead .brand small { font:500 11px var(--mono); color:var(--muted); letter-spacing:0; margin-left:4px; }
+.sidehead { display:flex; align-items:center; justify-content:space-between; }
+.sidehead .logo { display:block; margin-left:-3px; }
 .add { display:grid; gap:7px; }
 .addrow { display:flex; gap:6px; }
 .addrow .field { padding:8px 10px; }
@@ -75,8 +77,7 @@ body { overflow:hidden; }
 <div class="shell">
   <aside class="side" id="side">
     <div class="sidehead">
-      <img src="design/icons/20-pianpian-watermelon.svg" alt="" width="28" height="28">
-      <span class="brand">片片<small>pianpian</small></span>
+      <img class="logo" src="design/icons/20-pianpian-watermelon.svg" alt="Pianpian 片片" title="Pianpian 片片" width="30" height="30">
       <button class="ib" id="hide" type="button" title="hide the library (B)">⟨</button>
     </div>
 
@@ -156,13 +157,16 @@ function side(open) {
   $('show').hidden = open;
   try { localStorage.setItem('pp-side', open ? 'open' : 'closed'); } catch {}
 }
-$('hide').onclick = () => side(false);
-$('show').onclick = () => side(true);
+// the title, the note, the video and every button glide together into the space the library frees
+const gliding = () => [$('vtitle'), $('vsrc'), $('notes'), player.stage, ...document.querySelectorAll('.pbar > *, .pbar [data-extra] > *'), document.querySelector('.transcript')];
+const fold = open => Kit.flip(gliding(), () => side(open), [player.stage]);
+$('hide').onclick = () => fold(false);
+$('show').onclick = () => fold(true);
 side(!document.documentElement.classList.contains('side-closed'));
-requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('ready')));
+setTimeout(() => document.documentElement.classList.add('ready'), 80);   // after the first paint (rAF can stall in a hidden window)
 document.addEventListener('keydown', e => {
   if ((e.key === 'b' || e.key === 'B') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !e.metaKey && !e.ctrlKey)
-    side(document.documentElement.classList.contains('side-closed'));
+    fold(document.documentElement.classList.contains('side-closed'));
 });
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */

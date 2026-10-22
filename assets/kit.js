@@ -30,5 +30,25 @@
     if (btn) btn.addEventListener('click', () => { mode = MODES[(MODES.indexOf(mode) + 1) % 3]; setTheme(mode, btn); });
   });
 
-  window.Kit = { copy, SERVER: 'http://127.0.0.1:8770' };
+  /* FLIP: change the layout at once, then glide every element from where it was to where it is.
+     Only transforms animate, so the video and the buttons move together and nothing is laid out
+     again on each frame. Elements in `scale` also grow or shrink (the video); the rest only move. */
+  const EASE = 'cubic-bezier(.2,.8,.2,1)', DURATION = 340;
+  function flip(targets, change, scale = []) {
+    const els = targets.filter(Boolean);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { change(); return; }
+    const before = new Map(els.map(e => [e, e.getBoundingClientRect()]));
+    change();
+    for (const e of els) {
+      const a = before.get(e), b = e.getBoundingClientRect();
+      if (!a.width || !b.width) continue;
+      const dx = a.left - b.left, dy = a.top - b.top;
+      const sx = scale.includes(e) ? a.width / b.width : 1, sy = scale.includes(e) ? a.height / b.height : 1;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.005 && Math.abs(sy - 1) < 0.005) continue;
+      e.animate([{ transformOrigin: '0 0', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+                 { transformOrigin: '0 0', transform: 'none' }], { duration: DURATION, easing: EASE });
+    }
+  }
+
+  window.Kit = { copy, flip, SERVER: 'http://127.0.0.1:8770' };
 })();
