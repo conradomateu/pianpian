@@ -1,0 +1,64 @@
+{
+ "mlx-community/whisper-large-v3-turbo": {
+  "modelscope": "2ea465385494dbe25b7d5a2ec15f2c4fdfe3e33b",
+  "huggingface": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb",
+  "files": [
+   {
+    "name": "config.json",
+    "size": 268,
+    "sha256": "b34fc29e4e11e0a25e812775dd67f4dd16fc2c8eb43d28ae25ff7d660ecb6379"
+   },
+   {
+    "name": "weights.safetensors",
+    "size": 1613977612,
+    "sha256": "951ed3fc1203e6a62467abb2144a96ce7eafca8fa77e3704fdb8635ff3e7f8a6"
+   }
+  ]
+ },
+ "mlx-community/Hy-MT2-1.8B-4bit": {
+  "modelscope": "a96c253b73995b50489db55256ae416f6fcc266d",
+  "huggingface": "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912",
+  "files": [
+   {
+    "name": "chat_template.jinja",
+    "size": 654,
+    "sha256": "b7491ec0e9c869dfce20f2176758099bf248d979dd05530ede99deb21698acee"
+   },
+   {
+    "name": "config.json",
+    "size": 1688,
+    "sha256": "63180daf56cf2ca15223b358eae0bcb5252b7fd4bfa2b2882b36e82f4c410da8"
+   },
+   {
+    "name": "generation_config.json",
+    "size": 221,
+    "sha256": "0e28667f1cb4c7b880b9223b2d87978f88e79ed7ae037de1021f826c18d4ed6f"
+   },
+   {
+    "name": "mlx_manifest.json",
+    "size": 375,
+    "sha256": "73de5f79e38fc86ec2a0a3a7e7ad830c049064b8de09686bb2c4de92a7819c35"
+   },
+   {
+    "name": "model.safetensors",
+    "size": 1007776125,
+    "sha256": "a9cecbc77050b86b2fa3df3a8941d34ed3585cdbcce07bd64b3da289d50537c6"
+   },
+   {
+    "name": "model.safetensors.index.json",
+    "size": 57380,
+    "sha256": "6026955be1656bf6cf7b9ffd56aac91c88287ba13fbab8b9f140655464b9de4b"
+   },
+   {
+    "name": "tokenizer.json",
+    "size": 9527287,
+    "sha256": "b475bbef1b0b2fd57dcb865332b546475bd1ede2deb3bb91bafd0c047a8a530a"
+   },
+   {
+    "name": "tokenizer_config.json",
+    "size": 359,
+    "sha256": "9c8fad86305966b62964ad3f4b56d00fb3234141028a31710ca312ba3e417cd9"
+   }
+  ]
+ }
+}

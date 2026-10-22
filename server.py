@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import engine  # noqa: E402  (next to this file: the engine's Python, the settings, the first-run setup)
 import report  # noqa: E402  (problem hints and reports)
+import updates  # noqa: E402  (a new app version, a fresh downloader)
 
 HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("pianpian")
@@ -126,6 +127,7 @@ class Job:
         self.id, self.label, self.cmd, self.cwd, self.env, self.video = Job._n, label, cmd, cwd, env or {}, video
         self.state, self.log, self.started, self.ended, self.code = "queued", [], None, None, None
         self.kind = "rebuild"
+        self.on_done = None                                   # called after a successful run
 
     def add(self, text):
         for part in re.split(r"[\r\n]+", text):
@@ -166,6 +168,8 @@ def worker():
             job.add(f"error: {e}")
             job.state = "failed"
         job.ended = time.time()
+        if job.state == "done" and job.on_done:
+            job.on_done()
         LOG.info("job %s %s: %s (%.0f s)", job.id, job.kind, job.state, job.ended - job.started)
         if job.state == "failed":                             # the whole log of a failure, for a report later
             LOG.info("job %s log:\n%s", job.id, "\n".join(job.log[-200:]))
@@ -259,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
                 return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": engine.STATE["engine"], "current": engine.STATE["current"],
-                                       "browsers": installed_browsers(), "busy": busy}, cors=True)
+                                       "browsers": installed_browsers(), "busy": busy, "update": UPDATE.get("app")}, cors=True)
             if path == "/api/videos":
                 return self.send_json(library())
             if m := re.fullmatch(r"/api/videos/([^/]+)", path):
@@ -371,13 +375,16 @@ class Handler(BaseHTTPRequestHandler):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
                 try:
-                    engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []])
+                    engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
                 except RuntimeError as e:
                     return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
                 os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())
                 return self.send_json(engine.SETUP.public())
+            if path == "/api/update-downloader":           # sites change; yt-dlp follows them
+                job = downloader_job()
+                return self.send_json(job.public()) if job else self.fail(409, "uv was not found, so the downloader can't be updated")
             if m := re.fullmatch(r"/api/videos/([^/]+)/rebuild", path):
                 return self.send_json(rebuild_job(m[1]).public())
             if m := re.fullmatch(r"/api/videos/([^/]+)/split", path):
@@ -427,6 +434,27 @@ def problem_report(q: dict) -> dict:
             "url": report.issue_url(report.REPO, title, problem["code"], details, sysline)}
 
 
+UPDATE: dict = {}                                            # {"app": {version, url, notes, download}} when one is out
+
+
+def downloader_job() -> "Job | None":
+    cmd = updates.update_ytdlp_cmd()
+    if not cmd:
+        return None
+    job = Job("Update the downloader (yt-dlp)", cmd, str(engine.data_dir()), engine.mirror_env())
+    job.kind, job.on_done = "update", updates.mark_ytdlp_updated
+    return enqueue(job)
+
+
+def keep_up_to_date() -> None:
+    """In the background: a new Pianpian (once a day), and the downloader (once a week)."""
+    while True:
+        UPDATE["app"] = updates.check_app(VERSION)
+        if engine.STATE["engine"] and updates.ytdlp_due() and not any(j.kind == "update" and j.state in ("queued", "running") for j in JOBS):
+            downloader_job()
+        time.sleep(6 * 3600)
+
+
 def installed_browsers() -> list[str]:
     """The browsers on this Mac that yt-dlp can borrow a Bilibili login from (Safari is always there)."""
     apps = [Path("/Applications"), Path.home() / "Applications"]
@@ -445,7 +473,7 @@ def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
         CFG["library"] = Path(library).expanduser().resolve()
     CFG["library"].mkdir(parents=True, exist_ok=True)
     os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())      # the pipeline's jobs find the models there
-    threading.Thread(target=engine.check, daemon=True).start()
+    threading.Thread(target=lambda: (engine.check(), keep_up_to_date()), daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)      # raises OSError if the port is taken
     threading.Thread(target=worker, daemon=True).start()
     return srv

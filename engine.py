@@ -159,10 +159,11 @@ class Setup:
         catalog = models.status()
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
-        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog,
+        os.environ["PIANPIAN_MODELS"] = str(models_dir())
+        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
                 "free": free_bytes(Path(cfg["data"])), "needed": not st["engine"] or not st["current"] or bool(missing)}
 
-    def start(self, library: str | None, data: str | None, want: list[str]) -> None:
+    def start(self, library: str | None, data: str | None, want: list[str], cleanup: bool = False) -> None:
         with self.lock:
             if self.state == "running":
                 raise RuntimeError("the setup is already running")
@@ -172,6 +173,7 @@ class Setup:
             self.steps += [{"id": m["id"], "label": m["about"], "state": "waiting", "done": 0, "total": m.get("size") or 0}
                            for m in models.status() if m["id"] in want]
             self.log.clear()
+        self.cleanup = cleanup
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
@@ -205,7 +207,7 @@ class Setup:
     def _run(self) -> None:
         try:
             self._say("checking which download sources are fastest from here")
-            net = mirrors()
+            net = mirror_env()
             for k, v in net.items():
                 self._say(f"  using the mirror {v}")
             env = {**net, "UV_PYTHON_INSTALL_DIR": str(data_dir() / "python"), "UV_NO_CACHE": "1", "UV_PYTHON_PREFERENCE": "only-managed",
@@ -231,6 +233,9 @@ class Setup:
                 self._step(s["id"], state="running")
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], {"PIANPIAN_MODELS": str(models_dir()), **net}, s["id"])
                 self._step(s["id"], state="done", done=s["total"])
+            if getattr(self, "cleanup", False):
+                os.environ["PIANPIAN_MODELS"] = str(models_dir())
+                self._say(f"deleted old models: {models.remove_unused() / 1e9:.1f} GB freed")
             with self.lock:
                 self.state = "done"
         except Exception as e:                                # shown on the page, with the log
@@ -262,6 +267,16 @@ def mirrors() -> dict:
     with ThreadPoolExecutor(4) as pool:
         timed = {k: (pool.submit(speed, a), pool.submit(speed, b), m) for k, (a, b, m) in SOURCES.items()}
         return {k: m for k, (a, b, m) in timed.items() if b.result() > 2 * a.result()}
+
+
+_MIRRORS: dict = {}
+
+
+def mirror_env() -> dict:
+    """mirrors(), timed once per run (the setup and the downloader update both use it)."""
+    if "env" not in _MIRRORS:
+        _MIRRORS["env"] = mirrors()
+    return _MIRRORS["env"]
 
 
 SETUP = Setup()

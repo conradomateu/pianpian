@@ -95,14 +95,18 @@ function renderPlan() {
     plan.models.map(m => `
     <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${m.ready || !chosen || chosen.includes(m.id) ? 'checked' : ''} ${m.ready ? 'disabled' : ''}>
       <span><b>${m.task === 'transcribe' ? 'Speech recognition' : 'English translation'}</b><small>${esc(m.about)}${m.task === 'transcribe' ? '. Needed when a video has no Chinese subtitles' : '. You can also translate by hand'}</small></span>
-      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already on this Mac' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('');
+      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already on this Mac' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('') +
+    (plan.old && plan.old.length ? `
+    <label class="item"><input type="checkbox" name="cleanup" checked><span><b>Delete old models</b><small>${plan.old.map(o => esc(o.name)).join(', ')}: replaced by this version</small></span>
+      <span class="sz">frees ${gb(plan.old.reduce((t, o) => t + o.bytes, 0))}</span></label>` : '');
   sum();
 }
 function sum() {
   const e = plan.engine, picked = [...$('plan').querySelectorAll('input[name=m]:checked:not(:disabled)')].map(i => i.value);
   const bytes = (e.engine && e.current ? 0 : plan.engineMB * 1e6) + plan.models.filter(m => picked.includes(m.id)).reduce((t, m) => t + (m.size || 0), 0);
-  $('sum').textContent = `${gb(bytes)} to download · ${gb(plan.free)} free`;
-  $('go').textContent = bytes ? `Install (${gb(bytes)})` : 'Continue';
+  const upd = e.engine && !e.current;                 // an update fetches only the packages that changed
+  $('sum').textContent = `${upd ? 'up to ' : ''}${gb(bytes)} to download · ${gb(plan.free)} free`;
+  $('go').textContent = !bytes ? 'Continue' : upd ? 'Update' : `Install (${gb(bytes)})`;
   $('go').disabled = bytes > plan.free;
 }
 $('plan').addEventListener('change', sum);
@@ -110,7 +114,7 @@ $('plan').onsubmit = async ev => {
   ev.preventDefault();
   const f = $('plan');
   lastBody = { library: f.library.value.trim(), data: f.data.value.trim(),
-               models: [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value) };
+               models: [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value), cleanup: !!(f.cleanup && f.cleanup.checked) };
   start();
 };
 async function start() {
@@ -143,7 +147,8 @@ async function poll() {
   $('last').textContent = p.log[p.log.length - 1] || '';
   const log = $('log'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
   log.textContent = p.log.join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
-  $('runtitle').textContent = { running: 'Installing', done: 'Ready', failed: 'The setup stopped' }[p.state] || 'Installing';
+  const verb = plan && plan.engine.engine && !plan.engine.current ? 'Updating' : 'Installing';
+  $('runtitle').textContent = { running: verb, done: 'Ready', failed: 'The setup stopped' }[p.state] || verb;
   if (p.state === 'failed') {
     $('err').hidden = false; $('err').textContent = p.error + '. Try again: downloads carry on where they stopped.';
     $('retry').hidden = false; $('report').hidden = false; if ($('log').hidden) $('logbtn').click();
@@ -170,6 +175,10 @@ if (window.pywebview && window.pywebview.api) enablePickers(); else window.addEv
   try { plan = await api('/api/setup'); } catch (e) { document.querySelector('.head p').textContent = 'The app server is not answering: ' + e.message; return; }
   if (plan.progress.state === 'running') { $('run').hidden = false; return poll(); }
   if (!plan.needed && !new URLSearchParams(location.search).has('again')) { location.href = 'app.html'; return; }
+  if (plan.engine.engine && !plan.engine.current) {     // after an app update: the same page, other words
+    document.querySelector('.head h1').textContent = 'An update for Pianpian';
+    document.querySelector('.head p').textContent = 'This version needs newer tools. It only downloads what changed.';
+  }
   renderPlan(); $('plan').hidden = false;
 })();
 </script>

@@ -63,6 +63,9 @@ body { overflow:hidden; }
 .job .lbl { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .job .last { font:11.5px var(--mono); color:var(--muted); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .job .hint { margin-top:8px; font-size:12.5px; line-height:1.45; color:var(--fg-2); }
+.upd { padding:10px 12px; display:grid; gap:8px; border-color:var(--red); }
+.upd .top { display:flex; justify-content:space-between; align-items:center; font-size:13px; }
+.upd .btn { padding:4px 10px; font-size:12px; }
 .job .hint b { font:600 10.5px var(--mono); color:var(--red-fg); margin-right:4px; }
 .job pre.log { margin-top:8px; max-height:220px; overflow:auto; font-size:11px; border-radius:var(--r-sm); white-space:pre-wrap; word-break:break-all; }
 
@@ -123,7 +126,13 @@ body { overflow:hidden; }
       <div class="row" style="margin-top:8px"><button class="mini" id="logbtn" type="button">log</button><span class="muted mono" style="font-size:11px" id="jobtime"></span>
         <span style="flex:1"></span><button class="mini" data-report type="button" hidden title="opens GitHub's bug form, filled in: you read it there before sending">report</button>
         <button class="mini" data-copyreport type="button" hidden title="copy the same details, to send another way">copy details</button></div>
+      <button class="btn primary" id="ytdlpbtn" type="button" hidden style="margin-top:8px;padding:4px 10px;font-size:12px">Update the downloader</button>
       <pre class="log" id="joblog" hidden></pre>
+    </div>
+
+    <div class="card upd" id="upd" hidden>
+      <div class="top"><b id="updtitle"></b><button class="mini" id="upddismiss" type="button" title="hide until the next version">×</button></div>
+      <div class="row"><a class="btn primary" id="upddl" target="_blank" rel="noopener">Download</a><a class="btn" id="updnotes" target="_blank" rel="noopener">What's new ↗</a></div>
     </div>
 
     <div class="libh"><h4>Library</h4><span class="muted mono" style="font-size:10.5px" id="libinfo"></span></div>
@@ -233,9 +242,24 @@ async function status() {
       sel.onchange = () => { try { localStorage.setItem('pp-browser', sel.value); } catch {} };
     }
     $('libinfo').textContent = DEMO ? 'demo' : s.library.replace(/^\/Users\/[^/]+/, '~');
+    showUpdate(s.update);
     if (DEMO) { $('status').className = 'dot ok'; $('status').textContent = 'demo'; }
   } catch { $('status').className = 'dot off'; $('status').textContent = 'server stopped'; }
 }
+
+/* ---------- a new version: one quiet card, hidden for that version once dismissed ---------- */
+function showUpdate(u) {
+  let seen = ''; try { seen = localStorage.getItem('pp-update-seen') || ''; } catch {}
+  $('upd').hidden = !u || u.version === seen;
+  if (!u) return;
+  $('updtitle').textContent = `Pianpian ${u.version} is out`;
+  $('updnotes').href = u.url;
+  $('upddl').href = u.download || u.url;
+  $('upddismiss').onclick = () => { try { localStorage.setItem('pp-update-seen', u.version); } catch {} $('upd').hidden = true; };
+}
+$('ytdlpbtn').onclick = async () => {
+  try { await api('/api/update-downloader', {}); poll(); } catch (err) { $('addmsg').textContent = err.message; }
+};
 
 /* ---------- library ---------- */
 const CHIPS = [['zh', '中文'], ['pinyin', '拼音'], ['en', 'EN']];
@@ -459,6 +483,7 @@ async function poll() {
     $('jobhint').hidden = !pr;
     if (pr) $('jobhint').innerHTML = `<b>${esc(pr.code)}</b>${esc(pr.hint || 'Something went wrong: the log below says where.')}`;
     box.querySelectorAll('[data-report],[data-copyreport]').forEach(b => { b.hidden = !pr; b.dataset.job = active.id; });
+    $('ytdlpbtn').hidden = !(pr && pr.code === 'DL-SITE-CHANGED');
   } else box.hidden = true;
   const working = jobs.some(j => j.state === 'running' || j.state === 'queued');
   if (finished.length || working) await loadLibrary();

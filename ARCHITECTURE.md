@@ -19,14 +19,31 @@ straight from disk still plays video files dropped on it; it only needs the serv
   mlx-lm. torch is left out on purpose (mlx-whisper lists it for a conversion tool the app never uses),
   which keeps the engine at about 700 MB.
 
-`server.ENGINE_PY` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
+`engine.python()` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
 `~/Library/Application Support/Pianpian/engine`, the repository's `.venv` (`uv sync --group runtime`),
 then the Python running the server.
+
+## First run, updates and problems
+
+- `engine.py` holds the paths and settings (`~/Library/Application Support/Pianpian/config.json`) and runs
+  the setup that `setup.html` shows: Python 3.12 and the packages pinned with hashes in
+  `pipeline/requirements.txt`, the dictionary, then the models you pick. Each source is timed against its
+  mirror in mainland China and the faster one is used. The engine remembers which requirements it was
+  installed from, so a release that changes them sends you back to the setup page, which then says
+  "An update for Pianpian" and only fetches what changed (`uv pip sync`).
+- `updates.py` asks GitHub for the latest release at most once a day and shows a card in the library
+  when there is a newer one. yt-dlp is updated on its own at most once a week, and from the job card
+  when a download fails because the site changed.
+- `report.py` turns a failed job's log into a short code and a hint, and builds the Report link: GitHub's
+  bug form filled in with redacted details (no home folder, file names, link paths, cookies or
+  transcript). Nothing is sent until the person presses Submit on GitHub. Logs live in
+  `~/Library/Logs/Pianpian`.
 
 ## Models
 
 `pipeline/models.py` downloads the two models once into `~/.cache/mandarin-kit/models`
-(or `$PIANPIAN_MODELS`): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB). Each file comes
+(or `$PIANPIAN_MODELS`): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB), pinned file by file
+in `pipeline/models.lock.json` (`dev.py lock`). Each file comes
 from ModelScope first, which is fast from mainland China, then Hugging Face, and is checked against the
 size and SHA-256 Hugging Face publishes. Stopped downloads resume. A model already in the Hugging Face
 cache is used where it is. Progress goes to stdout as `@progress {json}` lines.
