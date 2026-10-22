@@ -220,7 +220,7 @@ document.addEventListener('keydown', e => {
 });
 let firstVisit = false;
 try { firstVisit = !localStorage.getItem('pp-left'); } catch {}
-setPanel('left', isOpen('left') && !(DEMO && firstVisit && innerWidth < 1100), false);   // a small demo frame: room for the video
+setPanel('left', isOpen('left') && !(DEMO && firstVisit), false);   // the demo opens on the video: one video, no library to browse
 setPanel('right', isOpen('right'), false);
 setTimeout(() => document.documentElement.classList.add('ready'), 80);   // motion only after the first paint
 
@@ -301,26 +301,6 @@ async function select(id, keepPlayer) {
     if (t) player.video.addEventListener('loadedmetadata', () => { player.video.currentTime = t; }, { once: true });
   }
 }
-// the website's "Try it in the demo" buttons call this (same origin): go to a moment and show one feature
-if (DEMO) window.demoShow = async what => {
-  const at = { word: 13.2, practice: 24.6, grammar: 13.2 }[what], v = player.video;
-  for (let i = 0; i < 80 && !(v.readyState >= 1 && v.duration); i++) await new Promise(r => setTimeout(r, 100));
-  document.querySelectorAll('details.dd[open]').forEach(d => { d.open = false; });
-  v.pause();
-  if (Math.abs(v.currentTime - at) > 0.05) await new Promise(r => { v.addEventListener('seeked', r, { once: true }); v.currentTime = at; });
-  await new Promise(r => setTimeout(r, 150));                        // the subtitles redraw after the seek
-  const menu = name => [...document.querySelectorAll('details.dd > summary')].find(x => x.textContent.trim() === name).parentElement;
-  if (what === 'word') {                                             // pin a word, as a click on it does: it stays lit with its card
-    const w = [...player.stage.querySelectorAll('.w')].find(e => e.textContent === '三个');
-    if (w) w.click();
-  } else if (what === 'practice') {
-    menu('Playback').open = true;
-    const loop = document.querySelector('[data-loop]');
-    if (!loop.classList.contains('on')) loop.click();                  // loop the line, and play it
-    v.play().catch(() => {});
-  } else if (what === 'grammar') menu('Grammar').open = true;
-};
-
 // the demo answers buttons that need the engine with one line and the download
 function demoNote() {
   $('notes').innerHTML = `<div class="note">${DEMO_SAYS} <a class="btn primary" href="${GET_APP}" target="_blank" rel="noopener">Download for Mac</a></div>`;
