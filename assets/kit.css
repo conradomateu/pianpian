@@ -12,6 +12,7 @@
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
   --tr-pinyin:#8A5E06; --tr-en:#2A6496; --tr-other:#2F7A4C;   /* transcript lines on paper: dark enough to read */
   --tone1:#C2352C; --tone2:#A86500; --tone3:#1B7A50; --tone4:#2B5FA6; --tone5:#8A7F74;   /* pinyin tones on paper */
+  --r-who:#2563A8; --r-when:#7B4DB8; --r-where:#0F7C80; --r-how:#B03A78; --r-what:#6B6259;   /* parts of a sentence (cheat sheet) */
   --r:12px; --r-sm:8px;
   --ease:cubic-bezier(.2,.8,.2,1);                  /* quick start, soft landing: every slide and fold uses it */
 }
@@ -23,6 +24,7 @@
   --amber:#F5B23C; --amber-fg:#FFC96B; --amber-tint:#2B2113;
   --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
   --tone1:#FF7B70; --tone2:#F5B23C; --tone3:#46D39A; --tone4:#79B0FF; --tone5:#9A9086;
+  --r-who:#7FB2FF; --r-when:#C3A3F5; --r-where:#5FD4D6; --r-how:#F08CC0; --r-what:#B8AFA3;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg:#14120F; --surface:#1C1916; --surface-2:#24201C; --fg:#F2EDE4; --fg-2:#C4BBAE; --muted:#8E8479;
@@ -32,6 +34,7 @@
   --amber:#F5B23C; --amber-fg:#FFC96B; --amber-tint:#2B2113;
   --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
   --tone1:#FF7B70; --tone2:#F5B23C; --tone3:#46D39A; --tone4:#79B0FF; --tone5:#9A9086;
+  --r-who:#7FB2FF; --r-when:#C3A3F5; --r-where:#5FD4D6; --r-how:#F08CC0; --r-what:#B8AFA3;
 } }
 
 /* ---------- base ---------- */
@@ -258,7 +261,13 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .gr .order { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; font:500 10.5px var(--mono); color:var(--muted); }
 .gr .order.zh { font:600 15px var(--body); color:var(--fg); }
 .gr .order span { padding:3px 4px; border-radius:6px; background:var(--surface-2); text-align:center; }
-.gr .order.zh span:nth-child(5) { background:var(--fg); color:var(--bg); }          /* the verb */
+/* each part of the sentence has its colour (blue who · purple when · teal where · pink with/how · bold verb · grey what),
+   chosen apart from the tense colours (green past · amber future · red now) */
+.gr i[class^="r-"] { font-style:normal; }
+.r-who { color:var(--r-who); } .r-when { color:var(--r-when); } .r-where { color:var(--r-where); } .r-how { color:var(--r-how); } .r-what { color:var(--r-what); }
+.r-verb { color:var(--fg); font-weight:800; }
+.gr .order span[class^="r-"] { box-shadow:inset 0 -2px currentColor; }
+.gr .order.zh span.r-verb { background:var(--fg); color:var(--bg); box-shadow:none; }
 .gr .ex { display:grid; grid-template-columns:132px 112px minmax(0,1fr); gap:8px; align-items:baseline; font-size:12.5px; }
 .gr .ex code { font-size:11px; background:none; border:0; padding:0; color:var(--muted); }
 .gr .ex span { font-size:15px; color:var(--fg); }
@@ -266,8 +275,8 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .gr .ex.more { opacity:.8; }
 .gr small { display:block; font:400 11px var(--mono); color:var(--tr-pinyin); margin-top:1px; }   /* the pinyin under each example */
 .gr .order.zh small { font-size:9.5px; color:inherit; opacity:.75; }
-.gr .ex { grid-template-columns:112px 176px minmax(0,1fr); }   /* room for the pinyin on one line */
-.gr p i { font-style:normal; color:var(--tr-pinyin); font-family:var(--mono); font-size:11px; }
+
+.gr p i.py { font-style:normal; color:var(--tr-pinyin); font-family:var(--mono); font-size:11px; }
 /* the card above the lines: the word's HSK level and measure word, or a tense rule in its colour */
 .ov .gl em { font-style:normal; font-size:.85em; margin-left:.45em; padding:0 .35em; border:1px solid rgba(255,255,255,.55); border-radius:.3em; white-space:nowrap; }
 .ov .gl span.rule { background:rgba(20,18,15,.92) !important; }
@@ -281,3 +290,12 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .w.say { background:rgba(255,255,255,.36); box-shadow:0 0 0 .08em rgba(255,255,255,.36); transition:background .12s ease; }
 .cue .w.say { background:var(--line-2); box-shadow:0 0 0 2px var(--line-2); }
 .ov .w.hl.say { background:var(--red); }
+
+/* cheat sheet examples: every word with its own pinyin above it, both in the word's colour */
+.gr .zh { font-size:16px; line-height:2.1; }
+.gr .zh ruby { ruby-align:center; margin:0 .08em; }
+.gr .zh rt { font:500 10px var(--mono); letter-spacing:0; }
+.gr .zh ruby.r-verb { font-weight:800; }
+.gr .zh ruby.g { text-underline-offset:4px; }
+.gr .zh ruby.g rt { text-decoration:none; }
+.gr .ex { grid-template-columns:112px auto minmax(0,1fr); }

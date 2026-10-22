@@ -164,26 +164,27 @@
             <details class="dd" data-dd><summary>Grammar</summary><div class="ddp grammar">
               <section class="gr">
                 <h5>Word order: always the same</h5>
-                <div class="order"><span>Who</span><span>When</span><span>Where</span><span>With / how</span><span>Verb</span><span>What</span></div>
-                <div class="order zh"><span>我<small>wǒ</small></span><span>明天<small>míngtiān</small></span><span>在家<small>zài jiā</small></span><span>跟朋友<small>gēn péngyou</small></span><span>看<small>kàn</small></span><span>电影<small>diànyǐng</small></span></div>
-                <p>I'll watch a film at home with friends tomorrow. Time and place go <b>before</b> the verb: 我明天去 <i>wǒ míngtiān qù</i> ✓ · 我去明天 ✗</p>
+                <div class="order"><span class="r-who">Who</span><span class="r-when">When</span><span class="r-where">Where</span><span class="r-how">With / how</span><span class="r-verb">Verb</span><span class="r-what">What</span></div>
+                <div class="order zh"><span class="r-who">我<small>wǒ</small></span><span class="r-when">明天<small>míngtiān</small></span><span class="r-where">在家<small>zài jiā</small></span><span class="r-how">跟朋友<small>gēn péngyou</small></span><span class="r-verb">看<small>kàn</small></span><span class="r-what">电影<small>diànyǐng</small></span></div>
+                <p>I'll watch a film at home with friends tomorrow. Time and place go <b>before</b> the verb:
+                  <span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="r-when">明天<rt>míngtiān</rt></ruby><ruby class="r-verb">去<rt>qù</rt></ruby></span> ✓ · 我去明天 ✗</p>
               </section>
               <section class="gr past">
                 <h5>Past · two ways</h5>
-                <div class="ex"><code>verb + 了 + what</code><span>我买<b class="g past">了</b>两本书<small>wǒ mǎi le liǎng běn shū</small></span><em>I bought two books (the action, done)</em></div>
-                <div class="ex"><code>… + 了 at the end</code><span>我吃饭<b class="g past">了</b><small>wǒ chī fàn le</small></span><em>I've eaten (it's done now)</em></div>
-                <div class="ex more"><code>没 + verb, no 了</code><span>我<b class="g past">没</b>吃饭<small>wǒ méi chī fàn</small></span><em>I didn't eat</em></div>
-                <div class="ex more"><code>verb + 过</code><span>我去<b class="g past">过</b>北京<small>wǒ qù guo Běijīng</small></span><em>I've been to Beijing (ever)</em></div>
+                <div class="ex"><code><i class="r-verb">verb</i> + 了 + <i class="r-what">what</i></code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="r-verb">买<rt>mǎi</rt></ruby><ruby class="g past">了<rt>le</rt></ruby><ruby class="r-what">两本书<rt>liǎng běn shū</rt></ruby></span><em>I bought two books (the action, done)</em></div>
+                <div class="ex"><code>… + 了 at the end</code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="r-verb">吃<rt>chī</rt></ruby><ruby class="r-what">饭<rt>fàn</rt></ruby><ruby class="g past">了<rt>le</rt></ruby></span><em>I've eaten (it's done now)</em></div>
+                <div class="ex more"><code>没 + <i class="r-verb">verb</i>, no 了</code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="g past">没<rt>méi</rt></ruby><ruby class="r-verb">吃<rt>chī</rt></ruby><ruby class="r-what">饭<rt>fàn</rt></ruby></span><em>I didn't eat</em></div>
+                <div class="ex more"><code><i class="r-verb">verb</i> + 过</code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="r-verb">去<rt>qù</rt></ruby><ruby class="g past">过<rt>guo</rt></ruby><ruby class="r-where">北京<rt>Běijīng</rt></ruby></span><em>I've been to Beijing (ever)</em></div>
               </section>
               <section class="gr future">
                 <h5>Future · two ways</h5>
-                <div class="ex"><code>要 + verb</code><span>我<b class="g future">要</b>去北京<small>wǒ yào qù Běijīng</small></span><em>I'm going to Beijing (a plan)</em></div>
-                <div class="ex"><code>会 + verb</code><span>明天<b class="g future">会</b>下雨<small>míngtiān huì xià yǔ</small></span><em>It will rain tomorrow (a guess)</em></div>
-                <div class="ex more"><code>快要 … 了</code><span><b class="g future">快要</b>下雨<b class="g future">了</b><small>kuài yào xià yǔ le</small></span><em>It's about to rain</em></div>
+                <div class="ex"><code>要 + <i class="r-verb">verb</i></code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="g future">要<rt>yào</rt></ruby><ruby class="r-verb">去<rt>qù</rt></ruby><ruby class="r-where">北京<rt>Běijīng</rt></ruby></span><em>I'm going to Beijing (a plan)</em></div>
+                <div class="ex"><code>会 + <i class="r-verb">verb</i></code><span class="zh"><ruby class="r-when">明天<rt>míngtiān</rt></ruby><ruby class="g future">会<rt>huì</rt></ruby><ruby class="r-verb">下雨<rt>xià yǔ</rt></ruby></span><em>It will rain tomorrow (a guess)</em></div>
+                <div class="ex more"><code>快要 + <i class="r-verb">verb</i> + 了</code><span class="zh"><ruby class="g future">快要<rt>kuài yào</rt></ruby><ruby class="r-verb">下雨<rt>xià yǔ</rt></ruby><ruby class="g future">了<rt>le</rt></ruby></span><em>It's about to rain</em></div>
               </section>
               <section class="gr present">
                 <h5>Now</h5>
-                <div class="ex"><code>在 + verb</code><span>我<b class="g present">在</b>吃饭<small>wǒ zài chī fàn</small></span><em>I'm eating</em></div>
+                <div class="ex"><code>在 + <i class="r-verb">verb</i></code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="g present">在<rt>zài</rt></ruby><ruby class="r-verb">吃<rt>chī</rt></ruby><ruby class="r-what">饭<rt>fàn</rt></ruby></span><em>I'm eating</em></div>
               </section>
               <div class="row"><button class="btn" data-grammar title="underline these words in the subtitles (G)">Underline them in the subtitles</button></div>
             </div></details>

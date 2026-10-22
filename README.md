@@ -38,7 +38,7 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 - **Tone colours:** each pinyin syllable in its tone's colour (Subtitles ▾ → Tone colours).
 - **Follow the voice:** the word being said lights up in every line and in the transcript, from Whisper's word timings (or spread evenly over the line when the subtitles came from elsewhere). Subtitles ▾ → Follow the voice, key K.
 - **Tenses (optional, off by default):** the characters that set the time (了 过 没 在 着 会 要 快要, and time words) are underlined in a colour for past / present / future; click one to see its rule (Grammar ▾ → Underline them in the subtitles, key G).
-- **Grammar cheat sheet** (Grammar ▾): the word order (who · when · where · with/how · verb · what), the two ways to say the past (verb + 了, … + 了) and the future (要 / 会 + verb), plus 没, 过, 快要…了 and 在, each with a short example. Found by rules on jieba's word tags, not by a person: when a rule can't tell (会 can mean "will" or "can"), it says "maybe".
+- **Grammar cheat sheet** (Grammar ▾): the word order (who · when · where · with/how · verb · what), the two ways to say the past (verb + 了, … + 了) and the future (要 / 会 + verb), plus 没, 过, 快要…了 and 在, each with a short example: every word in the colour of its part of the sentence, with its pinyin above it. Found by rules on jieba's word tags, not by a person: when a rule can't tell (会 can mean "will" or "can"), it says "maybe".
 - **Video level:** each video in the library shows an HSK level: the lowest level that covers 90% of its words.
 - **Any video:** drop a video file on the window to watch it, or add it to the library to get its subtitles, even if it wasn't downloaded here.
 
