@@ -11,6 +11,7 @@ from pathlib import Path
 
 W, H = 1280, 720
 INK = "#3B2A22"
+APPLE = "M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"   # the Apple logo (24×24), on the Download for Mac button
 RED, FLESH, RIND, BAND, PINK = "#DE3B26", "#E9503C", "#0E8A63", "#FBF8F3", "#FF9A88"
 
 
@@ -188,7 +189,7 @@ def scene_get_app():
             f'<text x="600" y="210" style="{font};font-weight:800;font-size:76px" fill="{INK}">Pianpian <tspan fill="{RED}">片片</tspan></text>'
             f'<text x="604" y="262" style="{font};font-weight:500;font-size:30px" fill="#6B5A4E">Learn Mandarin from real videos</text>'
             f'<g transform="translate(604 304)"><rect width="420" height="84" rx="22" fill="{RED}"/>'
-            '<path d="M44 24 v28 m0 0 l-12 -12 m12 12 l12 -12 M28 62 h32" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<g transform="translate(26 17) scale(2)"><path fill="#fff" d="{APPLE}"/></g>'
             f'<text x="84" y="55" style="{font};font-weight:700;font-size:32px" fill="#fff">Download for Mac</text></g>'
             f'<text x="606" y="436" style="{font};font-weight:500;font-size:22px" fill="#8A7F74">Free · open source · Apple Silicon</text>')
     return svg(body, '<radialGradient id="bg" cx=".3" cy=".42" r=".9"><stop offset="0" stop-color="#FFF7EE"/><stop offset="1" stop-color="#F5E4D2"/></radialGradient>')

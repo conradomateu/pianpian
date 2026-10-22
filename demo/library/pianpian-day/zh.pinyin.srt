@@ -1,5 +1,5 @@
 1
-00:00:01,500 --> 00:00:04,240
+00:00:01,500 --> 00:00:04,220
 nǐhǎo wǒ jiào piànpiàn, wǒ shì yīkuài xīguā.
 
 2
@@ -7,7 +7,7 @@ nǐhǎo wǒ jiào piànpiàn, wǒ shì yīkuài xīguā.
 jīntiāntiānqì hěn hǎo, wǒ xiǎng qù gōngyuán zǒuzǒu.
 
 3
-00:00:11,960 --> 00:00:15,320
+00:00:11,960 --> 00:00:15,300
 zuótiān wǒ chī le sāngè bāozi, xiànzài hái bù è.
 
 4
@@ -19,11 +19,11 @@ nǐ qùguò Zhōngguó ma?
 wǒ qùguò yīcì.
 
 6
-00:00:22,480 --> 00:00:25,620
+00:00:22,480 --> 00:00:25,640
 wǒ zhèngzài xué zhōngwén, měitiān kàn yígè shìpín.
 
 7
-00:00:27,860 --> 00:00:31,500
+00:00:27,880 --> 00:00:31,500
 míngtiān wǒyào qù péngyoujiā, wǒmen huì yìqǐ zuòfàn
 
 8
