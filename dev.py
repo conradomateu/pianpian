@@ -7,6 +7,8 @@
     python3 dev.py test       # pytest (tests/)
     python3 dev.py serve      # the app at http://127.0.0.1:8770
     python3 dev.py app        # build Pianpian.app into ~/Applications (macOS)
+    python3 dev.py site       # the website into _site/ (landing page + live demo)
+    python3 dev.py shots      # README and website screenshots from the demo (needs Chrome or Brave)
 
 Standard library only. Tools run through `uv run --group dev` (pyproject.toml). From China, set
 UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple first.
@@ -45,6 +47,8 @@ TASKS = {
     "engine": lambda: run("uv", "sync", "--group", "runtime"),
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
+    "site": lambda: run(sys.executable, "tools/build_site.py"),
+    "shots": lambda: run(sys.executable, "tools/shots.py"),
 }
 
 if __name__ == "__main__":

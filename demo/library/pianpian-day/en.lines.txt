@@ -1,0 +1,8 @@
+1	Hello, my name is Pianpian. I'm a slice of watermelon.
+2	Today the weather is great, I want to go for a walk in the park.
+3	Yesterday I ate three buns, but I'm still not hungry now.
+4	Have you been to China?
+5	I went once.
+6	I am learning Chinese, watching one video per day.
+7	Tomorrow I will go to a friend's house, and we will cook together
+8	It's about to rain, let's go home

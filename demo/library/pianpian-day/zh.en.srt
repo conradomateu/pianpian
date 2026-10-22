@@ -1,0 +1,31 @@
+1
+00:00:01,120 --> 00:00:04,220
+Hello, my name is Pianpian. I'm a slice of watermelon.
+
+2
+00:00:06,700 --> 00:00:10,280
+Today the weather is great, I want to go for a walk in the park.
+
+3
+00:00:12,460 --> 00:00:16,300
+Yesterday I ate three buns, but I'm still not hungry now.
+
+4
+00:00:18,500 --> 00:00:20,360
+Have you been to China?
+
+5
+00:00:20,360 --> 00:00:21,400
+I went once.
+
+6
+00:00:23,720 --> 00:00:27,280
+I am learning Chinese, watching one video per day.
+
+7
+00:00:29,440 --> 00:00:33,600
+Tomorrow I will go to a friend's house, and we will cook together
+
+8
+00:00:35,700 --> 00:00:38,300
+It's about to rain, let's go home

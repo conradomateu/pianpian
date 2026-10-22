@@ -150,6 +150,12 @@ body { overflow:hidden; }
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const OFFLINE = location.protocol === 'file:';     // opened from disk: no library, files only
+// app.html?demo: the website's demo. The library is a snapshot in demo/ (tools/build_site.py writes it with
+// the server's own code), and whatever needs the engine on a Mac points to the download instead
+const DEMO = new URLSearchParams(location.search).has('demo');
+const LIB = DEMO ? 'demo/library/' : '/library/';
+const GET_APP = 'https://github.com/bytemines/pianpian/releases/latest';
+const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac.';
 const PROMPT = `Each line below is: an id, a TAB, then one subtitle in Chinese.
 Translate the Chinese into natural English. Output EXACTLY the same ids, one per line, as: id<TAB>English.
 Do not merge, split, drop or renumber lines. " / " marks a line break; keep it.
@@ -157,6 +163,13 @@ If you think the Chinese contains a speech-recognition or OCR error, translate w
 
 `;
 const api = async (path, body) => {
+  if (DEMO) {
+    if (body !== undefined) { demoNote(); throw new Error(''); }   // the note says it; no second message
+    if (path === '/api/jobs') return [];
+    const r = await fetch('demo' + path + '.json');
+    if (!r.ok) throw new Error(r.statusText);
+    return r.json();
+  }
   const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kit': '1' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
@@ -190,7 +203,10 @@ document.addEventListener('keydown', e => {
   const side = { b: 'left', t: 'right' }[e.key.toLowerCase()];
   if (side) setPanel(side, !isOpen(side), true);
 });
-setPanel('left', isOpen('left'), false); setPanel('right', isOpen('right'), false);
+let firstVisit = false;
+try { firstVisit = !localStorage.getItem('pp-left'); } catch {}
+setPanel('left', isOpen('left') && !(DEMO && firstVisit && innerWidth < 1100), false);   // a small demo frame: room for the video
+setPanel('right', isOpen('right'), false);
 setTimeout(() => document.documentElement.classList.add('ready'), 80);   // motion only after the first paint
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */
@@ -210,7 +226,8 @@ async function status() {
       try { sel.value = localStorage.getItem('pp-browser') || ''; } catch {}
       sel.onchange = () => { try { localStorage.setItem('pp-browser', sel.value); } catch {} };
     }
-    $('libinfo').textContent = s.library.replace(/^\/Users\/[^/]+/, '~');
+    $('libinfo').textContent = DEMO ? 'demo' : s.library.replace(/^\/Users\/[^/]+/, '~');
+    if (DEMO) { $('status').className = 'dot ok'; $('status').textContent = 'demo'; }
   } catch { $('status').className = 'dot off'; $('status').textContent = 'server stopped'; }
 }
 
@@ -227,7 +244,7 @@ async function loadLibrary() {
   videos = await api('/api/videos');
   $('lib').innerHTML = videos.length ? videos.map(v => `
     <button class="item ${current && current.id === v.id ? 'on' : ''}" data-id="${esc(v.id)}">
-      <span class="thumb" style="${v.kind === 'folder' && v.video ? `background-image:url('/library/${encodeURIComponent(v.id)}/thumb.jpg')` : ''}"></span>
+      <span class="thumb" style="${v.kind === 'folder' && v.video ? `background-image:url('${LIB}${encodeURIComponent(v.id)}/thumb.jpg')` : ''}"></span>
       <span><b>${esc(v.title)}</b><span class="chips">${chips(v)}</span></span>
     </button>`).join('') : '<p class="muted" style="font-size:13px;margin:4px">Nothing here yet. Paste a link above.</p>';
 }
@@ -239,18 +256,24 @@ async function select(id, keepPlayer) {
   try { v = await api('/api/videos/' + encodeURIComponent(id)); } catch { return; }
   const changed = !current || current.id !== v.id;
   current = v;
-  history.replaceState(null, '', '#v=' + encodeURIComponent(id));
+  if (hashId() !== id) history.replaceState(null, '', location.search + '#v=' + encodeURIComponent(id));
   document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === id));
   document.title = v.title + ' · 片片';               // the title shows in the window and the library, not above the video
   renderNotes(v); renderMenu(v);
   if (changed || !keepPlayer) {
-    const base = '/library/' + encodeURIComponent(v.id) + '/';
+    const base = LIB + encodeURIComponent(v.id) + '/';
     const subs = await Promise.all((v.subs || []).map(async n => ({ name: n, text: await (await fetch(base + encodeURIComponent(n))).text() })));
     const words = v.words ? await (await fetch(base + v.words)).json().catch(() => null) : null;
     const align = v.align ? await (await fetch(base + v.align)).json().catch(() => null) : null;
-    player.load({ video: v.video ? (v.kind === 'file' ? '/library/' + encodeURIComponent(v.id) : base + encodeURIComponent(v.video)) : null,
+    player.load({ video: v.video ? (v.kind === 'file' ? LIB + encodeURIComponent(v.id) : base + encodeURIComponent(v.video)) : null,
                   subs, words, align, id: v.id });
+    const t = +((location.hash.match(/[#&]t=([\d.]+)/) || [])[1] || 0);      // #v=…&t=12.5 opens at that moment
+    if (t) player.video.addEventListener('loadedmetadata', () => { player.video.currentTime = t; }, { once: true });
   }
+}
+// the demo answers buttons that need the engine with one line and the download
+function demoNote() {
+  $('notes').innerHTML = `<div class="note">${DEMO_SAYS} <a class="btn primary" href="${GET_APP}" target="_blank" rel="noopener">Download for Mac</a></div>`;
 }
 // one short line above the video, only when something needs doing
 function renderNotes(v) {
@@ -322,12 +345,12 @@ async function openFiles(files) {
   if (files.some(f => /\.(ass|ssa)$/i.test(f.name))) alert('ASS/SSA files are not supported here; use the .srt files.');
   if (video) {                                    // a new video from disk: it is not a library item
     current = null;
-    history.replaceState(null, '', location.pathname);
+    history.replaceState(null, '', location.pathname + location.search);
     document.querySelectorAll('.item.on').forEach(b => b.classList.remove('on'));
     document.title = video.name + ' · 片片';
     $('vmenu').hidden = true;
     dropped = video;
-    $('notes').innerHTML = OFFLINE || !/\.(mp4|m4v|webm|mov|mkv)$/i.test(video.name) ? '' :
+    $('notes').innerHTML = DEMO ? '<div class="note">Playing from your disk: nothing is uploaded. The app also makes the subtitles for it.</div>' : OFFLINE || !/\.(mp4|m4v|webm|mov|mkv)$/i.test(video.name) ? '' :
       `<div class="note" id="importnote">Playing from disk, not in your library. ${subs.length ? '' : 'No subtitles came with it. '}
         <button class="btn primary" data-import type="button">Add to library &amp; make subtitles</button></div>`;
   }
@@ -417,6 +440,7 @@ if (OFFLINE) {
     await loadLibrary();
     const id = hashId();
     if (id && videos.some(v => v.id === id)) await select(id);
+    else if (DEMO && videos.length) await select(videos[0].id);
     poll();
   })();
 }
