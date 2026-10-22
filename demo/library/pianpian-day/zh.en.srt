@@ -1,31 +1,35 @@
 1
-00:00:01,500 --> 00:00:04,220
+00:00:01,500 --> 00:00:04,240
 Hello, my name is Pianpian. I'm a slice of watermelon.
 
 2
-00:00:06,680 --> 00:00:09,800
+00:00:06,700 --> 00:00:09,780
 Today the weather is great, I want to go for a walk in the park.
 
 3
-00:00:11,960 --> 00:00:15,300
-Yesterday I ate three buns, but I’m still not hungry now.
+00:00:11,960 --> 00:00:15,320
+Yesterday I ate three buns, but I'm still not hungry.
 
 4
-00:00:17,500 --> 00:00:20,200
-Have you been to China? I've been there once.
+00:00:17,500 --> 00:00:19,000
+Have you been to China?
 
 5
-00:00:22,480 --> 00:00:25,640
-I am learning Chinese, watching one video per day.
+00:00:19,320 --> 00:00:20,200
+I've been there once.
 
 6
-00:00:27,880 --> 00:00:31,500
-Tomorrow I will go to a friend's house, and we will cook together
+00:00:22,480 --> 00:00:25,620
+I am learning Chinese, watching one video every day.
 
 7
-00:00:33,640 --> 00:00:35,840
-It's about to rain, let's go home
+00:00:27,860 --> 00:00:31,500
+Tomorrow I will go to a friend's house, and we will cook together
 
 8
+00:00:33,660 --> 00:00:35,860
+It's about to rain, let's go home
+
+9
 00:00:38,000 --> 00:00:40,740
 Download Pianpian and learn Chinese with me

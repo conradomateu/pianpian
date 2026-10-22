@@ -1,31 +1,35 @@
 1
-00:00:01,500 --> 00:00:04,220
+00:00:01,500 --> 00:00:04,240
 nǐhǎo wǒ jiào piànpiàn, wǒ shì yīkuài xīguā.
 
 2
-00:00:06,680 --> 00:00:09,800
+00:00:06,700 --> 00:00:09,780
 jīntiāntiānqì hěn hǎo, wǒ xiǎng qù gōngyuán zǒuzǒu.
 
 3
-00:00:11,960 --> 00:00:15,300
+00:00:11,960 --> 00:00:15,320
 zuótiān wǒ chī le sāngè bāozi, xiànzài hái bù è.
 
 4
-00:00:17,500 --> 00:00:20,200
-nǐ qùguò Zhōngguó ma, wǒ qùguò yīcì.
+00:00:17,500 --> 00:00:19,000
+nǐ qùguò Zhōngguó ma?
 
 5
-00:00:22,480 --> 00:00:25,640
-wǒ zhèngzài xué zhōngwén, měitiān kàn yígè shìpín.
+00:00:19,320 --> 00:00:20,200
+wǒ qùguò yīcì.
 
 6
-00:00:27,880 --> 00:00:31,500
-míngtiān wǒyào qù péngyoujiā, wǒmen huì yìqǐ zuòfàn
+00:00:22,480 --> 00:00:25,620
+wǒ zhèngzài xué zhōngwén, měitiān kàn yígè shìpín.
 
 7
-00:00:33,640 --> 00:00:35,840
-kuàiyào xiàyǔ le wǒmen huíjiāba
+00:00:27,860 --> 00:00:31,500
+míngtiān wǒyào qù péngyoujiā, wǒmen huì yìqǐ zuòfàn
 
 8
+00:00:33,660 --> 00:00:35,860
+kuàiyào xiàyǔ le wǒmen huíjiāba
+
+9
 00:00:38,000 --> 00:00:40,740
 xiàzài piànpiàn hé wǒ yìqǐ xué zhōngwén ba

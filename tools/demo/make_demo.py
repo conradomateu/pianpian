@@ -53,7 +53,7 @@ def main():
     ap.add_argument("--tts-python", required=True)
     ap.add_argument("--kokoro", required=True)
     ap.add_argument("--voice", default="zm_yunxia")
-    ap.add_argument("--music", default="bouncy", help="a style in music.py: bouncy, dizi, sneaky, festival, calm")
+    ap.add_argument("--music", default="festival", help="a style in music.py: bouncy, dizi, sneaky, festival, calm")
     a = ap.parse_args()
     lines = [s for s in (HERE / "script.txt").read_text(encoding="utf-8").splitlines() if s.strip()]
     tmp = Path(tempfile.mkdtemp(prefix="pianpian-demo-"))
