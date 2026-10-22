@@ -235,21 +235,20 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .w.hl s, .ov .w.hl .g { color:inherit; background:none; outline:0; box-shadow:none; }
 .ov .gl s { color:inherit; }                       /* the card has its own background: plain white pinyin there */
 .g { font-weight:inherit; }
-/* on the video (always dark): solid chips for sure marks, dashed for "maybe", an underline for time words */
-.ov .g { border-radius:.18em; padding:0 .04em; cursor:help; pointer-events:auto; }
-.ov .g.past { background:#0E8A63; color:#fff; } .ov .g.present { background:#DE3B26; color:#fff; } .ov .g.future { background:#DE9407; color:#1F1B16; }
-.ov .g.maybe { outline:.07em dashed #F5B23C; outline-offset:-.03em; } .ov .g.change { outline:.07em dashed #46D39A; outline-offset:-.03em; }
-.ov .g.time-past { box-shadow:inset 0 -.14em #46D39A; } .ov .g.time-present { box-shadow:inset 0 -.14em #FF6B54; } .ov .g.time-future { box-shadow:inset 0 -.14em #F5B23C; }
-/* in the transcript and the Grammar menu: the theme's colours */
-.cue .g, .ddp .g { padding:0 .12em; border-radius:4px; font-weight:700; }
-.cue .g.past, .ddp .g.past { color:var(--jade-fg); background:var(--jade-tint); }
-.cue .g.present, .ddp .g.present { color:var(--red-fg); background:var(--red-tint); }
-.cue .g.future, .ddp .g.future { color:var(--amber-fg); background:var(--amber-tint); }
-.cue .g.maybe, .ddp .g.maybe { color:var(--amber-fg); outline:1px dashed var(--amber); outline-offset:-1px; }
-.cue .g.change, .ddp .g.change { color:var(--jade-fg); outline:1px dashed var(--jade); outline-offset:-1px; }
-.cue .g.time-past, .ddp .g.time-past { box-shadow:inset 0 -2px var(--jade); font-weight:inherit; }
-.cue .g.time-present, .ddp .g.time-present { box-shadow:inset 0 -2px var(--red); font-weight:inherit; }
-.cue .g.time-future, .ddp .g.time-future { box-shadow:inset 0 -2px var(--amber); font-weight:inherit; }
+/* on the video (always dark): the text stays white, only an underline in the tense's colour
+   (solid when sure, dashed for "maybe" and "new situation", dotted for time words) */
+.ov .g { cursor:help; pointer-events:auto; text-decoration:underline; text-decoration-thickness:.09em; text-underline-offset:.16em; }
+.ov .g.past { text-decoration-color:#46D39A; } .ov .g.present { text-decoration-color:#FF6B54; } .ov .g.future { text-decoration-color:#F5B23C; }
+.ov .g.maybe { text-decoration-color:#F5B23C; text-decoration-style:dashed; } .ov .g.change { text-decoration-color:#46D39A; text-decoration-style:dashed; }
+.ov .g.time-past, .ov .g.time-present, .ov .g.time-future { text-decoration-style:dotted; }
+.ov .g.time-past { text-decoration-color:#46D39A; } .ov .g.time-present { text-decoration-color:#FF6B54; } .ov .g.time-future { text-decoration-color:#F5B23C; }
+/* in the transcript and the Grammar menu: the same underlines, in the theme's colours */
+.cue .g, .ddp .g { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:3px; }
+.cue .g.past, .ddp .g.past, .cue .g.change, .ddp .g.change, .cue .g.time-past, .ddp .g.time-past { text-decoration-color:var(--jade); }
+.cue .g.present, .ddp .g.present, .cue .g.time-present, .ddp .g.time-present { text-decoration-color:var(--red); }
+.cue .g.future, .ddp .g.future, .cue .g.maybe, .ddp .g.maybe, .cue .g.time-future, .ddp .g.time-future { text-decoration-color:var(--amber); }
+.cue .g.maybe, .ddp .g.maybe, .cue .g.change, .ddp .g.change { text-decoration-style:dashed; }
+.cue .g.time-past, .ddp .g.time-past, .cue .g.time-present, .ddp .g.time-present, .cue .g.time-future, .ddp .g.time-future { text-decoration-style:dotted; }
 .ddp.grammar { width:min(460px, 92vw); }
 .legend { display:grid; gap:8px; font-size:13px; color:var(--fg-2); }
 .legend > div { display:grid; grid-template-columns:48px minmax(0,1fr); gap:10px; align-items:baseline; }
@@ -262,3 +261,8 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .gl span.rule.future { background:rgba(222,148,7,.95) !important; color:#1F1B16 !important; }
 .ov .gl span.rule.maybe { box-shadow:inset 0 0 0 .08em #F5B23C; } .ov .gl span.rule.change { box-shadow:inset 0 0 0 .08em #46D39A; }
 .ov .gl span.rule.time-past { box-shadow:inset 0 -.18em #46D39A; } .ov .gl span.rule.time-present { box-shadow:inset 0 -.18em #FF6B54; } .ov .gl span.rule.time-future { box-shadow:inset 0 -.18em #F5B23C; }
+
+/* follow the voice: the word being spoken, softly lit (a clicked word's red wins) */
+.ov .w.say { background:rgba(255,255,255,.24); box-shadow:0 0 0 .08em rgba(255,255,255,.24); transition:background .12s ease; }
+.cue .w.say { background:var(--amber-tint); box-shadow:0 0 0 2px var(--amber-tint); }
+.ov .w.hl.say { background:var(--red); }

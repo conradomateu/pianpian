@@ -36,7 +36,8 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 - **Player:** any mix of tracks, each with its own size, colour and blur. Pause after a line, loop, change speed, go fullscreen.
 - **Word links:** click a word in Chinese, pinyin or English and its partners light up, with the CC-CEDICT meaning, its HSK 3.0 level and its measure word. English is linked through the dictionary first and through the translation model's own vectors second.
 - **Tone colours:** each pinyin syllable in its tone's colour (Subtitles ▾ → Tone colours).
-- **Tense colours:** the characters that set the time (了 过 没 在 着 会 要 快要, and time words) are coloured past / present / future; click one to see its rule (Grammar ▾, key G). Found by rules on jieba's word tags, not by a person: when a rule can't tell (会 can mean "will" or "can"), it says "maybe".
+- **Follow the voice:** the word being said lights up in every line and in the transcript, from Whisper's word timings (or spread evenly over the line when the subtitles came from elsewhere). Subtitles ▾ → Follow the voice, key K.
+- **Tenses (optional, off by default):** the characters that set the time (了 过 没 在 着 会 要 快要, and time words) are underlined in a colour for past / present / future; click one to see its rule (Grammar ▾ → Show tenses, key G). Found by rules on jieba's word tags, not by a person: when a rule can't tell (会 can mean "will" or "can"), it says "maybe".
 - **Video level:** each video in the library shows an HSK level: the lowest level that covers 90% of its words.
 - **Any video:** drop a video file on the window to watch it, or add it to the library to get its subtitles, even if it wasn't downloaded here.
 

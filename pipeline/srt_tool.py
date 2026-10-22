@@ -302,6 +302,28 @@ def secs(t: str) -> float:
     return int(h) * 3600 + int(m) * 60 + float(rest.replace(",", "."))
 
 
+def spoken_times(cues: list[dict], whisper: Path) -> None:
+    """When the line was transcribed by Whisper, give each Chinese word the moment it is spoken:
+    cue["k"] = per line, [start, end] per word (0 for punctuation or a word Whisper didn't say).
+    Whisper's characters are matched in order (a few characters of slack, so hand edits or a missing
+    word only blur the nearby ones); the player spreads a line's time evenly when there is no "k"."""
+    from zhconv import convert
+    times = [(convert(c, "zh-cn"), s0, e0) for c, s0, e0 in char_times(whisper) if HAN.match(c)]
+    j = 0
+    for cue in cues:
+        cue["k"] = []
+        for line in cue["w"]:
+            row = []
+            for w in line:
+                got = []
+                for ch in (c for c in w[0] if HAN.match(c)):
+                    k = next((k for k in range(j, min(j + 12, len(times))) if times[k][0] == ch), None)
+                    if k is not None:
+                        got.append(times[k]); j = k + 1
+                row.append([round(got[0][1], 2), round(got[-1][2], 2)] if got else 0)
+            cue["k"].append(row)
+
+
 def cmd_words(a):
     """The same segmentation as the pinyin track, kept as pairs so the player can link
     each Chinese word to its pinyin (hover one, both light up; or pinyin above the word)."""
@@ -317,6 +339,9 @@ def cmd_words(a):
             marks.append(grammar.tags("".join(zh for zh, _ in pairs)))   # character index -> tense tag
         cues.append({"s": secs(start), "e": secs(end), "w": lines, "g": marks})
         levels += [hsk_level(w[0]) for line in lines for w in line if len(w) > 3]
+    whisper = src.with_name("zh.whisper.json")
+    if whisper.exists():                             # word timings: the player lights up each word as it is said
+        spoken_times(cues, whisper)
     out = Path(a.out) if a.out else src.with_suffix(".words.json")
     out.write_text(json.dumps({"version": 2, "source": src.name, "hsk": video_level(levels), "cues": cues},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

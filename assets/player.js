@@ -137,6 +137,7 @@
               </div>
               <div class="row">
                 <button class="btn" data-ruby title="pinyin above each Chinese word (needs zh.words.json)">Pinyin above words</button>
+                <button class="btn on" data-karaoke title="light up each word as it is spoken (K)">Follow the voice</button>
                 <button class="btn on" data-tones title="each pinyin syllable in its tone's colour: 1 red · 2 orange · 3 green · 4 blue · light grey">Tone colours</button>
                 <button class="btn" data-raise title="lift the lines above Chinese that is burned into the picture">Raise above burned-in text</button>
                 <label class="check"><input type="checkbox" data-bg checked> dark box</label>
@@ -161,7 +162,7 @@
               </div>
             </div></details>
             <details class="dd" data-dd><summary>Grammar</summary><div class="ddp grammar">
-              <div class="row"><button class="btn on" data-grammar title="colour the characters that set the time (G)">Colour tenses</button></div>
+              <div class="row"><button class="btn" data-grammar title="underline the characters that set the time (G)">Show tenses</button></div>
               <div class="legend">
                 <div><b class="g past">了</b><span><b>Past</b> · verb + 了: done · verb + 过: done before · 没 + verb: didn't</span></div>
                 <div><b class="g present">在</b><span><b>Present</b> · 在 / 正在 + verb: happening now · verb + 着: ongoing</span></div>
@@ -171,7 +172,7 @@
                 <div><b class="g time-past">昨天</b><span><b>Time words</b> · 昨天 past · 现在 now · 明天 future</span></div>
               </div>
               <p class="note">Golden rule: Chinese verbs never change. Time comes from these words, and the time word goes <b>before</b> the verb: 我明天去, not 我去明天.</p>
-              <p class="muted" style="margin:0;font-size:12px">Click a coloured character in the subtitles to see its rule. Found by rules, not by a person: when it can't tell, it says "maybe".</p>
+              <p class="muted" style="margin:0;font-size:12px">Off by default. When on, click an underlined character to see its rule. Found by rules, not by a person: when it can't tell, it says "maybe".</p>
             </div></details>
             <span data-extra></span>
             <details class="dd" data-dd><summary>Resources</summary><div class="ddp">
@@ -182,7 +183,7 @@
               <div><b>Space</b> play · <b>←</b><b>→</b> line · <b>R</b> replay</div>
               <div><b>L</b> loop · <b>P</b> pause after line · <b>C</b> cover band</div>
               <div><b>1</b>–<b>9</b> track on/off · <b>↑</b><b>↓</b> lift</div>
-              <div><b>G</b> tense colours · <b>F</b> fullscreen${opts.keys || ''}</div>
+              <div><b>K</b> follow the voice · <b>G</b> tenses · <b>F</b> fullscreen${opts.keys || ''}</div>
             </div></details>
             <button class="ib" data-full title="fullscreen (F)">⛶</button>
           </div>
@@ -193,7 +194,8 @@
     const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = opts.list || q('[data-list]');
     let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 6;
     let words = null, align = null, ruby = false, pin = null, pinCue = -1, videoKey = '';
-    let tones = true, grammar = true;              // tone colours in pinyin, tense colours in Chinese (both on by default)
+    let tones = true, grammar = false;             // tone colours in pinyin (on), tense colours in Chinese (optional, off)
+    let karaoke = true, sayKey = null;             // light up each word as it is spoken (on)
     const COVERS = 'zh-player-cover-v1';             // { videoKey: { on, b, h } }: the band differs per video
     const SHOWN = 'zh-player-shown-v1';              // { videoKey: { zh: true, pinyin: false, … } }
 
@@ -276,6 +278,30 @@
       if (gl) { const html = glossFor(key); gl.innerHTML = html ? `<span>${html}</span>` : ''; }
     }
 
+    /* ---- the word being spoken: Whisper's times (zh.words.json "k"), or the line's time spread evenly ---- */
+    function spokenKey(w, t) {
+      let best = null;
+      if (w.k) {                                   // the last word that has started (a word stays lit through short pauses)
+        w.k.forEach((row, L) => row.forEach((tm, k) => { if (tm && tm[0] <= t + 0.05) best = `${L}-${k}`; }));
+        return best;
+      }
+      const han = w.w.flatMap((line, L) => line.map((p, k) => [`${L}-${k}`, [...p[0]].filter(c => /[\u4e00-\u9fff]/.test(c)).length])).filter(x => x[1]);
+      const total = han.reduce((n, x) => n + x[1], 0);
+      let at = (t - w.s) / Math.max(w.e - w.s, 0.1) * total;
+      for (const [key, n] of han) { if (at < n) return key; at -= n; }
+      return han.length ? han[han.length - 1][0] : null;
+    }
+    function say(t) {
+      const key = karaoke && shownWords && !(pin && !pin.startsWith('rule:')) ? spokenKey(shownWords, t) : null;
+      if (key === sayKey) return;
+      sayKey = key;
+      root.ownerDocument.querySelectorAll('.w.say').forEach(e => { if (root.contains(e) || list.contains(e)) e.classList.remove('say'); });
+      if (!key) return;
+      ov.querySelectorAll(`.w[data-w="${key}"]`).forEach(e => e.classList.add('say'));
+      const now = list.querySelector('.cue.now');
+      if (now) now.querySelectorAll(`.w[data-w="${key}"]`).forEach(e => e.classList.add('say'));
+    }
+
     /* ---- on screen ---- */
     const lead = () => tracks.find(t => t.on) || tracks[0];
     function tick(force) {
@@ -288,8 +314,8 @@
         if (loopLine) v.currentTime = L.cues[li].s + delay;
         else if (autoPause && pausedFor !== li) { pausedFor = li; v.pause(); }
       }
-      if (!force && key === shownKey) return;
-      shownKey = key;
+      if (!force && key === shownKey) { say(t); return; }
+      shownKey = key; sayKey = undefined;              // the lines are drawn again: light the word up again
       if (pin && li !== pinCue) pin = null;          // a pinned word lasts until its line ends
       shownWords = L && li >= 0 ? wordsAt(L.cues[li]) : null;
       ov.innerHTML = '<div class="gl"></div>' + shown.map(([tr, c]) =>
@@ -304,6 +330,7 @@
         const r = el.getBoundingClientRect(), b = list.getBoundingClientRect();
         if (r.top < b.top || r.bottom > b.bottom) list.scrollTop += r.top - b.top - b.height / 3;
       }
+      say(t);
     }
     (function frame() { if (root.isConnected) { tick(false); requestAnimationFrame(frame); } })();
     const timer = setInterval(() => root.isConnected ? tick(false) : clearInterval(timer), 120);   // rAF sleeps in background tabs
@@ -388,6 +415,7 @@
     q('[data-raise]').onclick = () => { const up = +lift.value > 12; if (!up) lowLift = +lift.value; lift.value = up ? lowLift : 17; lift.oninput(); };
     q('[data-bg]').onchange = e => { ov.classList.toggle('bg', e.target.checked); save(); };
     q('[data-ruby]').onclick = e => { ruby = !ruby; e.currentTarget.classList.toggle('on', ruby); save(); tick(true); };
+    q('[data-karaoke]').onclick = e => { karaoke = !karaoke; e.currentTarget.classList.toggle('on', karaoke); save(); sayKey = undefined; tick(true); };
     q('[data-tones]').onclick = e => { tones = !tones; e.currentTarget.classList.toggle('on', tones); save(); renderList(); tick(true); };
     q('[data-grammar]').onclick = e => { grammar = !grammar; e.currentTarget.classList.toggle('on', grammar); save(); renderList(); tick(true); };
 
@@ -478,6 +506,7 @@
       else if (k === 'f' || k === 'F') fullscreen();
       else if (k === 'c' || k === 'C') q('[data-cover]').click();
       else if (k === 'g' || k === 'G') q('[data-grammar]').click();
+      else if (k === 'k' || k === 'K') q('[data-karaoke]').click();
       else if (/^[1-9]$/.test(k) && tracks[+k - 1]) { tracks[+k - 1].on = !tracks[+k - 1].on; changed(); }
     });
 
@@ -486,7 +515,7 @@
       try {
         const roles = {};
         for (const t of tracks) if (t.role !== 'stacked' && !roles[t.role]) roles[t.role] = { scale: t.scale, colour: t.colour, blur: t.blur };
-        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, tones, grammar, roles }));
+        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, tones, tenses: grammar, karaoke, roles }));
         if (videoKey) {
           const shown = JSON.parse(localStorage.getItem(SHOWN) || '{}');
           shown[videoKey] = Object.fromEntries(tracks.filter(t => t.role !== 'stacked').map(t => [t.role, t.on]));
@@ -502,7 +531,8 @@
       if (p.speed) { q('[data-speed]').value = p.speed; v.playbackRate = +p.speed; }
       if (p.ruby !== undefined) { ruby = p.ruby; q('[data-ruby]').classList.toggle('on', ruby); }
       if (p.tones !== undefined) { tones = p.tones; q('[data-tones]').classList.toggle('on', tones); }
-      if (p.grammar !== undefined) { grammar = p.grammar; q('[data-grammar]').classList.toggle('on', grammar); }
+      if (p.karaoke !== undefined) { karaoke = p.karaoke; q('[data-karaoke]').classList.toggle('on', karaoke); }
+      if (p.tenses !== undefined) { grammar = p.tenses; q('[data-grammar]').classList.toggle('on', grammar); }   // new key: off for everyone at first
       for (const t of tracks) { const { on, ...look } = (p.roles || {})[t.role] || {}; Object.assign(t, look); }   // on/off is per video, below
       let shown = {}; try { shown = (JSON.parse(localStorage.getItem(SHOWN)) || {})[videoKey] || {}; } catch {}
       for (const t of tracks) if (t.role in shown) t.on = shown[t.role];     // this video's own choice wins
