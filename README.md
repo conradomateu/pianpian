@@ -2,7 +2,7 @@
 
 *一天一片 · yì tiān yí piàn · a slice a day.* Watch Chinese videos with Chinese, pinyin and English subtitles that you can mix, resize and click, made on your Mac with local models.
 
-**Status:** working prototype (local server + browser). The desktop app is planned in [`docs/plans/`](docs/plans/). macOS on Apple Silicon only for now.
+**Status:** working prototype. macOS on Apple Silicon only for now.
 
 ## Start
 
@@ -60,8 +60,7 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 | `pipeline/grammar.py` | Tense marks for the colours (tests in `tests/test_grammar.py`) |
 | `pipeline/data/hsk3.json` | Word → HSK 3.0 level, from complete-hsk-vocabulary (MIT, `hsk3.LICENSE`) |
 | `PLAN.md` | The prototype's screen and API |
-| `docs/plans/` | Desktop app design and orchestration (CI, releases, updates, Windows) |
-| `design/icons/` | Logo explorations. Chosen: `20-pianpian-watermelon.svg` (app) and `19-pianpian-mono.svg` (menu bar) |
+| `design/icons/` | The logo: `20-pianpian-watermelon.svg` (app) and `19-pianpian-mono.svg` (one colour) |
 
 ## Development
 
@@ -71,7 +70,7 @@ python3 dev.py serve     # the app at http://127.0.0.1:8770
 python3 dev.py app       # build Pianpian.app (macOS)
 ```
 
-Commit messages and pull request titles start with `feat:`, `fix:`, `docs:` or `chore:`: release-please builds the changelog and the version from them. Plans: [`docs/plans/`](docs/plans/). Where the work stands: [`docs/HANDOFF.md`](docs/HANDOFF.md).
+Commit messages and pull request titles start with `feat:`, `fix:`, `docs:` or `chore:`: release-please builds the changelog and the version from them.
 
 ## Licence and data
 
