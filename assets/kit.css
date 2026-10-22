@@ -13,6 +13,7 @@
   --tr-pinyin:#8A5E06; --tr-en:#2A6496; --tr-other:#2F7A4C;   /* transcript lines on paper: dark enough to read */
   --tone1:#C2352C; --tone2:#A86500; --tone3:#1B7A50; --tone4:#2B5FA6; --tone5:#8A7F74;   /* pinyin tones on paper */
   --wm-red:#DE3B26; --wm-pink:#D9604F; --wm-pink-tint:#FBE3DE; --wm-green:#0E8A63;   /* watermelon: flesh, light flesh, rind */
+  --r-who:#2F6DB0; --r-where:#A8701A; --r-how:#7B55B8; --r-what:#C2477A;   /* parts of a sentence; when = rind green, verb = flesh red */
   --r:12px; --r-sm:8px;
   --ease:cubic-bezier(.2,.8,.2,1);                  /* quick start, soft landing: every slide and fold uses it */
 }
@@ -25,6 +26,7 @@
   --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
   --tone1:#FF7B70; --tone2:#F5B23C; --tone3:#46D39A; --tone4:#79B0FF; --tone5:#9A9086;
   --wm-red:#FF6B54; --wm-pink:#FF9A88; --wm-pink-tint:#3A201B; --wm-green:#46D39A;
+  --r-who:#86B6F5; --r-where:#E2B66B; --r-how:#B9A2F2; --r-what:#F296BC;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg:#14120F; --surface:#1C1916; --surface-2:#24201C; --fg:#F2EDE4; --fg-2:#C4BBAE; --muted:#8E8479;
@@ -35,6 +37,7 @@
   --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
   --tone1:#FF7B70; --tone2:#F5B23C; --tone3:#46D39A; --tone4:#79B0FF; --tone5:#9A9086;
   --wm-red:#FF6B54; --wm-pink:#FF9A88; --wm-pink-tint:#3A201B; --wm-green:#46D39A;
+  --r-who:#86B6F5; --r-where:#E2B66B; --r-how:#B9A2F2; --r-what:#F296BC;
 } }
 
 /* ---------- base ---------- */
@@ -264,11 +267,13 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .gr .order { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; font:500 10.5px var(--mono); color:var(--muted); }
 .gr .order.zh { font:600 15px var(--body); color:var(--fg); }
 .gr .order span { padding:3px 4px; border-radius:6px; background:var(--surface-2); text-align:center; }
-.gr .order span.r-when { color:var(--wm-green); }
+.gr .order span.r-who { color:var(--r-who); } .gr .order span.r-when { color:var(--wm-green); } .gr .order span.r-where { color:var(--r-where); }
+.gr .order span.r-how { color:var(--r-how); } .gr .order span.r-what { color:var(--r-what); }
+.gr .order span[class^="r-"]:not(.r-verb) { box-shadow:inset 0 -2px currentColor; }
 .gr .order span.r-verb { background:var(--wm-red); color:#fff; }
 .gr .order.zh small { display:block; font:400 9.5px var(--mono); color:inherit; opacity:.75; }
 .gr i[class^="r-"] { font-style:normal; }
-.r-when { color:var(--wm-green); }
+.r-who { color:var(--r-who); } .r-when { color:var(--wm-green); } .r-where { color:var(--r-where); } .r-how { color:var(--r-how); } .r-what { color:var(--r-what); }
 .r-verb { color:var(--wm-red); font-weight:800; }
 .gr .ex { display:grid; grid-template-columns:112px auto minmax(0,1fr); gap:8px; align-items:baseline; font-size:12.5px; }
 .gr .ex code { font-size:11px; background:none; border:0; padding:0; color:var(--muted); }
@@ -277,7 +282,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .gr .zh { font-size:16px; line-height:2.1; color:var(--fg); }
 .gr .zh ruby { ruby-align:center; margin:0 .06em; }
 .gr .zh rt { font:500 10px var(--mono); letter-spacing:0; color:var(--muted); }
-.gr .zh ruby.r-verb rt { color:var(--wm-red); } .gr .zh ruby.r-when rt { color:var(--wm-green); }
+.gr .zh ruby[class^="r-"] rt { color:inherit; opacity:.85; }   /* each word's pinyin in its word's colour */
 /* a tense marker: plain text in a small box whose border is its tense's colour (so it never looks like the red verb) */
 .gr .g { background:none; color:var(--fg); font-weight:600; text-decoration:none; border:1.5px solid var(--line-2); border-radius:5px; padding:0 .12em; margin:0 .1em; }
 .gr .g.past { border-color:var(--wm-green); } .gr .g.future { border-color:var(--wm-pink); } .gr .g.present { border-color:var(--wm-red); }
