@@ -162,7 +162,7 @@ def main() -> None:
         Path(".split").write_text(split_max + "\n")
 
     # pinyin, the translation worksheet and the player's words (redone when zh.srt or the fixes change)
-    if not newer("zh.pinyin.srt", "zh.srt", FIXES):
+    if not newer("zh.pinyin.srt", "zh.srt", FIXES) or not Path("zh.zh-pinyin.srt").exists():   # it writes both
         tool("pinyin", "zh.srt")
     if not newer("zh.lines.txt", "zh.srt"):
         tool("export", "zh.srt")

@@ -64,9 +64,19 @@ def ready(window, url):
     window.show()
 
 
+class Api:
+    """What the pages may ask of the window (window.pywebview.api in JavaScript)."""
+
+    def pick_folder(self, start=""):
+        kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
+        start = start if start and Path(start).expanduser().is_dir() else str(Path.home())
+        picked = webview.windows[0].create_file_dialog(kind, directory=start)
+        return picked[0] if picked else None
+
+
 def main():
     url = serve()
-    window = webview.create_window("Pianpian 片片", url="about:blank", width=1440, height=900,
+    window = webview.create_window("Pianpian 片片", url="about:blank", width=1440, height=900, js_api=Api(),
                                    min_size=(900, 600), background_color="#14120F", hidden=True)
     webview.start(ready, (window, url))
     logging.info("window closed")

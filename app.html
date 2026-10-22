@@ -435,6 +435,9 @@ if (OFFLINE) {
 } else {
   window.addEventListener('hashchange', () => { const id = hashId(); if (id && (!current || current.id !== id)) select(id); });
   (async () => {
+    if (!DEMO) {                                      // first run, or an engine update: the setup page asks first
+      try { const p = await api('/api/setup'); if (p.needed && p.progress.state !== 'done') { location.href = 'setup.html'; return; } } catch {}
+    }
     await status();
     try { lastJobs = await api('/api/jobs'); } catch {}
     await loadLibrary();

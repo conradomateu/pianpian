@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up Pianpian 片片</title>
+<link rel="icon" href="design/icons/20-pianpian-watermelon.svg">
+<script>(function(){try{var t=localStorage.getItem("zh-kit-theme");if(t&&t!=="system")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<link rel="stylesheet" href="assets/kit.css">
+<style>
+/* the first run: where things go, what gets downloaded, then the progress. Same tokens as the app. */
+body { min-height:100vh; display:grid; place-items:start center; padding:56px 16px 40px; }
+.box { width:min(620px, 100%); display:grid; gap:18px; }
+.head { display:flex; align-items:center; gap:14px; }
+.head h1 { font-size:30px; margin:0; }
+.head p { margin:2px 0 0; color:var(--fg-2); }
+.card { padding:18px; display:grid; gap:12px; }
+.card h4 { margin:0; font:600 10.5px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.place { display:grid; grid-template-columns:110px minmax(0,1fr) auto; gap:8px; align-items:center; }
+.place span { font-size:13.5px; color:var(--fg-2); }
+.place .field { padding:7px 10px; font:12.5px var(--mono); }
+.item { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:10px; align-items:start; padding:10px 0; border-top:1px solid var(--line); }
+.item:first-of-type { border-top:0; }
+.item input { margin-top:3px; accent-color:var(--red); }
+.item b { display:block; font-size:14px; } .item small { color:var(--muted); font-size:12.5px; }
+.item .sz { font:12px var(--mono); color:var(--fg-2); white-space:nowrap; }
+.item .sz.ready { color:var(--jade-fg); }
+.sum { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; align-items:center; }
+.sum .muted { font-size:12.5px; }
+.go { padding:11px 20px; font-size:15px; }
+.step { display:grid; gap:6px; padding:10px 0; border-top:1px solid var(--line); }
+.step:first-of-type { border-top:0; }
+.step .top { display:flex; justify-content:space-between; gap:10px; font-size:13.5px; }
+.step .st { font:11.5px var(--mono); color:var(--muted); }
+.step.done .st { color:var(--jade-fg); } .step.failed .st { color:var(--red-fg); } .step.running .st { color:var(--fg); }
+.meter { height:6px; border-radius:99px; background:var(--surface-2); overflow:hidden; }
+.meter i { display:block; height:100%; width:0; border-radius:inherit; background:var(--red); transition:width .4s var(--ease); }
+.step.done .meter i { background:var(--jade); width:100%; }
+.step.running.busy .meter i { width:35%; animation:slide 1.3s var(--ease) infinite; }
+@keyframes slide { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
+.last { font:11.5px var(--mono); color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+pre.log { max-height:240px; overflow:auto; font-size:11px; white-space:pre-wrap; word-break:break-all; margin:0; }
+.err { color:var(--red-fg); font-size:13.5px; }
+.row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="head">
+    <img src="design/icons/20-pianpian-watermelon.svg" width="54" height="54" alt="">
+    <div><h1>Welcome to Pianpian</h1><p>One step before your first video: the tools that make the subtitles.</p></div>
+  </div>
+
+  <form class="card" id="plan" hidden>
+    <h4>Where things go</h4>
+    <label class="place"><span>Your videos</span><input class="field" name="library" spellcheck="false"><button class="btn" type="button" data-pick="library" hidden>Choose…</button></label>
+    <label class="place"><span>Tools &amp; models</span><input class="field" name="data" spellcheck="false"><button class="btn" type="button" data-pick="data" hidden>Choose…</button></label>
+    <h4 style="margin-top:6px">What it downloads, once</h4>
+    <div id="items"></div>
+    <div class="sum"><span class="muted" id="sum"></span><button class="btn primary go" type="submit" id="go">Install</button></div>
+  </form>
+
+  <div class="card" id="run" hidden>
+    <h4 id="runtitle">Installing</h4>
+    <div id="steps"></div>
+    <div class="last" id="last"></div>
+    <div class="err" id="err" hidden></div>
+    <div class="row"><button class="mini" type="button" id="logbtn">log</button><span style="flex:1"></span>
+      <button class="btn" type="button" id="retry" hidden>Try again</button>
+      <a class="btn primary" href="app.html" id="open" hidden>Open Pianpian</a></div>
+    <pre class="log" id="log" hidden></pre>
+  </div>
+</div>
+<script src="assets/kit.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const gb = b => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB';
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kit': '1' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+let plan = null, timer = null, lastBody = null;
+
+function renderPlan() {
+  const f = $('plan'), e = plan.engine, ok = e.engine && e.current;
+  f.library.value = plan.config.library; f.data.value = plan.config.data;
+  const chosen = plan.config.models;
+  $('items').innerHTML = `
+    <label class="item"><input type="checkbox" checked disabled><span><b>Engine</b><small>Python and the tools that download videos and make pinyin${ok ? '' : e.engine ? ' (an update)' : ''}</small></span>
+      <span class="sz ${ok ? 'ready' : ''}">${ok ? 'ready' : '≈ ' + gb(plan.engineMB * 1e6)}</span></label>` +
+    plan.models.map(m => `
+    <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${m.ready || !chosen || chosen.includes(m.id) ? 'checked' : ''} ${m.ready ? 'disabled' : ''}>
+      <span><b>${m.task === 'transcribe' ? 'Speech recognition' : 'English translation'}</b><small>${esc(m.about)}${m.task === 'transcribe' ? '. Needed when a video has no Chinese subtitles' : '. You can also translate by hand'}</small></span>
+      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already on this Mac' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('');
+  sum();
+}
+function sum() {
+  const e = plan.engine, picked = [...$('plan').querySelectorAll('input[name=m]:checked:not(:disabled)')].map(i => i.value);
+  const bytes = (e.engine && e.current ? 0 : plan.engineMB * 1e6) + plan.models.filter(m => picked.includes(m.id)).reduce((t, m) => t + (m.size || 0), 0);
+  $('sum').textContent = `${gb(bytes)} to download · ${gb(plan.free)} free`;
+  $('go').textContent = bytes ? `Install (${gb(bytes)})` : 'Continue';
+  $('go').disabled = bytes > plan.free;
+}
+$('plan').addEventListener('change', sum);
+$('plan').onsubmit = async ev => {
+  ev.preventDefault();
+  const f = $('plan');
+  lastBody = { library: f.library.value.trim(), data: f.data.value.trim(),
+               models: [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value) };
+  start();
+};
+async function start() {
+  $('err').hidden = true; $('retry').hidden = true;
+  try { await api('/api/setup', lastBody); } catch (e) { $('err').hidden = false; $('err').textContent = e.message; return; }
+  $('plan').hidden = true; $('run').hidden = false;
+  poll();
+}
+$('retry').onclick = start;
+$('logbtn').onclick = () => { $('log').hidden = !$('log').hidden; $('logbtn').classList.toggle('on', !$('log').hidden); };
+
+async function poll() {
+  clearTimeout(timer);
+  let s; try { s = await api('/api/setup'); } catch { timer = setTimeout(poll, 1500); return; }
+  const p = s.progress;
+  $('steps').innerHTML = p.steps.map(st => {
+    const pct = st.total ? Math.min(100, st.done / st.total * 100) : 0;
+    const label = st.state === 'running' && st.total ? `${gb(st.done)} of ${gb(st.total)}` : { waiting: 'waiting', running: 'working…', done: 'done', failed: 'stopped' }[st.state];
+    return `<div class="step ${st.state} ${st.state === 'running' && !st.total ? 'busy' : ''}">
+      <div class="top"><span>${esc(st.label)}</span><span class="st">${label}</span></div>
+      <div class="meter"><i style="width:${st.state === 'done' ? 100 : pct}%"></i></div></div>`;
+  }).join('');
+  $('last').textContent = p.log[p.log.length - 1] || '';
+  const log = $('log'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+  log.textContent = p.log.join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
+  $('runtitle').textContent = { running: 'Installing', done: 'Ready', failed: 'The setup stopped' }[p.state] || 'Installing';
+  if (p.state === 'failed') {
+    $('err').hidden = false; $('err').textContent = p.error + '. Try again: downloads carry on where they stopped.';
+    $('retry').hidden = false; if ($('log').hidden) $('logbtn').click();
+    return;
+  }
+  if (p.state === 'done') { $('open').hidden = false; setTimeout(() => { location.href = 'app.html'; }, 1500); return; }
+  timer = setTimeout(poll, 700);
+}
+
+// the native folder picker, when running inside the app window (pywebview)
+function enablePickers() {
+  document.querySelectorAll('[data-pick]').forEach(b => {
+    b.hidden = false;
+    b.onclick = async () => {
+      const input = $('plan')[b.dataset.pick];
+      const dir = await window.pywebview.api.pick_folder(input.value);
+      if (dir) input.value = dir;
+    };
+  });
+}
+if (window.pywebview && window.pywebview.api) enablePickers(); else window.addEventListener('pywebviewready', enablePickers);
+
+(async () => {
+  try { plan = await api('/api/setup'); } catch (e) { document.querySelector('.head p').textContent = 'The app server is not answering: ' + e.message; return; }
+  if (plan.progress.state === 'running') { $('run').hidden = false; return poll(); }
+  if (!plan.needed && !new URLSearchParams(location.search).has('again')) { location.href = 'app.html'; return; }
+  renderPlan(); $('plan').hidden = false;
+})();
+</script>
+</body>
+</html>

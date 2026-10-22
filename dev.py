@@ -2,6 +2,7 @@
 """Pianpian's task runner: the same commands on your Mac and in CI.
 
     python3 dev.py engine     # the pipeline's environment (.venv, group "runtime"): server.py finds it
+    python3 dev.py lock       # pin the engine's packages with hashes: pipeline/requirements.txt (the app installs these)
     python3 dev.py check      # lint + test: what CI runs on every push
     python3 dev.py lint       # ruff (real mistakes only) + node --check on the JavaScript
     python3 dev.py test       # pytest (tests/)
@@ -40,11 +41,22 @@ def test() -> None:
     run("uv", "run", "--group", "dev", "pytest", "-q")
 
 
+def lock() -> None:
+    """pipeline/requirements.txt: the engine's packages for Apple Silicon (where it runs), pinned with hashes,
+    which hold whether they come from PyPI or a mirror."""
+    out = ROOT / "pipeline" / "requirements.txt"
+    run("uv", "pip", "compile", "pyproject.toml", "--group", "runtime", "--python-version", "3.12", "--python-platform", "aarch64-apple-darwin",
+        "--generate-hashes", "--no-annotate", "--no-header", "-q", "-o", str(out.relative_to(ROOT)))
+    out.write_text('# The engine\'s packages, pinned with hashes. Made by `python3 dev.py lock` from pyproject.toml (group "runtime").\n'
+                   + out.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 TASKS = {
     "lint": lint,
     "test": test,
     "check": lambda: (lint(), test()),
     "engine": lambda: run("uv", "sync", "--group", "runtime"),
+    "lock": lock,
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
     "site": lambda: run(sys.executable, "tools/build_site.py"),

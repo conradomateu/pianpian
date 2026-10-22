@@ -4,9 +4,10 @@
     python pipeline/models.py ensure mlx-community/Hy-MT2-1.8B-4bit    # download it (progress lines on stdout)
 
 Files come from ModelScope's copy first (fast from mainland China) and Hugging Face second, and each
-one is checked against the size and SHA-256 that Hugging Face publishes. A download that stops resumes
-where it left off. A model already in the Hugging Face cache (~/.cache/huggingface) is used as it is.
-Folder: $PIANPIAN_MODELS, else ~/.cache/mandarin-kit/models (shared with the command-line tools).
+one is checked against the size and SHA-256 that the same site publishes. A download that stops resumes
+where it left off. A model already in the Hugging Face cache (~/.cache/huggingface) or in ~/.cache/mandarin-kit/models
+(the command-line tools' folder) is used where it is.
+Folder: $PIANPIAN_MODELS (the app sets it to <data>/models), else ~/.cache/mandarin-kit/models.
 
 Progress lines, for the installer:  @progress {"model": …, "file": …, "done": bytes, "total": bytes}
 """
@@ -18,11 +19,16 @@ import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-CACHE = Path(os.environ.get("PIANPIAN_MODELS") or Path.home() / ".cache" / "mandarin-kit" / "models")
+LEGACY = Path.home() / ".cache" / "mandarin-kit" / "models"
+
+
+def cache() -> Path:
+    return Path(os.environ.get("PIANPIAN_MODELS") or LEGACY)
 NEEDED = re.compile(r"\.(json|safetensors|jinja|model|tiktoken|npz)$")       # weights, config, tokenizer; no images
 CATALOG = [
-    {"id": "mlx-community/whisper-large-v3-turbo", "task": "transcribe", "about": "Whisper large-v3-turbo: Chinese speech to text"},
-    {"id": "mlx-community/Hy-MT2-1.8B-4bit", "task": "translate", "about": "Hy-MT2 1.8B (4-bit): Chinese to English, and the word links"},
+    # size: what the download weighs, for the setup page before anything is fetched
+    {"id": "mlx-community/whisper-large-v3-turbo", "task": "transcribe", "about": "Whisper large-v3-turbo: Chinese speech to text", "size": 1_614_000_000},
+    {"id": "mlx-community/Hy-MT2-1.8B-4bit", "task": "translate", "about": "Hy-MT2 1.8B (4-bit): Chinese to English, and the word links", "size": 1_017_000_000},
 ]
 
 
@@ -30,11 +36,17 @@ def progress(**kw) -> None:
     print("@progress " + json.dumps(kw), flush=True)
 
 
-def files_of(repo: str) -> list[dict]:
-    """[{name, size, sha256}] of the files the app needs, from Hugging Face's API (small, one request)."""
-    info = json.load(urlopen(f"https://huggingface.co/api/models/{repo}?blobs=true", timeout=60))
-    return [{"name": f["rfilename"], "size": f.get("size"), "sha256": (f.get("lfs") or {}).get("sha256")}
-            for f in info["siblings"] if NEEDED.search(f["rfilename"]) and "/" not in f["rfilename"]]
+def files_of(repo: str) -> tuple[str, list[dict]]:
+    """(download base, [{name, size, sha256}]) of the files the app needs: ModelScope's list, else Hugging Face's."""
+    try:
+        info = json.load(urlopen(f"https://www.modelscope.cn/api/v1/models/{repo}/repo/files?Recursive=true", timeout=20))
+        files = [{"name": f["Path"], "size": f["Size"], "sha256": f.get("Sha256")} for f in info["Data"]["Files"] if f["Type"] == "blob"]
+        base = f"https://www.modelscope.cn/models/{repo}/resolve/master/"
+    except (OSError, ValueError, KeyError, TypeError):
+        info = json.load(urlopen(f"https://huggingface.co/api/models/{repo}?blobs=true", timeout=60))
+        files = [{"name": f["rfilename"], "size": f.get("size"), "sha256": (f.get("lfs") or {}).get("sha256")} for f in info["siblings"]]
+        base = f"https://huggingface.co/{repo}/resolve/main/"
+    return base, [f for f in files if NEEDED.search(f["name"]) and "/" not in f["name"] and f["name"] != "configuration.json"]
 
 
 def hf_cached(repo: str) -> Path | None:
@@ -49,9 +61,9 @@ def hf_cached(repo: str) -> Path | None:
 def local_path(repo: str) -> Path | None:
     if Path(repo).expanduser().is_dir():
         return Path(repo).expanduser()
-    dest = CACHE / repo.replace("/", "__")
-    if (dest / ".complete").exists():
-        return dest
+    for base in (cache(), LEGACY):
+        if (base / repo.replace("/", "__") / ".complete").exists():
+            return base / repo.replace("/", "__")
     return hf_cached(repo)
 
 
@@ -80,20 +92,20 @@ def ensure(repo: str) -> str:
     """A local folder with the model, downloading what is missing."""
     if (have := local_path(repo)) is not None:
         return str(have)
-    dest = CACHE / repo.replace("/", "__")
+    dest = cache() / repo.replace("/", "__")
     dest.mkdir(parents=True, exist_ok=True)
-    files = files_of(repo)
+    base, files = files_of(repo)
     total = sum(f["size"] or 0 for f in files)
     print(f"downloading {repo} ({total / 1e9:.2f} GB), once…", flush=True)
     for f in files:
         target = dest / f["name"]
-        for base in (f"https://www.modelscope.cn/models/{repo}/resolve/master/", f"https://huggingface.co/{repo}/resolve/main/"):
+        for tries in range(3):                               # a dropped connection resumes where it stopped
             if target.exists() and target.stat().st_size == f["size"]:
                 break
             try:
                 fetch(base + f["name"], target, f["size"], repo)
             except OSError as e:
-                print(f"  {f['name']}: {base.split('/')[2]} failed ({e}), trying the next source", flush=True)
+                print(f"  {f['name']}: {e}, trying again", flush=True)
         if not target.exists() or target.stat().st_size != f["size"]:
             sys.exit(f"could not download {f['name']} (check the connection and try again: it resumes)")
         if f["sha256"]:
@@ -103,23 +115,13 @@ def ensure(repo: str) -> str:
                     h.update(chunk)
             if h.hexdigest() != f["sha256"]:
                 target.unlink()
-                sys.exit(f"{f['name']}: checksum does not match Hugging Face's; deleted it, try again")
+                sys.exit(f"{f['name']}: checksum does not match; deleted it, try again")
     (dest / ".complete").touch()
     return str(dest)
 
 
 def status() -> list[dict]:
-    out = []
-    for m in CATALOG:
-        path = local_path(m["id"])
-        size = None
-        if path is None:
-            try:
-                size = sum(f["size"] or 0 for f in files_of(m["id"]))
-            except OSError:
-                pass
-        out.append({**m, "ready": path is not None, "path": str(path) if path else None, "size": size})
-    return out
+    return [{**m, "ready": (p := local_path(m["id"])) is not None, "path": str(p) if p else None} for m in CATALOG]
 
 
 if __name__ == "__main__":

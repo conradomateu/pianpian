@@ -16,7 +16,6 @@ import os
 import queue
 import re
 import subprocess
-import sys
 import threading
 import time
 import webbrowser
@@ -24,13 +23,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import engine  # noqa: E402  (next to this file: the engine's Python, the settings, the first-run setup)
+
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "pipeline" / "study.py"
-SUPPORT = Path.home() / "Library" / "Application Support" / "Pianpian"
-# the Python that runs the pipeline: $PIANPIAN_PYTHON, else the engine the app installed, else the
-# repository's own environment (`uv sync --group runtime`), else this one
-ENGINE_PY = os.environ.get("PIANPIAN_PYTHON") or next(
-    (str(p) for p in (SUPPORT / "engine" / "bin" / "python", HERE / ".venv" / "bin" / "python") if p.exists()), sys.executable)
 # browsers yt-dlp can borrow a Bilibili login from, as macOS apps
 BROWSERS = {"safari": "Safari", "chrome": "Google Chrome", "brave": "Brave Browser", "firefox": "Firefox",
             "edge": "Microsoft Edge", "chromium": "Chromium", "opera": "Opera", "vivaldi": "Vivaldi"}
@@ -43,7 +39,7 @@ mimetypes.add_type("video/x-matroska", ".mkv")
 mimetypes.add_type("text/javascript; charset=utf-8", ".js")
 mimetypes.add_type("application/json; charset=utf-8", ".json")
 
-CFG = {"library": Path.home() / "Movies" / "mandarin"}
+CFG = {"library": Path(engine.config()["library"]).expanduser()}
 _m = re.search(r'^version = "([^"]+)"', (HERE / "pyproject.toml").read_text(encoding="utf-8"), re.M) if (HERE / "pyproject.toml").exists() else None
 VERSION = os.environ.get("PIANPIAN_VERSION") or (_m[1] if _m else "dev")
 
@@ -180,14 +176,14 @@ def rebuild_job(vid_id: str, translate=False, split=None) -> Job:
     if split is not None:
         env.update(RESPLIT="1", SPLIT_MAX=str(split))
     if p.is_file():                                           # loose video: the script makes <name>_study/
-        return enqueue(Job(f"Make subtitles · {p.name}", [ENGINE_PY, str(SCRIPT), str(p)], str(p.parent), env, video=p.stem + "_study"))
+        return enqueue(Job(f"Make subtitles · {p.name}", [engine.python(), str(SCRIPT), str(p)], str(p.parent), env, video=p.stem + "_study"))
     src = video_in(p)
     if not src:
         raise FileNotFoundError("no source video in " + vid_id)
     if translate:
         env["FORCE_EN"] = "1"
     verb = "Translate" if translate else f"Lines of {split or 'any'} characters" if split is not None else "Rebuild"
-    return enqueue(Job(f"{verb} · {read(p / 'title.txt') or vid_id}", [ENGINE_PY, str(SCRIPT), str(src)], str(p), env, video=vid_id))
+    return enqueue(Job(f"{verb} · {read(p / 'title.txt') or vid_id}", [engine.python(), str(SCRIPT), str(src)], str(p), env, video=vid_id))
 
 
 # ---------------------------------------------------------------- HTTP
@@ -254,7 +250,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
-                return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": ENGINE["ok"],
+                return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": engine.STATE["engine"], "current": engine.STATE["current"],
                                        "browsers": installed_browsers(), "busy": busy}, cors=True)
             if path == "/api/videos":
                 return self.send_json(library())
@@ -265,6 +261,8 @@ class Handler(BaseHTTPRequestHandler):
                     info["lines"] = read(p / "zh.lines.txt")
                     info["english"] = read(p / "en.lines.txt")
                 return self.send_json(info)
+            if path == "/api/setup":                       # what the first-run setup would do, and how it is going
+                return self.send_json({**engine.SETUP.plan(), "progress": engine.SETUP.public()})
             if path == "/api/jobs":
                 return self.send_json([j.public() for j in reversed(JOBS)])
             if m := re.fullmatch(r"/library/([^/]+)/thumb\.jpg", path):
@@ -290,7 +288,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(404, "no thumbnail for a loose file")
         out = p / "thumb.jpg"
         if not out.exists() and (src := video_in(p)):
-            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
+            subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
                             "-vf", "scale=480:-2", str(out)], timeout=30)
         return self.send_file(out) if out.exists() else self.fail(404, "no thumbnail")
 
@@ -351,11 +349,25 @@ class Handler(BaseHTTPRequestHandler):
                 browser = str(data.get("browser") or "")
                 if browser and browser not in BROWSERS:
                     return self.fail(400, "unknown browser")
-                cmd = [ENGINE_PY, str(SCRIPT), url] + ([browser] if browser else [])
+                cmd = [engine.python(), str(SCRIPT), url] + ([browser] if browser else [])
                 env = {**({"HARDSUBS": "1"} if data.get("burned") else {}), **({"AUTO_EN": "1"} if data.get("translate") else {})}
                 job = Job(f"Download · {url}", cmd, str(CFG["library"]), env)
                 job.kind = "add"
                 return self.send_json(enqueue(job).public())
+            if path == "/api/setup":                       # {library, data, models: [ids]}: install what is missing
+                library = str(data.get("library") or "").strip() or None
+                folder = str(data.get("data") or "").strip() or None
+                for d in (library, folder):
+                    if d and not Path(d).expanduser().is_absolute():
+                        return self.fail(400, f"not a full folder path: {d}")
+                try:
+                    engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []])
+                except RuntimeError as e:
+                    return self.fail(409, str(e))
+                CFG["library"] = Path(engine.config()["library"]).expanduser()
+                CFG["library"].mkdir(parents=True, exist_ok=True)
+                os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())
+                return self.send_json(engine.SETUP.public())
             if m := re.fullmatch(r"/api/videos/([^/]+)/rebuild", path):
                 return self.send_json(rebuild_job(m[1]).public())
             if m := re.fullmatch(r"/api/videos/([^/]+)/split", path):
@@ -390,24 +402,13 @@ def installed_browsers() -> list[str]:
     return [k for k, name in BROWSERS.items() if k == "safari" or any((a / f"{name}.app").exists() for a in apps)]
 
 
-ENGINE = {"ok": None}                                     # None until checked: can the engine's Python run the pipeline?
-
-
-def check_engine() -> None:
-    try:
-        r = subprocess.run([ENGINE_PY, "-c", "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm"],
-                           capture_output=True, timeout=120)
-        ENGINE["ok"] = r.returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
-        ENGINE["ok"] = False
-
-
 def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     """Start the job worker and bind the server (not yet serving). launcher.py uses this too."""
     if library:
         CFG["library"] = Path(library).expanduser().resolve()
     CFG["library"].mkdir(parents=True, exist_ok=True)
-    threading.Thread(target=check_engine, daemon=True).start()
+    os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())      # the pipeline's jobs find the models there
+    threading.Thread(target=engine.check, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)      # raises OSError if the port is taken
     threading.Thread(target=worker, daemon=True).start()
     return srv
