@@ -10,3 +10,6 @@ __pycache__/
 
 # built apps (tools/make_app.sh)
 dist/
+
+# made locally with the Tsinghua PyPI mirror, which CI can't use: CI resolves from PyPI (lock again in M1)
+uv.lock

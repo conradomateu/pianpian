@@ -61,4 +61,22 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 | `docs/plans/` | Desktop app design and orchestration (CI, releases, updates, Windows) |
 | `design/icons/` | Logo explorations. Chosen: `20-pianpian-watermelon.svg` (app) and `19-pianpian-mono.svg` (menu bar) |
 
+## Development
+
+```bash
+python3 dev.py check     # lint + tests, the same as CI
+python3 dev.py serve     # the app at http://127.0.0.1:8770
+python3 dev.py app       # build Pianpian.app (macOS)
+```
+
+Commit messages and pull request titles start with `feat:`, `fix:`, `docs:` or `chore:`: release-please builds the changelog and the version from them. Plans: [`docs/plans/`](docs/plans/). Where the work stands: [`docs/HANDOFF.md`](docs/HANDOFF.md).
+
+## Licence and data
+
+Pianpian is MIT licensed ([`LICENSE`](LICENSE)). It uses data from others, under their own terms:
+
+- **HSK 3.0 word levels:** `pipeline/data/hsk3.json`, derived from [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) (MIT, [`hsk3.LICENSE`](pipeline/data/hsk3.LICENSE)).
+- **CC-CEDICT** meanings (CC BY-SA 4.0), downloaded on first use, not shipped.
+- **Models**, downloaded on first use, not shipped: Whisper large-v3-turbo (MIT) and Hy-MT2-1.8B by Tencent (check its licence before you share the app).
+
 Only download videos you may watch, and don't re-upload them.

@@ -1,0 +1,11 @@
+name: Idea
+description: Something that would help you learn
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like
+      description: What you are trying to do, and why it would help.
+    validations:
+      required: true

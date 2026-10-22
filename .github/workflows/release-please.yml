@@ -1,0 +1,18 @@
+# On main: keeps a "release v0.x.y" pull request up to date (version + CHANGELOG from feat:/fix: commits).
+# Merging it tags the version and creates the GitHub release. Needs: Settings → Actions → General →
+# "Allow GitHub Actions to create and approve pull requests".
+name: release-please
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

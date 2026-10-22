@@ -1,0 +1,29 @@
+[project]
+name = "pianpian"
+version = "0.0.1"
+description = "Watch Chinese videos with Chinese, pinyin and English subtitles you can mix and click, made on your Mac with local models."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+# The app itself needs nothing: server.py is standard library only, and each pipeline script
+# declares its own dependencies (PEP 723) and runs with `uv run`. These are for development.
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "jieba>=0.42", "pypinyin>=0.51", "zhconv>=1.4"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 160
+target-version = "py312"
+extend-exclude = ["design", "docs"]
+
+[tool.ruff.lint]
+# real mistakes only (undefined names, unused imports, syntax); the style is hand-made and kept as is
+select = ["F", "E9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::SyntaxWarning", "ignore::DeprecationWarning"]

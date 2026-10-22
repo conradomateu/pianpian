@@ -153,7 +153,8 @@ def numbered_to_marks(syl: str) -> str:
         max(low.rfind(v) for v in "iouü")
     if i < 0:
         return base
-    return base[:i + 1] + "\u0304\u0301\u030c\u0300"[tone - 1] + base[i + 1:]
+    import unicodedata
+    return unicodedata.normalize("NFC", base[:i + 1] + "\u0304\u0301\u030c\u0300"[tone - 1] + base[i + 1:])
 
 
 def measure_words(cl: str) -> str:

@@ -1,0 +1,27 @@
+name: Something went wrong
+description: An error, a crash, or a result that looks wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: code
+    attributes:
+      label: Error code
+      description: If the app showed one (for example NET-PYPI). Leave empty if not.
+  - type: textarea
+    id: details
+    attributes:
+      label: Details from the app
+      description: The app fills this when you press Report. Check it before sending; it never includes cookies or your file names.
+      render: text
+  - type: input
+    id: system
+    attributes:
+      label: Mac and macOS version
+      placeholder: MacBook Air M2, macOS 15.1
