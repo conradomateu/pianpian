@@ -80,9 +80,9 @@ h3 { font:600 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; 
 .btn { display:inline-flex; align-items:center; gap:6px; font:600 12px var(--mono); text-decoration:none; white-space:nowrap; cursor:pointer;
   border:1px solid var(--line-2); background:var(--surface); color:var(--fg); padding:6px 12px; border-radius:20px; }
 .btn:hover { border-color:var(--red); color:var(--red-fg); }
-.btn.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
-.btn.primary:hover { background:var(--red); border-color:var(--red); color:#fff; }
-.btn.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.btn.primary { background:var(--red); color:#fff; border-color:var(--red); }
+.btn.primary:hover { background:var(--red-fg); border-color:var(--red-fg); color:#fff; }
+.btn.on { background:var(--jade); color:#fff; border-color:var(--jade); }          /* switched on: rind green */
 .btn.ok { border-color:var(--jade); color:var(--jade-fg); }
 .btn:disabled { opacity:.45; cursor:default; border-color:var(--line-2); color:var(--muted); }
 .field { width:100%; font:13px var(--mono); padding:9px 11px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--bg); color:var(--fg); }
@@ -90,7 +90,7 @@ h3 { font:600 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; 
 textarea.field { resize:vertical; min-height:120px; line-height:1.5; }
 select { background:var(--surface-2); border:1px solid var(--line-2); border-radius:var(--r-sm); padding:4px 6px; }
 input[type=range] { width:120px; accent-color:var(--red); }
-input[type=checkbox] { accent-color:var(--red); }
+input[type=checkbox] { accent-color:var(--jade); }        /* the watermelon touch: rind-green ticks */
 .check { display:flex; gap:7px; align-items:center; font-size:13px; color:var(--fg-2); cursor:pointer; }
 
 /* ---------- pills, notes, cards, tables ---------- */
@@ -152,7 +152,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .vc button:hover { background:rgba(255,255,255,.16); }
 .vc [data-vspeed] { font:600 12px var(--mono); }
 .vc [data-time] { white-space:nowrap; opacity:.9; padding:0 4px; }
-.vc input[type=range] { flex:1; width:auto; min-width:60px; accent-color:#fff; }
+.vc input[type=range] { flex:1; width:auto; min-width:60px; accent-color:#FF6B54; }   /* the progress bar: red flesh */
 .ov { z-index:3; }                                 /* words sit above the bar; the rest of .ov lets clicks through */
 .stage .cover { position:absolute; left:0; right:0; bottom:calc(var(--cb, 5) * 1%); height:calc(var(--ch, 25) * 1%); pointer-events:none;
   background:rgba(12,10,8,.35); -webkit-backdrop-filter:blur(18px) brightness(.55); backdrop-filter:blur(18px) brightness(.55);
@@ -187,7 +187,8 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .dd > summary::after { content:'▾'; font-size:10px; color:var(--muted); }
 .dd.icon > summary::after { content:none; }
 .dd > summary:hover, .ib:hover { border-color:var(--red); color:var(--red-fg); }
-.dd[open] > summary, .ib.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.dd[open] > summary { background:var(--red); color:#fff; border-color:var(--red); }   /* the open menu: red flesh */
+.ib.on { background:var(--jade); color:#fff; border-color:var(--jade); }
 .dd[open] > summary::after { color:inherit; }
 .ib { padding:6px 10px; }
 .ddp { position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:max-content; min-width:240px; max-width:min(540px, 92vw); max-height:min(64vh, 560px); overflow:auto;
@@ -211,7 +212,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .trk input[type=color]::-webkit-color-swatch-wrapper { padding:0; } .trk input[type=color]::-webkit-color-swatch { border:0; border-radius:50%; }
 .trk input[type=range] { width:92px; }
 .mini { font:600 10px var(--mono); border:1px solid var(--line-2); background:var(--surface); border-radius:12px; padding:2px 8px; cursor:pointer; color:var(--muted); }
-.mini.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.mini.on { background:var(--jade); color:#fff; border-color:var(--jade); }
 .trk .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; }
 .trk small { color:var(--muted); font:11px var(--mono); }
 .trk button { border:0; background:none; cursor:pointer; color:var(--muted); padding:0 3px; }
