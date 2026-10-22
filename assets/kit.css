@@ -302,4 +302,4 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .w.say { background:rgba(255,255,255,.36); box-shadow:0 0 0 .08em rgba(255,255,255,.36); transition:background .12s ease; }
 .cue .w.say { background:var(--line-2); box-shadow:0 0 0 2px var(--line-2); }
 .ov .w.hl.say { background:var(--red); }
-
+.tonekey { margin:-2px 0 0; font:500 11.5px var(--mono); color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 12px; }   /* what the pinyin colours mean */

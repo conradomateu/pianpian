@@ -142,6 +142,8 @@
                 <button class="btn" data-raise title="lift the lines above Chinese that is burned into the picture">Raise above burned-in text</button>
                 <label class="check"><input type="checkbox" data-bg checked> dark box</label>
               </div>
+              <p class="tonekey" title="each pinyin syllable is coloured by its tone">Tone colours:
+                <s class="t1">1 mā</s> <s class="t2">2 má</s> <s class="t3">3 mǎ</s> <s class="t4">4 mà</s> <s class="t5">neutral ma</s></p>
               <div class="row">
                 <button class="btn" data-cover title="hide subtitles that are part of the picture behind a blurred band (C)">Cover burned-in text</button>
                 <span class="row" data-coverctl hidden>
