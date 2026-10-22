@@ -266,7 +266,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .gr .ex.more { opacity:.8; }
 .gr small { display:block; font:400 11px var(--mono); color:var(--tr-pinyin); margin-top:1px; }   /* the pinyin under each example */
 .gr .order.zh small { font-size:9.5px; color:inherit; opacity:.75; }
-.gr .ex { grid-template-columns:120px 150px minmax(0,1fr); }
+.gr .ex { grid-template-columns:112px 176px minmax(0,1fr); }   /* room for the pinyin on one line */
 .gr p i { font-style:normal; color:var(--tr-pinyin); font-family:var(--mono); font-size:11px; }
 /* the card above the lines: the word's HSK level and measure word, or a tense rule in its colour */
 .ov .gl em { font-style:normal; font-size:.85em; margin-left:.45em; padding:0 .35em; border:1px solid rgba(255,255,255,.55); border-radius:.3em; white-space:nowrap; }
