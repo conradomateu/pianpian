@@ -24,14 +24,23 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "site" / "shots"
 BROWSERS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
             "/Applications/Chromium.app/Contents/MacOS/Chromium"]
-W, H = 1440, 680
-# name: (seconds into the demo, colour scheme, what to do before the capture: hover a word on the video, or open a menu)
+W, H = 1440, 760
+# name: (seconds into the demo, colour scheme, what to do before the capture: hover a word on the video or open a menu,
+#        and whether to crop to the middle column: the video and its menus, for the website's feature rows)
 SHOTS = {
-    "app-dark": (13.2, "dark", None),
-    "app-light": (24.6, "light", None),
-    "word": (13.2, "dark", ("hover", "三个")),
-    "grammar": (13.2, "light", ("open", "Grammar")),
+    "app-dark": (13.2, "dark", None, False),
+    "app-light": (24.6, "light", None, False),
+    "word": (13.2, "dark", ("hover", "三个"), True),
+    "grammar": (13.2, "light", ("open", "Grammar"), True),
+    "practice": (24.6, "dark", ("open", "Playback"), True),
 }
+# the middle column's box, from the video's top edge to below whichever menu is open
+CROP = """(() => {
+  const m = document.getElementById('main').getBoundingClientRect(), v = player.stage.getBoundingClientRect();
+  const open = document.querySelector('details.dd[open] > .ddp'), b = open ? Math.max(open.getBoundingClientRect().bottom, v.bottom) : v.bottom;
+  const top = Math.min(v.top, open ? open.getBoundingClientRect().top : v.top) - 16;
+  return {x: m.left, y: Math.max(0, top), width: m.width, height: Math.min(innerHeight, b + 70) - Math.max(0, top), scale: 1};
+})()"""
 # resolves once the video has painted the frame at time T (or after 3 s, whatever happens)
 READY = """new Promise(done => {
   const end = Date.now() + 8000, go = () => {
@@ -132,7 +141,7 @@ def main() -> None:
             page = next(t for t in c.call("Target.getTargets")["targetInfos"] if t["type"] == "page")
             c.session = c.call("Target.attachToTarget", targetId=page["targetId"], flatten=True)["sessionId"]
             c.call("Page.enable")
-            for name, (t, scheme, action) in SHOTS.items():
+            for name, (t, scheme, action, crop) in SHOTS.items():
                 c.call("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": scheme}])
                 c.call("Page.navigate", url=f"http://127.0.0.1:{srv.server_port}/app.html?demo#v=pianpian-day&t={t}")
                 c.js("new Promise(r => setTimeout(r, 300))")
@@ -147,7 +156,8 @@ def main() -> None:
                 elif action and action[0] == "open":
                     c.js(f"[...document.querySelectorAll('details.dd > summary')].find(s => s.textContent.trim() === '{action[1]}').click()")
                 c.js("new Promise(r => setTimeout(r, 500))")      # menus and cards fade in
-                png = c.call("Page.captureScreenshot", format="png")["data"]
+                clip = c.js(CROP) if crop else None
+                png = c.call("Page.captureScreenshot", format="png", **({"clip": clip} if clip else {}))["data"]
                 (OUT / f"{name}.png").write_bytes(base64.b64decode(png))
                 print(f"site/shots/{name}.png", flush=True)
         finally:

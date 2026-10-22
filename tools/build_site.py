@@ -7,6 +7,7 @@ answers are written here by server.py's own functions, so the demo shows what th
 The version and the download link come from the repository, so every release rebuilds the site
 (.github/workflows/site.yml). Standard library only.
 """
+import html
 import json
 import re
 import shutil
@@ -15,8 +16,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "_site"
-REPO = "conradomateu/pianpian"
 sys.path.insert(0, str(ROOT))
+from report import REPO  # noqa: E402  (one place for the repository name)
+sys.path.insert(0, str(ROOT / "tools" / "demo"))
+from scenes import APPLE  # noqa: E402  (the same logo as on the demo video's button)
 
 
 def version() -> str:
@@ -41,6 +44,25 @@ def demo_api(dest: Path, ver: str) -> None:
                                                    "browsers": [], "busy": False}), encoding="utf-8")
 
 
+def testimonials() -> str:
+    """The "What learners say" section from site/testimonials.json: [{quote, name, about, url?}], real ones only.
+    An empty list leaves the section out."""
+    try:
+        items = json.loads((ROOT / "site" / "testimonials.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        items = []
+    if not items:
+        return ""
+    cards = []
+    for t in items:
+        name = html.escape(t["name"])
+        who = f'<a href="{html.escape(t["url"])}" rel="noopener">{name}</a>' if t.get("url") else name
+        cards.append(f'      <figure class="quote"><p>{html.escape(t["quote"])}</p><footer><span class="av">{html.escape(t["name"][:1].upper())}</span>'
+                     f'<span><b>{who}</b><br>{html.escape(t.get("about", ""))}</span></footer></figure>')
+    return ('  <section id="people">\n    <h2 class="sec">What learners say</h2>\n    <div class="quotes">\n'
+            + "\n".join(cards) + "\n    </div>\n  </section>\n")
+
+
 def main() -> None:
     ver = version()
     if OUT.exists():
@@ -57,12 +79,13 @@ def main() -> None:
     for f in (ROOT / "site").iterdir():                  # the landing page and whatever sits next to it (CNAME, images)
         if f.is_dir():
             shutil.copytree(f, OUT / f.name)
-        elif f.is_file():
+        elif f.is_file() and f.name != "testimonials.json":
             text = f.read_text(encoding="utf-8") if f.suffix in (".html", ".txt", ".xml", ".json") else None
             if text is None:
                 shutil.copy2(f, OUT / f.name)
             else:
-                (OUT / f.name).write_text(text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO), encoding="utf-8")
+                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
+                (OUT / f.name).write_text(text, encoding="utf-8")
     (OUT / ".nojekyll").touch()                           # serve the files as they are
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
     print(f"_site/: version {ver}, {size / 1e6:.1f} MB")
