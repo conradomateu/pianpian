@@ -45,6 +45,18 @@ def ffmpeg() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
+def ffmpeg_on_path() -> None:
+    """Some steps call a program named exactly `ffmpeg` (mlx_whisper reads the audio that way). On a Mac without
+    Homebrew there is none, so the engine's is linked as `ffmpeg` next to this Python and that folder goes first
+    on PATH for every step."""
+    if shutil.which("ffmpeg"):
+        return
+    link = Path(PY).parent / "ffmpeg"
+    if not link.exists():
+        link.symlink_to(ffmpeg())
+    os.environ["PATH"] = f"{link.parent}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
 def newer(out: str | Path, *deps: str | Path) -> bool:
     """out exists and is newer than every dependency that exists."""
     out = Path(out)
@@ -123,6 +135,7 @@ def main() -> None:
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     src, browser = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "")
+    ffmpeg_on_path()
     env = os.environ.get
     work = get_video(src, browser)
     os.chdir(work)

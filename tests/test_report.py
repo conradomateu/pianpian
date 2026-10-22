@@ -11,6 +11,7 @@ def test_hints_for_known_failures():
     assert report.explain(["ERROR: [BiliBili] BV1: HTTP Error 412: Precondition Failed"])["code"] == "DL-LOGIN"
     assert report.explain(["ERROR: Unsupported URL: https://example.com"])["code"] == "DL-UNSUPPORTED"
     assert report.explain(["OSError: [Errno 28] No space left on device"])["code"] == "DISK-FULL"
+    assert report.explain(["FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'"])["code"] == "TOOL-MISSING"
     assert report.explain(["all good"]) is None
 
 

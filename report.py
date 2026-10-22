@@ -34,6 +34,8 @@ KNOWN = [
      "A model didn't download completely. Try again: it carries on where it stopped."),
     ("MEMORY", r"Killed: 9|MemoryError|\[METAL\].*(failed|out of memory)|Insufficient Memory",
      "The Mac ran out of memory. Close other apps and try again."),
+    ("TOOL-MISSING", r"No such file or directory: '(ffmpeg|ffprobe|swift|uv)'",
+     "A tool the pipeline needs is missing. Run the setup again; if it keeps happening, please report it."),
     ("ENGINE", r"ModuleNotFoundError|No module named|engine (is )?not installed",
      "The engine is missing a part. Run the setup again from the status menu."),
     ("VIDEO-FILE", r"moov atom not found|Invalid data found when processing input|Error opening input",
