@@ -8,17 +8,15 @@ optionally hover a word or open a menu, then capture. Standard library only. Run
 changing the look.
 """
 import base64
-import functools
-import http.server
-import io
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
-import threading
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import build_site  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "site" / "shots"
@@ -109,31 +107,9 @@ def main() -> None:
     exe = next((b for b in BROWSERS if Path(b).exists()), None)
     if not exe:
         sys.exit("needs Chrome, Brave or Chromium")
-    subprocess.run([sys.executable, str(ROOT / "tools" / "build_site.py")], check=True)
+    build_site.main()
 
-    class Quiet(http.server.SimpleHTTPRequestHandler):
-        """Quiet, and with byte ranges: without them Chrome can't seek the video (GitHub Pages has them)."""
-        def log_message(self, *a):
-            pass
-
-        def send_head(self):
-            m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
-            path = Path(self.translate_path(self.path))
-            if not m or not path.is_file():
-                return super().send_head()
-            size = path.stat().st_size
-            start, end = int(m[1]), min(int(m[2] or size - 1), size - 1)
-            f = path.open("rb")
-            f.seek(start)
-            self.send_response(206)
-            self.send_header("Content-Type", self.guess_type(str(path)))
-            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
-            self.send_header("Content-Length", str(end - start + 1))
-            self.send_header("Accept-Ranges", "bytes")
-            self.end_headers()
-            return io.BytesIO(f.read(end - start + 1))
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT / "_site")))
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv = build_site.server(0)                                # with byte ranges, so the video can seek
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as profile:           # a fresh profile: default settings, nothing of yours
         c = Chrome(exe, profile)

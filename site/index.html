@@ -71,6 +71,9 @@ section { scroll-margin-top:70px; }
 .show li kbd { flex:none; min-width:30px; text-align:center; font:600 12px var(--mono); padding:3px 7px; border-radius:7px; color:var(--fg);
   background:var(--surface-2); border:1px solid var(--line-2); border-bottom-width:2px; }
 .show img { display:block; width:100%; height:auto; }
+.try { margin-top:20px; display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:10px; cursor:pointer;
+  font:600 14px var(--body); color:var(--red-fg); background:var(--red-tint); border:1px solid transparent; transition:border-color .16s ease; }
+.try:hover { border-color:var(--red); }
 
 .features { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:26px; }
 @media (max-width:900px) { .features { grid-template-columns:repeat(2, 1fr); } }
@@ -160,6 +163,7 @@ footer.site .grow { flex:1; }
         <span class="k">Every word</span>
         <h2>Hover a word, see what it means</h2>
         <p>Each word shows its pinyin, a dictionary meaning, its HSK level and its measure words. The same word lights up in the pinyin and in the English, so you see which part of the translation it is.</p>
+        <button class="try" type="button" data-try="word">Try it in the demo <span aria-hidden="true">↑</span></button>
       </div>
       <div class="frame"><img src="shots/word.png" alt="Hovering 三个 on the video shows sāngè, three, and the dictionary card" width="1600" height="1036" loading="lazy"></div>
     </div>
@@ -176,6 +180,7 @@ footer.site .grow { flex:1; }
           <li><kbd>P</kbd> Pause after every line, so you can repeat it</li>
           <li><kbd>½×</kbd> Slow it down, from half speed to 1.5×</li>
         </ul>
+        <button class="try" type="button" data-try="practice">Try it in the demo <span aria-hidden="true">↑</span></button>
       </div>
       <div class="frame"><img src="shots/practice.png" alt="The Playback menu: previous and next line, replay, loop line, pause after line, speed" width="1600" height="1044" loading="lazy"></div>
     </div>
@@ -185,6 +190,7 @@ footer.site .grow { flex:1; }
         <span class="k">Grammar</span>
         <h2>See how a sentence is built</h2>
         <p>A cheat sheet for Chinese word order, with every part in its own colour and the pinyin above each word. Optional marks under 了, 过, 在 and 要 tell you whether a sentence is about the past, now, or later.</p>
+        <button class="try" type="button" data-try="grammar">Try it in the demo <span aria-hidden="true">↑</span></button>
       </div>
       <div class="frame"><img src="shots/grammar.png" alt="The Grammar menu: who, when, where, verb, what, each in its own colour" width="1600" height="1128" loading="lazy"></div>
     </div>
@@ -274,6 +280,17 @@ footer.site .grow { flex:1; }
   } catch {}
   say('', 'Needs a Mac with Apple Silicon. Check in  → About This Mac: the chip should say Apple M1 or newer.');
 })();
+/* "Try it in the demo": scroll up to the live app and have it show that feature (demoShow in app.html) */
+document.querySelectorAll('[data-try]').forEach(b => b.onclick = async () => {
+  const frame = document.querySelector('#demo iframe');
+  frame.loading = 'eager';
+  document.getElementById('demo').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  for (let i = 0; i < 100; i++) {                       // the demo may still be loading
+    const show = frame.contentWindow && frame.contentWindow.demoShow;
+    if (show) return show(b.dataset.try);
+    await new Promise(r => setTimeout(r, 100));
+  }
+});
 /* the header gets a hairline once the page scrolls */
 const head = document.querySelector('header.top');
 addEventListener('scroll', () => { head.style.borderBottomColor = scrollY > 8 ? 'var(--line)' : 'transparent'; }, { passive: true });

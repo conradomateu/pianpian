@@ -1,17 +1,22 @@
 """Build the website into _site/: the landing page, and the app itself as a live demo.
 
-    python3 tools/build_site.py            # then: python3 -m http.server -d _site 8000
+    python3 tools/build_site.py            # _site/
+    python3 tools/build_site.py --serve    # and serve it at http://127.0.0.1:8765 (with byte ranges, so video seeks)
 
 The demo is app.html?demo running on demo/library/ (made by tools/demo/make_demo.py). Its API
 answers are written here by server.py's own functions, so the demo shows what the app shows.
 The version and the download link come from the repository, so every release rebuilds the site
 (.github/workflows/site.yml). Standard library only.
 """
+import functools
 import html
+import http.server
+import io
 import json
 import re
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,5 +96,44 @@ def main() -> None:
     print(f"_site/: version {ver}, {size / 1e6:.1f} MB")
 
 
+class RangedHandler(http.server.SimpleHTTPRequestHandler):
+    """http.server with byte ranges (Chrome can't seek a video without them; GitHub Pages has them), and quiet."""
+
+    def log_message(self, *a):
+        pass
+
+    def send_head(self):
+        m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+        path = Path(self.translate_path(self.path))
+        if not m or not path.is_file():
+            return super().send_head()
+        size = path.stat().st_size
+        start, end = int(m[1]), min(int(m[2] or size - 1), size - 1)
+        with path.open("rb") as f:
+            f.seek(start)
+            body = f.read(end - start + 1)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(str(path)))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+        return io.BytesIO(body)
+
+
+def server(port: int) -> http.server.ThreadingHTTPServer:
+    """_site/ served on 127.0.0.1:port (0 = any free port), in a background thread."""
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(RangedHandler, directory=str(OUT)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
 if __name__ == "__main__":
     main()
+    if "--serve" in sys.argv:
+        srv = server(8765)
+        print("http://127.0.0.1:8765/  (Ctrl+C to stop)")
+        try:
+            threading.Event().wait()
+        except KeyboardInterrupt:
+            srv.shutdown()

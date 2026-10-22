@@ -9,6 +9,7 @@
     python3 dev.py serve      # the app at http://127.0.0.1:8770
     python3 dev.py app        # build Pianpian.app into ~/Applications (macOS)
     python3 dev.py site       # the website into _site/ (landing page + live demo)
+    python3 dev.py preview    # build it and serve it at http://127.0.0.1:8765
     python3 dev.py shots      # README and website screenshots from the demo (needs Chrome or Brave)
 
 Standard library only. Tools run through `uv run --group dev` (pyproject.toml). From China, set
@@ -60,6 +61,7 @@ TASKS = {
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
     "site": lambda: run(sys.executable, "tools/build_site.py"),
+    "preview": lambda: run(sys.executable, "tools/build_site.py", "--serve"),
     "shots": lambda: run(sys.executable, "tools/shots.py"),
 }
 
