@@ -55,6 +55,7 @@ body { overflow:hidden; }
 .opts > summary::-webkit-details-marker { display:none; }
 .opts > summary::before { content:'▸ '; } .opts[open] > summary::before { content:'▾ '; }
 .opts[open] { display:grid; gap:7px; }
+.opts .check { align-items:flex-start; line-height:1.4; } .opts .check input { margin-top:2px; }   /* one line of text per option, wrapping as a block */
 .msg { font-size:12.5px; color:var(--red-fg); }
 .msg:empty { display:none; }
 .job { padding:10px 12px; }
@@ -105,8 +106,8 @@ body { overflow:hidden; }
         <button class="btn primary" type="submit" title="download it and make the subtitles">Add</button>
       </div>
       <details class="opts"><summary>options</summary>
-        <label class="check"><input type="checkbox" name="cookies" checked> Use my Brave login <span class="muted">(Bilibili's AI subtitles)</span></label>
-        <label class="check"><input type="checkbox" name="translate" checked> English too <span class="muted">(local model, 1 GB the first time)</span></label>
+        <label class="check"><input type="checkbox" name="cookies" checked><span>Use my Brave login <span class="muted">(Bilibili's AI subtitles)</span></span></label>
+        <label class="check"><input type="checkbox" name="translate" checked><span>English too <span class="muted">(local model, 1 GB the first time)</span></span></label>
       </details>
       <div class="msg" id="addmsg"></div>
     </form>
@@ -314,10 +315,34 @@ async function openFiles(files) {
     history.replaceState(null, '', location.pathname);
     document.querySelectorAll('.item.on').forEach(b => b.classList.remove('on'));
     document.title = video.name + ' · 片片';
-    $('notes').innerHTML = ''; $('vmenu').hidden = true;
+    $('vmenu').hidden = true;
+    dropped = video;
+    $('notes').innerHTML = OFFLINE || !/\.(mp4|m4v|webm|mov|mkv)$/i.test(video.name) ? '' :
+      `<div class="note" id="importnote">Playing from disk, not in your library. ${subs.length ? '' : 'No subtitles came with it. '}
+        <button class="btn primary" data-import type="button">Add to library &amp; make subtitles</button></div>`;
   }
   player.load({ video, subs, words, align, append: !video, ...(video ? { id: video.name + ':' + video.size } : {}) });
 }
+// a video that came from anywhere (not downloaded here) gets the same pipeline: it is copied into the
+// library, then transcribed, given pinyin and English, like a link
+let dropped = null;
+$('notes').addEventListener('click', e => {
+  if (!e.target.closest('[data-import]') || !dropped) return;
+  const note = $('importnote'), file = dropped, en = $('add').translate.checked;
+  const xhr = new XMLHttpRequest();
+  xhr.open('PUT', `/api/import?name=${encodeURIComponent(file.name)}&translate=${en ? 1 : 0}`);
+  xhr.setRequestHeader('X-Kit', '1');
+  xhr.upload.onprogress = ev => { if (ev.lengthComputable) note.textContent = `Copying into the library… ${Math.round(ev.loaded / ev.total * 100)}%`; };
+  xhr.onload = () => {
+    let r = {}; try { r = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status !== 200) { note.textContent = r.error || 'Could not add it.'; return; }
+    note.textContent = 'In your library. Making the subtitles: follow the job on the left; it opens here when it is done.';
+    dropped = null; poll();
+  };
+  xhr.onerror = () => { note.textContent = 'Could not reach the app server.'; };
+  note.textContent = 'Copying into the library…';
+  xhr.send(file);
+});
 $('pick').onchange = e => { openFiles(e.target.files); e.target.value = ''; };
 ['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); player.stage.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); player.stage.classList.remove('over'); }));

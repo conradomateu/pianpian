@@ -275,6 +275,42 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET")
         self.end_headers()
 
+    # ---- PUT /api/import?name=…&translate=1: a video dropped on the window, copied into the library
+    #      and then made into subtitles like a loose file (needs X-Kit, like POST)
+    def do_PUT(self):
+        if self.headers.get("X-Kit") != "1":
+            return self.fail(403, "missing X-Kit header")
+        u = urlparse(self.path)
+        if u.path != "/api/import":
+            return self.fail(404, "not found")
+        q = dict(p.split("=", 1) for p in u.query.split("&") if "=" in p)
+        name = Path(unquote(q.get("name", ""))).name.strip()
+        size = int(self.headers.get("Content-Length") or 0)
+        if not name or name.startswith(".") or Path(name).suffix.lower() not in VIDEO_EXT:
+            return self.fail(400, "drop a video file (" + ", ".join(VIDEO_EXT) + ")")
+        if not size:
+            return self.fail(400, "empty file")
+        lib = CFG["library"]
+        target, n = lib / name, 2
+        while target.exists() or (lib / (target.stem + "_study")).exists():   # never overwrite: "name (2).mp4"
+            target, n = lib / f"{Path(name).stem} ({n}){Path(name).suffix}", n + 1
+        part = lib / f".{target.name}.part"
+        try:
+            with part.open("wb") as f:
+                left = size
+                while left > 0 and (buf := self.rfile.read(min(1 << 20, left))):
+                    f.write(buf)
+                    left -= len(buf)
+            if left:
+                raise ConnectionError("upload stopped early")
+            part.rename(target)
+        except (OSError, ConnectionError) as e:
+            part.unlink(missing_ok=True)
+            return self.fail(500, f"could not copy the video into the library: {e}")
+        job = rebuild_job(target.name, translate=q.get("translate") == "1")
+        job.kind = "add"                                      # like a new link: the app opens it when it is done
+        return self.send_json(job.public())
+
     # ---- POST (needs X-Kit: other sites cannot send that header without a preflight we never grant)
     def do_POST(self):
         if self.headers.get("X-Kit") != "1":

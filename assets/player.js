@@ -232,7 +232,7 @@
       const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
       list.innerHTML = L.cues.map((c, i) => `<div class="cue" data-i="${i}"><div class="t">${fmt(c.s)}</div>` +
         tracks.filter(t => t.on).map(t => { const k = cueAt(t.cues, (c.s + c.e) / 2);
-          return k >= 0 ? `<div class="l" style="color:${t.role === 'zh' ? 'inherit' : t.colour}">${lineHTML(t, t.cues[k], true)}</div>` : ''; }).join('') +
+          return k >= 0 ? `<div class="l ${t.role}">${lineHTML(t, t.cues[k], true)}</div>` : ''; }).join('') +   // colours: kit.css, per theme
         '</div>').join('');
       shownKey = '';
     }

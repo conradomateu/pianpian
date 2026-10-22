@@ -10,6 +10,7 @@
   --display:'Bricolage Grotesque','Archivo',system-ui,-apple-system,sans-serif;
   --body:'Archivo','Avenir Next',system-ui,-apple-system,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --tr-pinyin:#8A5E06; --tr-en:#2A6496; --tr-other:#2F7A4C;   /* transcript lines on paper: dark enough to read */
   --r:12px; --r-sm:8px;
   --ease:cubic-bezier(.2,.8,.2,1);                  /* quick start, soft landing: every slide and fold uses it */
 }
@@ -19,6 +20,7 @@
   --red:#FF6B54; --red-fg:#FF8B76; --red-tint:#2E1A16;
   --jade:#34C795; --jade-fg:#55D9AC; --jade-tint:#10261F;
   --amber:#F5B23C; --amber-fg:#FFC96B; --amber-tint:#2B2113;
+  --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg:#14120F; --surface:#1C1916; --surface-2:#24201C; --fg:#F2EDE4; --fg-2:#C4BBAE; --muted:#8E8479;
@@ -26,6 +28,7 @@
   --red:#FF6B54; --red-fg:#FF8B76; --red-tint:#2E1A16;
   --jade:#34C795; --jade-fg:#55D9AC; --jade-tint:#10261F;
   --amber:#F5B23C; --amber-fg:#FFC96B; --amber-tint:#2B2113;
+  --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
 } }
 
 /* ---------- base ---------- */
@@ -217,6 +220,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .cue.now { background:var(--surface-2); box-shadow:inset 3px 0 var(--red); }
 .cue .t { font:10.5px var(--mono); color:var(--muted); }
 .cue .l { font-size:14.5px; }
+.cue .l.pinyin { color:var(--tr-pinyin); } .cue .l.en { color:var(--tr-en); } .cue .l.stacked, .cue .l.other { color:var(--tr-other); }
 .empty { padding:18px; color:var(--muted); font-size:13px; }
 
 @media (max-width:640px) { .bar nav { display:none; } .wrap { padding:24px 16px 70px; } }
