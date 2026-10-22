@@ -249,11 +249,21 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .cue .g.future, .ddp .g.future, .cue .g.maybe, .ddp .g.maybe, .cue .g.time-future, .ddp .g.time-future { text-decoration-color:var(--amber); }
 .cue .g.maybe, .ddp .g.maybe, .cue .g.change, .ddp .g.change { text-decoration-style:dashed; }
 .cue .g.time-past, .ddp .g.time-past, .cue .g.time-present, .ddp .g.time-present, .cue .g.time-future, .ddp .g.time-future { text-decoration-style:dotted; }
-.ddp.grammar { width:min(460px, 92vw); }
-.legend { display:grid; gap:8px; font-size:13px; color:var(--fg-2); }
-.legend > div { display:grid; grid-template-columns:48px minmax(0,1fr); gap:10px; align-items:baseline; }
-.legend > div > .g { justify-self:start; font-size:16px; }
-.ddp .note { margin:0; font-size:12.5px; }
+.ddp.grammar { width:min(520px, 92vw); gap:12px; }
+/* the cheat sheet: word order, then past / future / now, each with its colour on the left */
+.gr { display:grid; gap:6px; padding-left:10px; border-left:3px solid var(--line-2); }
+.gr.past { border-color:var(--jade); } .gr.future { border-color:var(--amber); } .gr.present { border-color:var(--red); }
+.gr h5 { margin:0; }
+.gr p { margin:2px 0 0; font-size:12.5px; color:var(--fg-2); }
+.gr .order { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; font:500 10.5px var(--mono); color:var(--muted); }
+.gr .order.zh { font:600 15px var(--body); color:var(--fg); }
+.gr .order span { padding:3px 4px; border-radius:6px; background:var(--surface-2); text-align:center; }
+.gr .order.zh span:nth-child(5) { background:var(--fg); color:var(--bg); }          /* the verb */
+.gr .ex { display:grid; grid-template-columns:132px 112px minmax(0,1fr); gap:8px; align-items:baseline; font-size:12.5px; }
+.gr .ex code { font-size:11px; background:none; border:0; padding:0; color:var(--muted); }
+.gr .ex span { font-size:15px; color:var(--fg); }
+.gr .ex em { font-style:normal; color:var(--fg-2); }
+.gr .ex.more { opacity:.8; }
 /* the card above the lines: the word's HSK level and measure word, or a tense rule in its colour */
 .ov .gl em { font-style:normal; font-size:.85em; margin-left:.45em; padding:0 .35em; border:1px solid rgba(255,255,255,.55); border-radius:.3em; white-space:nowrap; }
 .ov .gl span.rule { background:rgba(20,18,15,.92) !important; }

@@ -162,17 +162,30 @@
               </div>
             </div></details>
             <details class="dd" data-dd><summary>Grammar</summary><div class="ddp grammar">
-              <div class="row"><button class="btn" data-grammar title="underline the characters that set the time (G)">Show tenses</button></div>
-              <div class="legend">
-                <div><b class="g past">了</b><span><b>Past</b> · verb + 了: done · verb + 过: done before · 没 + verb: didn't</span></div>
-                <div><b class="g present">在</b><span><b>Present</b> · 在 / 正在 + verb: happening now · verb + 着: ongoing</span></div>
-                <div><b class="g future">要</b><span><b>Future</b> · 将 + verb · 快要 … 了: about to</span></div>
-                <div><b class="g maybe">会</b><span><b>Maybe future</b> · 会 + verb (or "can") · 要 + verb (or "want to")</span></div>
-                <div><b class="g change">了</b><span><b>New situation</b> · 了 at the end, not after a verb</span></div>
-                <div><b class="g time-past">昨天</b><span><b>Time words</b> · 昨天 past · 现在 now · 明天 future</span></div>
-              </div>
-              <p class="note">Golden rule: Chinese verbs never change. Time comes from these words, and the time word goes <b>before</b> the verb: 我明天去, not 我去明天.</p>
-              <p class="muted" style="margin:0;font-size:12px">Off by default. When on, click an underlined character to see its rule. Found by rules, not by a person: when it can't tell, it says "maybe".</p>
+              <section class="gr">
+                <h5>Word order: always the same</h5>
+                <div class="order"><span>Who</span><span>When</span><span>Where</span><span>With / how</span><span>Verb</span><span>What</span></div>
+                <div class="order zh"><span>我</span><span>明天</span><span>在家</span><span>跟朋友</span><span>看</span><span>电影</span></div>
+                <p>I'll watch a film at home with friends tomorrow. Time and place go <b>before</b> the verb: 我明天去 ✓ · 我去明天 ✗</p>
+              </section>
+              <section class="gr past">
+                <h5>Past · two ways</h5>
+                <div class="ex"><code>verb + 了 + what</code><span>我买<b class="g past">了</b>两本书</span><em>I bought two books (the action, done)</em></div>
+                <div class="ex"><code>… + 了 at the end</code><span>我吃饭<b class="g past">了</b></span><em>I've eaten (it's done now)</em></div>
+                <div class="ex more"><code>没 + verb, no 了</code><span>我<b class="g past">没</b>吃饭</span><em>I didn't eat</em></div>
+                <div class="ex more"><code>verb + 过</code><span>我去<b class="g past">过</b>北京</span><em>I've been to Beijing (ever)</em></div>
+              </section>
+              <section class="gr future">
+                <h5>Future · two ways</h5>
+                <div class="ex"><code>要 + verb</code><span>我<b class="g future">要</b>去北京</span><em>I'm going to Beijing (a plan)</em></div>
+                <div class="ex"><code>会 + verb</code><span>明天<b class="g future">会</b>下雨</span><em>It will rain tomorrow (a guess)</em></div>
+                <div class="ex more"><code>快要 … 了</code><span><b class="g future">快要</b>下雨<b class="g future">了</b></span><em>It's about to rain</em></div>
+              </section>
+              <section class="gr present">
+                <h5>Now</h5>
+                <div class="ex"><code>在 + verb</code><span>我<b class="g present">在</b>吃饭</span><em>I'm eating</em></div>
+              </section>
+              <div class="row"><button class="btn" data-grammar title="underline these words in the subtitles (G)">Underline them in the subtitles</button></div>
             </div></details>
             <span data-extra></span>
             <details class="dd" data-dd><summary>Resources</summary><div class="ddp">
