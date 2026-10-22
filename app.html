@@ -20,7 +20,9 @@ body { overflow:hidden; }
 /* folding the library: it leaves the layout at once and slides out on top, while the video side
    glides into the freed space (Kit.flip below). Only transform and opacity animate.
    Motion is on only after the first paint, so a folded library doesn't animate shut on load. */
-.side { will-change:transform; contain:paint; }      /* its own layer, ready before it moves: no first-frame stall */
+/* its own layer, ready before it moves (no first-frame stall), and always above the content: while the
+   title and the video glide aside they pass under the library, never across it */
+.side { position:relative; z-index:5; will-change:transform; contain:paint; }
 .side-closed .side { position:absolute; top:0; bottom:0; left:0; z-index:5; transform:translateX(-100%); opacity:0; pointer-events:none; }
 /* it moves like a solid drawer: opening shows it at once, closing keeps it opaque until it is nearly out */
 .ready .side { transition:transform .34s var(--ease), opacity .12s ease; }
