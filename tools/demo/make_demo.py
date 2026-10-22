@@ -2,7 +2,7 @@
 
     python3 tools/demo/make_demo.py --tts-python PATH --kokoro DIR
 
-Everything in it is made here: the lines are script.txt, the voice is Kokoro-82M (Apache-2.0,
+Everything in it is made here: the lines are script.txt, the music is music.py, the voice is Kokoro-82M (Apache-2.0,
 voice zm_yunxia, a young boy) run through mlx-audio, and the pictures are scenes.py rendered by Chrome. Then
 the app's own pipeline makes the subtitles, so the demo shows exactly what the app makes.
 
@@ -24,7 +24,8 @@ OUT = ROOT / "demo" / "library" / "pianpian-day"
 TITLE = "片片的一天 · A day with Pianpian"
 # where the local model slips, the English is fixed by hand (as the app lets you), keyed by line id
 EN_FIXES = {"1": "Hello, my name is Pianpian. I'm a slice of watermelon."}
-LEAD, GAP, TAIL, FADE, FPS = 0.8, 0.9, 1.4, 0.5, 25
+LEAD, GAP, TAIL, FADE, FPS = 1.2, 0.9, 3.0, 0.5, 25     # the tail lets the music's last chord ring
+MUSIC = 0.20                                             # the music's level under the voice (it also ducks when he speaks)
 KEEP = {"source.mp4", "title.txt", "thumb.jpg", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "zh.words.json", "zh.align.json",
         "zh.lines.txt", "en.lines.txt", ".english-auto", ".from-whisper", ".split"}
 BROWSERS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
@@ -52,6 +53,7 @@ def main():
     ap.add_argument("--tts-python", required=True)
     ap.add_argument("--kokoro", required=True)
     ap.add_argument("--voice", default="zm_yunxia")
+    ap.add_argument("--music", default="bouncy", help="a style in music.py: bouncy, dizi, sneaky, festival, calm")
     a = ap.parse_args()
     lines = [s for s in (HERE / "script.txt").read_text(encoding="utf-8").splitlines() if s.strip()]
     tmp = Path(tempfile.mkdtemp(prefix="pianpian-demo-"))
@@ -76,11 +78,12 @@ def main():
         args += ["-loop", "1", "-framerate", str(FPS), "-t", f"{d + FADE:.3f}", "-i", tmp / f"{i + 1}.png"]
     for i in range(len(dur)):
         args += ["-i", tmp / f"v{i + 1}_000.wav"]
+    run(sys.executable, HERE / "music.py", tmp / "music.wav", f"{sum(dur) - 2.5:.2f}", a.music)
+    args += ["-i", tmp / "music.wav"]
     n = len(dur)
     for i, d in enumerate(dur):
-        frames = int((d + FADE) * FPS)
-        zoom = f"1.0+0.05*on/{frames}" if i % 2 == 0 else f"1.05-0.05*on/{frames}"      # slow push in, then out
-        vf.append(f"[{i}]scale=2560:-1,zoompan=z='{zoom}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1280x720:fps={FPS},format=yuv420p[s{i}]")
+        # still pictures (a slow zoom shook: zoompan moves in whole pixels); only the crossfades move
+        vf.append(f"[{i}]scale=1280:720,fps={FPS},format=yuv420p[s{i}]")
         delay = f"adelay={int(LEAD * 1000)}," if i == 0 else ""
         af.append(f"[{n + i}]aresample=48000,{delay}apad=whole_dur={d:.3f}[a{i}]")
     chain, offset = "[s0]", 0.0
@@ -88,7 +91,10 @@ def main():
         offset += dur[i - 1]
         vf.append(f"{chain}[s{i}]xfade=transition=fade:duration={FADE}:offset={offset - FADE / 2:.3f}[x{i}]")
         chain = f"[x{i}]"
-    af.append("".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[aout]")
+    af.append("".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1,asplit=2[voice][key]")
+    # the music under the voice: quieter while he speaks (sidechain), faded out at the very end
+    af.append(f"[{2 * n}]aresample=48000,volume={MUSIC}[music];[music][key]sidechaincompress=threshold=0.015:ratio=4:attack=20:release=500[duck];"
+              f"[voice][duck]amix=inputs=2:normalize=0:duration=first,afade=t=out:st={sum(dur) - 1.0:.3f}:d=1.0,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]")
     video = tmp / "source.mp4"
     run(*args, "-filter_complex", ";".join(vf + af), "-map", chain, "-map", "[aout]", "-t", f"{sum(dur):.3f}",
         "-c:v", "libx264", "-preset", "slow", "-tune", "animation", "-crf", "30", "-pix_fmt", "yuv420p",

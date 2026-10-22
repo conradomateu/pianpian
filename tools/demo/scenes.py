@@ -1,10 +1,11 @@
-"""The demo video's pictures: seven flat scenes with Pianpian, a slice of watermelon, as SVG (1280×720).
+"""The demo video's pictures: eight flat scenes with Pianpian, a slice of watermelon, as SVG (1280×720).
 
-    python3 tools/demo/scenes.py out_dir        # writes 1.svg … 7.svg, one per line of script.txt
+    python3 tools/demo/scenes.py out_dir        # writes 1.svg … 8.svg, one per line of script.txt
 
 Drawn here, so the demo has no one else's pictures in it. The bottom of each scene is kept quiet:
 that is where the subtitles go.
 """
+import math
 import sys
 from pathlib import Path
 
@@ -13,33 +14,34 @@ INK = "#3B2A22"
 RED, FLESH, RIND, BAND, PINK = "#DE3B26", "#E9503C", "#0E8A63", "#FBF8F3", "#FF9A88"
 
 
-def slice_(x, y, s=1.0, flesh=FLESH, arm="down", flip=False, extra=""):
-    """Pianpian at (x, y) = the middle of the slice's flat top; feet end about 178·s below it."""
+def slice_(x, y, s=1.0, flesh=FLESH, arm="down", flip=False, extra="", front=""):
+    """Pianpian at (x, y) = the middle of the slice's flat top; feet end about 178·s below it.
+    extra is drawn behind him (a backpack), front over him."""
     r = 120
-    seeds = "".join(f'<ellipse cx="{sx}" cy="{sy}" rx="5" ry="8" fill="{INK}" transform="rotate({a} {sx} {sy})"/>'
-                    for sx, sy, a in ((-62, 58, 30), (-30, 80, 12), (30, 80, -12), (62, 58, -30), (0, 92, 0)))
+    # five seeds on one arc, evenly spaced and pointing at the centre, well clear of the white band
+    seeds = "".join(f'<ellipse cx="{78 * math.sin(math.radians(a)):.1f}" cy="{78 * math.cos(math.radians(a)):.1f}" rx="4.5" ry="7" fill="{INK}" '
+                    f'transform="rotate({-a} {78 * math.sin(math.radians(a)):.1f} {78 * math.cos(math.radians(a)):.1f})"/>' for a in (-40, -20, 0, 20, 40))
     arms = {
         "down": '<path d="M-104 34 Q-132 58 -138 86" /><path d="M104 34 Q132 58 138 86" />',
         "wave": '<path d="M-104 34 Q-132 58 -138 86" /><path d="M104 30 Q140 8 150 -40" />'
                 '<path d="M168 -66 q10 8 12 22 M182 -40 q12 2 20 12" stroke-width="6" opacity=".55"/>',
-        "belly": '<path d="M-104 34 Q-120 70 -60 70" /><path d="M104 34 Q132 58 138 86" />',
+        "point": '<path d="M-104 34 Q-132 58 -138 86" /><path d="M106 30 Q146 22 182 6" /><path d="M182 6 l16 -8" stroke-width="7"/>',
         "up": '<path d="M-104 34 Q-132 58 -138 86" /><path d="M104 30 Q130 0 128 -40" />',
         "type": '<path d="M-104 34 Q-130 60 -110 96" /><path d="M104 34 Q140 60 170 70" />',
     }[arm]
     face = (f'<ellipse cx="-30" cy="26" rx="9" ry="11" fill="{INK}"/><ellipse cx="30" cy="26" rx="9" ry="11" fill="{INK}"/>'
             f'<circle cx="-33" cy="22" r="3.2" fill="#fff"/><circle cx="27" cy="22" r="3.2" fill="#fff"/>'
-            f'<ellipse cx="-56" cy="44" rx="13" ry="7" fill="{PINK}" opacity=".85"/><ellipse cx="56" cy="44" rx="13" ry="7" fill="{PINK}" opacity=".85"/>'
+            f'<ellipse cx="-56" cy="38" rx="13" ry="7" fill="{PINK}" opacity=".85"/><ellipse cx="56" cy="38" rx="13" ry="7" fill="{PINK}" opacity=".85"/>'
             f'<path d="M-15 44 Q0 58 15 44" fill="none" stroke="{INK}" stroke-width="5" stroke-linecap="round"/>')
     legs = (f'<path d="M-36 {r - 4} L-40 {r + 46}" /><path d="M36 {r - 4} L40 {r + 46}" />'
             f'<ellipse cx="-48" cy="{r + 50}" rx="17" ry="8" fill="{INK}" stroke="none"/><ellipse cx="48" cy="{r + 50}" rx="17" ry="8" fill="{INK}" stroke="none"/>')
     body = (f'<path d="M{-r} 0 A{r} {r} 0 0 0 {r} 0 Z" fill="{RIND}"/>'
             f'<path d="M{-r + 13} 0 A{r - 13} {r - 13} 0 0 0 {r - 13} 0 Z" fill="{BAND}"/>'
-            f'<path d="M{-r + 22} 0 A{r - 22} {r - 22} 0 0 0 {r - 22} 0 Z" fill="{flesh}"/>'
-            f'<rect x="{-r}" y="-5" width="{2 * r}" height="10" rx="5" fill="{flesh}"/>')
+            f'<path d="M{-r + 22} 0 A{r - 22} {r - 22} 0 0 0 {r - 22} 0 Z" fill="{flesh}"/>')
     limbs = f'<g fill="none" stroke="{INK}" stroke-width="9" stroke-linecap="round">{legs}{arms}</g>'
     mirror = ' scale(-1 1)' if flip else ''
     return (f'<g transform="translate({x} {y}) scale({s}){mirror}">'
-            f'<ellipse cx="0" cy="{r + 54}" rx="96" ry="12" fill="#000" opacity=".10"/>{extra}{limbs}{body}{seeds}{face}</g>')
+            f'<ellipse cx="0" cy="{r + 54}" rx="96" ry="12" fill="#000" opacity=".10"/>{extra}{limbs}{body}{seeds}{face}{front}</g>')
 
 
 def svg(body, bg):
@@ -83,20 +85,34 @@ def scene_park():
 
 
 def bun(x, y, s=1.0):
-    pleats = "".join(f'<path d="M0 -44 Q{dx} -20 {dx * 1.6} 0" fill="none" stroke="#D4B48C" stroke-width="4" stroke-linecap="round"/>' for dx in (-26, -12, 12, 26))
-    return (f'<g transform="translate({x} {y}) scale({s})"><path d="M-62 0 Q-60 -58 0 -60 Q60 -58 62 0 Z" fill="#FBE9CF" stroke="#DCC09B" stroke-width="4"/>'
-            f'{pleats}<circle cx="0" cy="-50" r="7" fill="#E6CBA6"/></g>')
+    """A baozi: a round bun gathered into a little knot on top, with pleats curling down from it."""
+    pleats = "".join(f'<path d="M{dx * .25:.0f} -50 Q{dx * .9:.0f} -40 {dx:.0f} -24" fill="none" stroke="#DDBF95" stroke-width="3.5" stroke-linecap="round"/>'
+                     for dx in (-34, -17, 0, 17, 34))
+    return (f'<g transform="translate({x} {y}) scale({s})">'
+            '<path d="M-56 0 C-60 -28 -38 -50 -10 -54 Q0 -60 10 -54 C38 -50 60 -28 56 0 Q0 8 -56 0 Z" fill="#FFF4E2"/>'
+            '<path d="M-56 0 C-58 -12 -54 -20 -48 -26 C-44 -6 44 -6 48 -26 C54 -20 58 -12 56 0 Q0 8 -56 0 Z" fill="#F3DFC0"/>'
+            f'{pleats}<path d="M-8 -54 Q0 -64 8 -54 Q0 -50 -8 -54 Z" fill="#E8CFA8"/></g>')
+
+
+def steamer(x, y):
+    """A round bamboo steamer (蒸笼), open, three buns inside: its back rim, the buns, then its front."""
+    slats = "".join(f'<path d="M{dx} 4 V54" stroke="#B98A55" stroke-width="3" opacity=".55"/>' for dx in range(-150, 151, 30))
+    return (f'<g transform="translate({x} {y})">'
+            '<ellipse cx="0" cy="0" rx="176" ry="30" fill="#C99A62"/><ellipse cx="0" cy="2" rx="160" ry="22" fill="#A97B47"/>'
+            f'{bun(-80, 10, .95)}{bun(80, 10, .95)}{bun(0, 2, 1.05)}'
+            '<path d="M-176 0 A176 30 0 0 0 176 0 V44 A176 30 0 0 1 -176 44 Z" fill="#D9AE74"/>'
+            f'{slats}<path d="M-176 0 A176 30 0 0 0 176 0" fill="none" stroke="#C4945C" stroke-width="7"/>'
+            '<path d="M-176 26 A176 30 0 0 0 176 26" fill="none" stroke="#C4945C" stroke-width="5"/></g>')
 
 
 def scene_baozi():
-    steam = "".join(f'<path d="M{x} 300 q-14 -24 0 -48 t0 -48" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".8"/>' for x in (780, 850, 920))
+    steam = "".join(f'<path d="M{x} 286 q-14 -24 0 -48 t0 -48" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".8"/>' for x in (790, 860, 930))
     body = ('<rect x="0" y="0" width="1280" height="440" fill="#F6E3CC"/>'
             '<rect x="930" y="70" width="230" height="190" rx="14" fill="#CFE7F3" stroke="#E9CDAE" stroke-width="12"/><path d="M1045 70 V260 M930 165 H1160" stroke="#E9CDAE" stroke-width="10"/>'
             '<rect x="0" y="430" width="1280" height="290" fill="#E9CBA7"/>'
             '<rect x="560" y="420" width="640" height="36" rx="10" fill="#C98B5A"/><rect x="600" y="456" width="26" height="200" fill="#B27749"/><rect x="1134" y="456" width="26" height="200" fill="#B27749"/>'
-            '<ellipse cx="850" cy="412" rx="190" ry="26" fill="#fff"/><ellipse cx="850" cy="408" rx="150" ry="16" fill="#F3EEE5"/>'
-            f'{bun(760, 404)}{bun(940, 404)}{bun(850, 380, 1.05)}{steam}'
-            f'{slice_(330, 300, 1.0, arm="belly")}')
+            f'{steamer(860, 352)}{steam}'
+            f'{slice_(330, 300, 1.0, arm="point")}')
     return svg(body, sky("#F6E3CC", "#F6E3CC"))
 
 
@@ -112,12 +128,11 @@ def scene_china():
             f'{wall}{towers}<path d="M0 520 Q400 470 800 520 T1280 500 V720 H0 Z" fill="#C7826A"/>'
             f'{trail}<g transform="translate(540 120) rotate(-8)"><path d="M-60 0 L60 0 Q78 0 78 8 Q78 16 60 16 L-60 16 Z" fill="#fff"/>'
             '<path d="M-6 6 L-40 -34 L-22 -34 L22 6 Z M-6 10 L-40 50 L-22 50 L22 10 Z M-58 4 L-74 -20 L-62 -20 L-44 4 Z" fill="#fff"/></g>'
-            f'{slice_(880, 360, .9, arm="up", extra=_backpack())}')
+            f'{slice_(880, 360, .9, arm="up")}')
     return svg(body, sky("#FFD9BF", "#FFF2E6"))
 
 
-def _backpack():
-    return '<rect x="-150" y="-10" width="70" height="96" rx="20" fill="#3E7CB1"/><rect x="-140" y="34" width="50" height="30" rx="8" fill="#2F6595"/>'
+
 
 
 def scene_study():
@@ -165,7 +180,21 @@ def scene_rain():
     return svg(body, sky("#93A1B0", "#C8D1DA"))
 
 
-SCENES = [scene_hello, scene_park, scene_baozi, scene_china, scene_study, scene_cook, scene_rain]
+def scene_get_app():
+    """The last line invites you to download: the name, what it does, and a Download button (drawn, not a link)."""
+    font = "font-family:'Avenir Next','Helvetica Neue','PingFang SC',sans-serif"
+    body = (f'<circle cx="330" cy="300" r="210" fill="{PINK}" opacity=".22"/>'
+            f'{slice_(330, 230, 1.15, arm="wave")}'
+            f'<text x="600" y="210" style="{font};font-weight:800;font-size:76px" fill="{INK}">Pianpian <tspan fill="{RED}">片片</tspan></text>'
+            f'<text x="604" y="262" style="{font};font-weight:500;font-size:30px" fill="#6B5A4E">Learn Mandarin from real videos</text>'
+            f'<g transform="translate(604 304)"><rect width="420" height="84" rx="22" fill="{RED}"/>'
+            '<path d="M44 24 v28 m0 0 l-12 -12 m12 12 l12 -12 M28 62 h32" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<text x="84" y="55" style="{font};font-weight:700;font-size:32px" fill="#fff">Download for Mac</text></g>'
+            f'<text x="606" y="436" style="{font};font-weight:500;font-size:22px" fill="#8A7F74">Free · open source · Apple Silicon</text>')
+    return svg(body, '<radialGradient id="bg" cx=".3" cy=".42" r=".9"><stop offset="0" stop-color="#FFF7EE"/><stop offset="1" stop-color="#F5E4D2"/></radialGradient>')
+
+
+SCENES = [scene_hello, scene_park, scene_baozi, scene_china, scene_study, scene_cook, scene_rain, scene_get_app]
 
 if __name__ == "__main__":
     out = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
