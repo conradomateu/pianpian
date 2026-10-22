@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mandarin Kit · Offline player</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='3' fill='%23DE3B26'/%3E%3Ctext x='16' y='23' font-size='21' text-anchor='middle' fill='white' font-family='serif'%3E%E5%AD%97%3C/text%3E%3C/svg%3E">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap" onload="this.rel='stylesheet'">
+<script>(function(){try{var t=localStorage.getItem("zh-kit-theme");if(t&&t!=="system")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<link rel="stylesheet" href="assets/kit.css">
+</head>
+<body>
+<header class="bar"><div class="in">
+  <a class="brand" href="app.html">学 Mandarin Kit</a>
+  <nav><a href="app.html">Library</a><a href="player.html" class="on">Offline player</a></nav>
+  <label class="btn" for="pick">Open files…</label><input id="pick" type="file" multiple hidden accept="video/*,audio/*,.srt,.vtt,.json,.mkv,.m4v">
+  <button class="btn" data-theme-toggle type="button">Auto</button>
+</div></header>
+
+<div style="max-width:1500px;margin:0 auto;padding:16px 20px 60px" id="player"></div>
+
+<script src="assets/kit.js"></script>
+<script src="assets/player.js"></script>
+<script>
+/* Works without the server: drop a video and its .srt files, nothing leaves this tab. */
+const player = SubPlayer.mount(document.getElementById('player'), {
+  hint: `<div><b>Drop a video and its subtitle files here</b>e.g. <code>source.mp4</code> + <code>zh.srt</code> + <code>zh.pinyin.srt</code> + <code>zh.en.srt</code> + <code>zh.words.json</code><br>
+         from a folder in your library, or use <b>Open files…</b></div>` });
+
+async function openFiles(files) {
+  files = [...files];
+  const video = files.find(f => /^(video|audio)\//.test(f.type) || /\.(mp4|m4v|webm|mov|mkv|mp3|m4a)$/i.test(f.name));
+  const subs = await Promise.all(files.filter(f => /\.(srt|vtt)$/i.test(f.name)).map(async f => ({ name: f.name, text: await f.text() })));
+  const wf = files.find(f => /\.words\.json$/i.test(f.name));
+  const words = wf ? JSON.parse(await wf.text()) : undefined;
+  const af = files.find(f => /\.align\.json$/i.test(f.name));
+  const align = af ? JSON.parse(await af.text()) : undefined;
+  if (files.some(f => /\.(ass|ssa)$/i.test(f.name))) alert('ASS/SSA files are not supported here; use the .srt files.');
+  player.load({ video, subs, words, align, append: !video, ...(video ? { id: video.name + ':' + video.size } : {}) });
+  if (video) document.title = video.name + ' · Mandarin Kit';
+}
+document.getElementById('pick').onchange = e => openFiles(e.target.files);
+const stage = player.stage;
+['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); stage.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); stage.classList.remove('over'); }));
+document.addEventListener('drop', e => { if (e.dataTransfer.files.length) openFiles(e.dataTransfer.files); });
+window.openFiles = openFiles;   // used by tests
+</script>
+</body>
+</html>

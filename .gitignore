@@ -1,0 +1,9 @@
+# other people's decks and anything downloaded (see README)
+scratch/
+
+
+# Python and macOS
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

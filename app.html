@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mandarin Kit · Library</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='3' fill='%23DE3B26'/%3E%3Ctext x='16' y='23' font-size='21' text-anchor='middle' fill='white' font-family='serif'%3E%E5%AD%A6%3C/text%3E%3C/svg%3E">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap" onload="this.rel='stylesheet'">
+<script>(function(){try{var t=localStorage.getItem("zh-kit-theme");if(t&&t!=="system")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<link rel="stylesheet" href="assets/kit.css">
+<style>
+.app { display:grid; grid-template-columns:340px minmax(0,1fr); min-height:calc(100vh - 49px); }
+.side { border-right:1px solid var(--line); padding:16px; display:flex; flex-direction:column; gap:12px; position:sticky; top:49px; height:calc(100vh - 49px); overflow:auto; }
+.main { padding:18px 22px 60px; min-width:0; }
+@media (max-width:900px) { .app { grid-template-columns:1fr; } .side { position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); } }
+
+.add { display:grid; gap:9px; }
+.add .btn { justify-content:center; padding:9px 12px; }
+.msg { font-size:12.5px; color:var(--red-fg); min-height:0; }
+.job .top { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+.job .lbl { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.job .last { font:11.5px var(--mono); color:var(--muted); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.job pre.log { margin-top:8px; max-height:260px; overflow:auto; font-size:11px; border-radius:var(--r-sm); white-space:pre-wrap; word-break:break-all; }
+
+.libh { display:flex; justify-content:space-between; align-items:baseline; margin:6px 2px -2px; }
+.libh h4 { margin:0; font:600 10px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.lib { display:grid; gap:6px; }
+.item { display:grid; grid-template-columns:96px minmax(0,1fr); gap:10px; align-items:center; text-align:left; width:100%; padding:7px; border:1px solid transparent; border-radius:var(--r-sm); background:none; cursor:pointer; }
+.item:hover { background:var(--surface); border-color:var(--line); }
+.item.on { background:var(--surface); border-color:var(--line-2); box-shadow:inset 3px 0 var(--red); }
+.thumb { width:96px; aspect-ratio:16/9; border-radius:6px; background:var(--surface-2) center/cover no-repeat; border:1px solid var(--line); }
+.item b { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; line-height:1.3; font-weight:600; }
+.item .chips { display:flex; flex-wrap:wrap; gap:3px; margin-top:5px; }
+.item .pill { font-size:9px; padding:1px 5px; }
+
+.vhead { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px 20px; align-items:flex-start; margin-bottom:14px; }
+.vhead h1 { font-size:clamp(22px,3vw,30px); margin:0 0 4px; }
+.vhead .meta { font:11.5px var(--mono); color:var(--muted); word-break:break-all; }
+.vhead .meta a { color:inherit; }
+.steps { display:grid; gap:10px; margin-bottom:14px; }
+.steps ol { margin:0; padding-left:20px; display:grid; gap:10px; font-size:13.5px; color:var(--fg-2); }
+.welcome { max-width:620px; margin:8vh auto; text-align:center; }
+.welcome h1 { font-size:34px; }
+.welcome p { color:var(--fg-2); }
+</style>
+</head>
+<body>
+<header class="bar"><div class="in">
+  <a class="brand" href="app.html">学 Mandarin Kit</a>
+  <nav><a href="app.html" class="on">Library</a><a href="player.html">Offline player</a></nav>
+  <span class="dot" id="status">checking…</span>
+  <button class="btn" data-theme-toggle type="button">Auto</button>
+</div></header>
+
+<div class="app">
+  <aside class="side">
+    <form class="card add" id="add" autocomplete="off">
+      <h4>Add a video</h4>
+      <input class="field" name="url" placeholder="Paste a Bilibili or YouTube link" spellcheck="false" required>
+      <label class="check"><input type="checkbox" name="cookies" checked> Use my Brave login <span class="muted">(Bilibili's AI subtitles)</span></label>
+      <label class="check"><input type="checkbox" name="burned"> Chinese is burned into the picture</label>
+      <label class="check"><input type="checkbox" name="translate" checked> English too, with the local model <span class="muted">(1 GB download the first time)</span></label>
+      <button class="btn primary" type="submit">Download &amp; make subtitles</button>
+      <div class="msg" id="addmsg"></div>
+    </form>
+
+    <div class="card job" id="job" hidden>
+      <div class="top"><span class="lbl" id="joblabel"></span><span class="pill" id="jobstate"></span></div>
+      <div class="last" id="joblast"></div>
+      <div class="row" style="margin-top:8px"><button class="mini" id="logbtn" type="button">log</button><span class="muted mono" style="font-size:11px" id="jobtime"></span></div>
+      <pre class="log" id="joblog" hidden></pre>
+    </div>
+
+    <div class="libh"><h4>Library</h4><span class="muted mono" style="font-size:11px" id="libinfo"></span></div>
+    <div class="lib" id="lib"></div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="welcome" id="welcome">
+      <h1>Pick a video, or paste a link.</h1>
+      <p>Every video in your library folder is listed on the left with the subtitle tracks it already has. A new link is downloaded, subtitled (the site's own Chinese subtitles, Whisper, or OCR when the Chinese is in the picture) and added to the list.</p>
+    </div>
+    <div id="video" hidden>
+      <div class="vhead">
+        <div><h1 id="vtitle"></h1><div class="meta" id="vmeta"></div></div>
+        <div class="row" id="vactions"></div>
+      </div>
+      <div class="steps" id="steps"></div>
+      <div id="player"></div>
+    </div>
+  </main>
+</div>
+
+<script src="assets/kit.js"></script>
+<script src="assets/player.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+const PROMPT = `Each line below is: an id, a TAB, then one subtitle in Chinese.
+Translate the Chinese into natural English. Output EXACTLY the same ids, one per line, as: id<TAB>English.
+Do not merge, split, drop or renumber lines. " / " marks a line break; keep it.
+If you think the Chinese contains a speech-recognition or OCR error, translate what was probably meant and add [?] at the end of that line.
+
+`;
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kit': '1' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+
+if (location.protocol === 'file:') {
+  $('main').innerHTML = `<div class="welcome"><h1>Start the local server first.</h1><p>This page needs it to download and list videos. In Terminal:</p>
+    <pre class="log" style="text-align:left;border-radius:8px">python3 ~/code/pianpian/server.py</pre><p class="muted">It opens this page at http://127.0.0.1:8770 by itself.</p></div>`;
+  document.querySelector('.side').hidden = true;
+  throw new Error('served from disk');
+}
+
+const player = SubPlayer.mount($('player'), { hint: '<div><b>No video file in this folder yet</b>The download may still be running.</div>' });
+let videos = [], current = null, lastJobs = [];
+
+/* ---------- status ---------- */
+async function status() {
+  try {
+    const s = await api('/api/status');
+    const missing = Object.entries(s.tools).filter(([, ok]) => !ok).map(([t]) => t);
+    $('status').className = 'dot ' + (missing.length ? 'off' : s.busy ? 'busy' : 'ok');
+    $('status').textContent = missing.length ? 'missing: ' + missing.join(', ') : s.busy ? 'working' : 'server ready';
+    $('libinfo').textContent = s.library.replace(/^\/Users\/[^/]+/, '~');
+  } catch { $('status').className = 'dot off'; $('status').textContent = 'server stopped'; }
+}
+
+/* ---------- library ---------- */
+const CHIPS = [['zh', '中文'], ['pinyin', '拼音'], ['en', 'EN'], ['mkv', 'MKV']];
+function chips(v) {
+  if (v.kind === 'file') return '<span class="pill soon">not processed</span>';
+  const busy = lastJobs.some(j => j.video === v.id && (j.state === 'running' || j.state === 'queued'));
+  return (busy ? '<span class="pill soon">working…</span>' : '') +
+    CHIPS.map(([k, n]) => `<span class="pill ${v.has[k] ? 'yes' : ''}">${n}</span>`).join('') +
+    (v.needsEnglish ? '<span class="pill soon">needs English</span>' : '');
+}
+async function loadLibrary() {
+  videos = await api('/api/videos');
+  $('lib').innerHTML = videos.length ? videos.map(v => `
+    <button class="item ${current && current.id === v.id ? 'on' : ''}" data-id="${esc(v.id)}">
+      <span class="thumb" style="${v.kind === 'folder' && v.video ? `background-image:url('/library/${encodeURIComponent(v.id)}/thumb.jpg')` : ''}"></span>
+      <span><b>${esc(v.title)}</b><span class="chips">${chips(v)}</span></span>
+    </button>`).join('') : '<p class="muted" style="font-size:13px;margin:4px">Nothing here yet. Paste a link above.</p>';
+}
+$('lib').onclick = e => { const b = e.target.closest('.item'); if (b) select(b.dataset.id); };
+
+/* ---------- one video ---------- */
+async function select(id, keepPlayer) {
+  let v;
+  try { v = await api('/api/videos/' + encodeURIComponent(id)); } catch { return; }
+  const changed = !current || current.id !== v.id;
+  current = v;
+  history.replaceState(null, '', '#v=' + encodeURIComponent(id));
+  document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  $('welcome').hidden = true; $('video').hidden = false;
+  $('vtitle').textContent = v.title;
+  $('vmeta').innerHTML = (v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.url)}</a> · ` : '') + esc(v.id) + (v.hardsubs ? ' · Chinese burned into the picture' : '');
+  const busy = lastJobs.some(j => j.video === v.id && (j.state === 'running' || j.state === 'queued'));
+  $('vactions').innerHTML = v.kind === 'file'
+    ? `<button class="btn primary" data-act="rebuild" ${busy ? 'disabled' : ''}>Make subtitles</button>`
+    : `<label class="check" title="how long each subtitle line may be; the English is redone to match">Lines
+         <select id="splitsel" ${busy || !v.has.zh ? 'disabled' : ''}>
+           ${[[12, 'short · 12'], [18, 'medium · 18'], [26, 'long · 26'], [0, 'as transcribed']].map(([n, l]) =>
+             `<option value="${n}" ${(v.split ?? -1) === n ? 'selected' : ''}>${l}</option>`).join('')}
+           ${v.split == null ? '<option value="" selected>not cut yet</option>' : ''}
+         </select></label>
+       <button class="btn" data-act="rebuild" ${busy ? 'disabled' : ''} title="re-run the pipeline, e.g. after fixing zh.srt">Rebuild</button>
+       <button class="btn" data-act="open">Show in Finder</button>`;
+  renderSteps(v);
+  if (changed || !keepPlayer) {
+    const base = '/library/' + encodeURIComponent(v.id) + '/';
+    const subs = await Promise.all((v.subs || []).map(async n => ({ name: n, text: await (await fetch(base + encodeURIComponent(n))).text() })));
+    const words = v.words ? await (await fetch(base + v.words)).json().catch(() => null) : null;
+    const align = v.align ? await (await fetch(base + v.align)).json().catch(() => null) : null;
+    player.load({ video: v.video ? (v.kind === 'file' ? '/library/' + encodeURIComponent(v.id) : base + encodeURIComponent(v.video)) : null,
+                  subs, words, align, id: v.id });
+  }
+}
+function renderSteps(v) {
+  const box = $('steps');
+  if (v.kind === 'file') { box.innerHTML = `<div class="note warn">This video is in your library folder but has no subtitles yet. <b>Make subtitles</b> creates a folder next to it and runs the pipeline.</div>`; return; }
+  const parts = [];
+  if (v.hardsubs && v.has.zh) parts.push(`<div class="note warn">The Chinese came from OCR. Open <code>zh.srt</code> (<b>Show in Finder</b>), fix any wrong characters, then <b>Rebuild</b>.</div>`);
+  if (v.lines) {
+    const busy = lastJobs.some(j => j.video === v.id && (j.state === 'running' || j.state === 'queued'));
+    const n = v.lines.split('\n').length;
+    parts.push(`
+    <details class="card" ${v.has.en ? '' : 'open'}>
+      <summary style="cursor:pointer;font-weight:600">${v.has.en ? `English track ✓ <span class="muted" style="font-weight:400">· ${v.englishAuto ? 'translated by the local model' : 'made by hand'} · replace it</span>` : 'Add the English track'}</summary>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" data-act="translate" type="button" ${busy ? 'disabled' : ''}>Translate automatically</button>
+        <span class="muted" style="font-size:12.5px">Local Hy-MT2 translation model, line by line, nothing leaves the Mac. ${n} lines.</span>
+      </div>
+      <h4 style="margin:16px 0 6px">Or by hand, with ChatGPT or Claude (better for jokes and slang)</h4>
+      <ol>
+        <li>Copy the prompt and the ${n} Chinese lines, and paste them into ChatGPT or Claude. <button class="btn" data-act="copy" type="button">Copy prompt + lines</button></li>
+        <li>Paste the reply here:<textarea class="field" id="entext" placeholder="1&#9;First line in English&#10;2&#9;Second line…" style="margin-top:6px">${esc(v.english || '')}</textarea></li>
+        <li><button class="btn" data-act="english" type="button">Save &amp; rebuild</button> <span class="msg" id="enmsg"></span></li>
+      </ol>
+    </details>`);
+  }
+  box.innerHTML = parts.join('');
+}
+$('video').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b || !current) return;
+  const id = encodeURIComponent(current.id);
+  try {
+    if (b.dataset.act === 'copy') Kit.copy(PROMPT + current.lines, b);
+    if (b.dataset.act === 'open') await api(`/api/videos/${id}/open`, {});
+    if (b.dataset.act === 'rebuild') { await api(`/api/videos/${id}/rebuild`, {}); poll(); }
+    if (b.dataset.act === 'translate') {
+      if (current.has.en && !confirm('Replace the English you have with a new automatic translation?')) return;
+      await api(`/api/videos/${id}/translate`, {}); poll();
+    }
+    if (b.dataset.act === 'english') { await api(`/api/videos/${id}/english`, { text: $('entext').value }); poll(); }
+  } catch (err) { const m = $('enmsg') || $('addmsg'); m.textContent = err.message; }
+});
+
+$('video').addEventListener('change', async e => {
+  if (e.target.id !== 'splitsel' || e.target.value === '' || !current) return;
+  if (current.has.en && !current.englishAuto && !confirm('The line numbers change, so the English is translated again automatically. Your hand-made English is kept as en.lines.before-split.txt. Go on?')) {
+    e.target.value = current.split ?? ''; return;
+  }
+  try { await api(`/api/videos/${encodeURIComponent(current.id)}/split`, { max: +e.target.value }); poll(); }
+  catch (err) { $('addmsg').textContent = err.message; }
+});
+
+/* ---------- add a link ---------- */
+$('add').onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target;
+  $('addmsg').textContent = '';
+  try {
+    await api('/api/add', { url: f.url.value.trim(), cookies: f.cookies.checked, burned: f.burned.checked, translate: f.translate.checked });
+    f.url.value = '';
+    poll();
+  } catch (err) { $('addmsg').textContent = err.message; }
+};
+
+/* ---------- jobs ---------- */
+let timer = null, openLog = false;
+$('logbtn').onclick = () => { openLog = !openLog; $('joblog').hidden = !openLog; $('logbtn').classList.toggle('on', openLog); };
+async function poll() {
+  clearTimeout(timer);
+  let jobs = [];
+  try { jobs = await api('/api/jobs'); } catch {}
+  const finished = jobs.filter(j => (j.state === 'done' || j.state === 'failed') && lastJobs.some(o => o.id === j.id && o.state !== j.state));
+  lastJobs = jobs;
+  const active = jobs.find(j => j.state === 'running') || jobs.find(j => j.state === 'queued') || jobs[0];
+  const box = $('job');
+  if (active && (active.state !== 'done' && active.state !== 'failed' || Date.now() / 1000 - active.ended < 600)) {
+    box.hidden = false;
+    $('joblabel').textContent = active.label; $('joblabel').title = active.label;
+    const st = $('jobstate'); st.textContent = active.state; st.className = 'pill ' + ({ running: 'soon', queued: '', done: 'yes', failed: 'bad' }[active.state]);
+    $('joblast').textContent = active.log[active.log.length - 1] || '';
+    const secs = Math.round((active.ended || Date.now() / 1000) - (active.started || Date.now() / 1000));
+    $('jobtime').textContent = active.started ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'waiting';
+    const log = $('joblog'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+    log.textContent = active.log.join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
+    if (active.state === 'failed' && !openLog) $('logbtn').click();
+  } else box.hidden = true;
+  const working = jobs.some(j => j.state === 'running' || j.state === 'queued');
+  if (finished.length || working) await loadLibrary();
+  for (const j of finished) {
+    if (j.kind === 'add' && j.state === 'done' && j.video) await select(j.video);       // show what was just downloaded
+    else if (current && j.video === current.id) await select(current.id);
+  }
+  status();
+  timer = setTimeout(poll, working ? 1200 : 6000);
+}
+
+/* ---------- start ---------- */
+const hashId = () => decodeURIComponent((location.hash.match(/v=([^&]+)/) || [])[1] || '');
+window.addEventListener('hashchange', () => { const id = hashId(); if (id && (!current || current.id !== id)) select(id); });
+(async () => {
+  await status();
+  try { lastJobs = await api('/api/jobs'); } catch {}
+  await loadLibrary();
+  const id = hashId();
+  if (id && videos.some(v => v.id === id)) await select(id);
+  poll();
+})();
+</script>
+</body>
+</html>

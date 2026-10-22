@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""Mandarin Kit local server. Python standard library only.
+
+    python3 server.py                 # http://127.0.0.1:8770 · library ~/Movies/mandarin · opens the browser
+    python3 server.py --no-browser --library ~/Movies/other --browser chrome
+
+Serves the pages in this folder and the videos in the library, and runs pipeline/study_video.sh
+(one job at a time) so the app can download a link, make subtitles and rebuild a video.
+Everything it knows about a video lives in that video's folder (see PLAN.md), so the app and
+the command line always agree. Listens on 127.0.0.1 only.
+"""
+import argparse
+import json
+import mimetypes
+import os
+import queue
+import re
+import shutil
+import subprocess
+import threading
+import time
+import webbrowser
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+HERE = Path(__file__).resolve().parent
+SCRIPT = HERE / "pipeline" / "study_video.sh"
+VIDEO_EXT = (".mp4", ".m4v", ".mkv", ".webm", ".mov")
+SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name inside the library: no slashes
+TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
+mimetypes.add_type("text/plain; charset=utf-8", ".srt")
+mimetypes.add_type("text/vtt; charset=utf-8", ".vtt")
+mimetypes.add_type("video/x-matroska", ".mkv")
+mimetypes.add_type("text/javascript; charset=utf-8", ".js")
+mimetypes.add_type("application/json; charset=utf-8", ".json")
+
+CFG = {"library": Path.home() / "Movies" / "mandarin", "browser": "brave"}
+
+
+# ---------------------------------------------------------------- library
+def video_in(folder: Path):
+    vids = sorted(p for p in folder.iterdir() if p.name.startswith("source.") and p.suffix.lower() in VIDEO_EXT)
+    return vids[0] if vids else None
+
+
+def read(p: Path) -> str:
+    try:
+        return p.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def describe(entry: Path) -> dict:
+    """One library item: a pipeline folder, or a loose video file not processed yet."""
+    if entry.is_file():
+        return {"id": entry.name, "kind": "file", "title": entry.stem, "url": "", "video": entry.name,
+                "has": {k: False for k in TRACK_FILES}, "subs": [], "hardsubs": False,
+                "needsEnglish": False, "mtime": entry.stat().st_mtime}
+    vid = video_in(entry)
+    has = {k: (entry / f).exists() for k, f in TRACK_FILES.items()}
+    return {"id": entry.name, "kind": "folder", "title": read(entry / "title.txt") or entry.name,
+            "url": read(entry / "source.url"), "video": vid.name if vid else None, "has": has,
+            "subs": sorted(p.name for p in entry.glob("*.srt") if not p.name.startswith("source.") and not p.name.endswith(".long.srt")),
+            "words": "zh.words.json" if (entry / "zh.words.json").exists() else None,
+            "align": "zh.align.json" if (entry / "zh.align.json").exists() else None,
+            "hardsubs": (entry / ".hardsubs").exists(),
+            "englishAuto": (entry / ".english-auto").exists(),
+            "split": int(read(entry / ".split")) if read(entry / ".split").isdigit() else None,
+            "needsEnglish": (entry / "zh.lines.txt").exists() and not has["en"],
+            "mtime": max((p.stat().st_mtime for p in entry.iterdir()), default=entry.stat().st_mtime)}
+
+
+def library() -> list:
+    lib = CFG["library"]
+    lib.mkdir(parents=True, exist_ok=True)
+    folders = [p for p in lib.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    done = {p.name[:-len("_study")] for p in folders if p.name.endswith("_study")}
+    files = [p for p in lib.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT and p.stem not in done]
+    return sorted((describe(p) for p in folders + files), key=lambda v: -v["mtime"])
+
+
+def entry_path(vid_id: str) -> Path:
+    if not SAFE_ID.match(vid_id) or vid_id.startswith("."):
+        raise ValueError("bad id")
+    p = CFG["library"] / vid_id
+    if not p.exists():
+        raise FileNotFoundError(vid_id)
+    return p
+
+
+# ---------------------------------------------------------------- jobs (one at a time)
+class Job:
+    _n = 0
+
+    def __init__(self, label, cmd, cwd, env=None, video=None):
+        Job._n += 1
+        self.id, self.label, self.cmd, self.cwd, self.env, self.video = Job._n, label, cmd, cwd, env or {}, video
+        self.state, self.log, self.started, self.ended, self.code = "queued", [], None, None, None
+        self.kind = "rebuild"
+
+    def add(self, text):
+        for part in re.split(r"[\r\n]+", text):
+            part = part.rstrip()
+            if not part:
+                continue
+            if self.log and part.startswith("[download]") and self.log[-1].startswith("[download]") and "%" in part:
+                self.log[-1] = part                           # keep one live progress line, not hundreds
+            else:
+                self.log.append(part)
+            if self.video is None and (m := re.match(r"folder: (.+)$", part)):
+                self.video = Path(m[1]).name                # study_video.sh says which folder it works in
+        del self.log[:-400]
+
+    def public(self, tail=60):
+        return {"id": self.id, "kind": self.kind, "label": self.label, "state": self.state, "video": self.video, "log": self.log[-tail:],
+                "started": self.started, "ended": self.ended, "code": self.code}
+
+
+JOBS: list = []
+QUEUE: "queue.Queue[Job]" = queue.Queue()
+
+
+def worker():
+    while True:
+        job = QUEUE.get()
+        job.state, job.started = "running", time.time()
+        job.add("$ " + " ".join(str(c) for c in job.cmd))
+        try:
+            p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env},
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            while chunk := p.stdout.read1(4096):
+                job.add(chunk.decode("utf-8", "replace"))
+            job.code = p.wait()
+            job.state = "done" if job.code == 0 else "failed"
+        except Exception as e:                                # missing tool, permissions…
+            job.add(f"error: {e}")
+            job.state = "failed"
+        job.ended = time.time()
+
+
+def enqueue(job: Job) -> Job:
+    JOBS.append(job)
+    del JOBS[:-30]
+    QUEUE.put(job)
+    return job
+
+
+def rebuild_job(vid_id: str, translate=False, split=None) -> Job:
+    p = entry_path(vid_id)
+    env = {"AUTO_EN": "1"} if translate else {}
+    if split is not None:
+        env.update(RESPLIT="1", SPLIT_MAX=str(split))
+    if p.is_file():                                           # loose video: the script makes <name>_study/
+        return enqueue(Job(f"Make subtitles · {p.name}", [str(SCRIPT), str(p)], str(p.parent), env, video=p.stem + "_study"))
+    src = video_in(p)
+    if not src:
+        raise FileNotFoundError("no source video in " + vid_id)
+    if translate:
+        env["FORCE_EN"] = "1"
+    verb = "Translate" if translate else f"Lines of {split or 'any'} characters" if split is not None else "Rebuild"
+    return enqueue(Job(f"{verb} · {read(p / 'title.txt') or vid_id}", [str(SCRIPT), str(src)], str(p), env, video=vid_id))
+
+
+# ---------------------------------------------------------------- HTTP
+class Handler(BaseHTTPRequestHandler):
+    server_version = "MandarinKit/1"
+
+    def log_message(self, fmt, *args):                        # quiet: the app shows what matters
+        pass
+
+    # ---- helpers
+    def send_json(self, obj, status=200, cors=False):
+        body = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if cors:                                              # only /api/status: lets a page opened from disk see the server
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def fail(self, status, msg):
+        self.send_json({"error": msg}, status)
+
+    def send_file(self, path: Path):
+        size = path.stat().st_size
+        ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        start, end, status = 0, size - 1, 200
+        m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range", ""))
+        if m and size:                                        # byte ranges, so <video> can seek
+            if m[1]:
+                start, end = int(m[1]), min(int(m[2]) if m[2] else size - 1, size - 1)
+            else:
+                start = max(0, size - int(m[2]))
+            if start > end:
+                self.send_response(416); self.send_header("Content-Range", f"bytes */{size}"); self.end_headers(); return
+            status = 206
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Cache-Control", "no-cache")
+        if status == 206:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        try:
+            with path.open("rb") as f:
+                f.seek(start)
+                left = end - start + 1
+                while left > 0 and (buf := f.read(min(256 * 1024, left))):
+                    self.wfile.write(buf)
+                    left -= len(buf)
+        except (BrokenPipeError, ConnectionResetError):       # the browser cancels ranges all the time
+            pass
+
+    def body(self) -> dict:
+        n = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(n) or b"{}") if n else {}
+
+    # ---- GET
+    def do_GET(self):
+        path = unquote(urlparse(self.path).path)
+        try:
+            if path == "/api/status":
+                tools = {t: bool(shutil.which(t)) for t in ("yt-dlp", "ffmpeg", "uv", "swift")}
+                busy = any(j.state in ("queued", "running") for j in JOBS)
+                return self.send_json({"ok": True, "library": str(CFG["library"]), "browser": CFG["browser"],
+                                       "tools": tools, "busy": busy}, cors=True)
+            if path == "/api/videos":
+                return self.send_json(library())
+            if m := re.fullmatch(r"/api/videos/([^/]+)", path):
+                p = entry_path(m[1])
+                info = describe(p)
+                if p.is_dir():
+                    info["lines"] = read(p / "zh.lines.txt")
+                    info["english"] = read(p / "en.lines.txt")
+                return self.send_json(info)
+            if path == "/api/jobs":
+                return self.send_json([j.public() for j in reversed(JOBS)])
+            if m := re.fullmatch(r"/library/([^/]+)/thumb\.jpg", path):
+                return self.thumb(entry_path(m[1]))
+            if m := re.fullmatch(r"/library/([^/]+)(?:/([^/]+))?", path):
+                p = entry_path(m[1])
+                f = p / m[2] if m[2] else p
+                if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]):
+                    return self.send_file(f)
+                return self.fail(404, "not found")
+            # the kit's own pages and assets
+            rel = path.lstrip("/") or "app.html"
+            f = (HERE / rel).resolve()
+            if f.is_file() and HERE in f.parents and not any(part.startswith(".") for part in f.relative_to(HERE).parts) \
+                    and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md", ".apkg"):
+                return self.send_file(f)
+            self.fail(404, "not found")
+        except (ValueError, FileNotFoundError) as e:
+            self.fail(404, str(e))
+
+    def thumb(self, p: Path):
+        if p.is_file():
+            return self.fail(404, "no thumbnail for a loose file")
+        out = p / "thumb.jpg"
+        if not out.exists() and (src := video_in(p)):
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
+                            "-vf", "scale=480:-2", str(out)], timeout=30)
+        return self.send_file(out) if out.exists() else self.fail(404, "no thumbnail")
+
+    def do_OPTIONS(self):                                     # preflight for /api/status only
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Access-Control-Allow-Methods", "GET")
+        self.end_headers()
+
+    # ---- POST (needs X-Kit: other sites cannot send that header without a preflight we never grant)
+    def do_POST(self):
+        if self.headers.get("X-Kit") != "1":
+            return self.fail(403, "missing X-Kit header")
+        path = urlparse(self.path).path
+        try:
+            data = self.body()
+            if path == "/api/add":
+                url = str(data.get("url", "")).strip()
+                if not re.match(r"^https?://\S+$", url):
+                    return self.fail(400, "paste a full http(s) link")
+                cmd = [str(SCRIPT), url] + ([CFG["browser"]] if data.get("cookies") else [])
+                env = {**({"HARDSUBS": "1"} if data.get("burned") else {}), **({"AUTO_EN": "1"} if data.get("translate") else {})}
+                job = Job(f"Download · {url}", cmd, str(CFG["library"]), env)
+                job.kind = "add"
+                return self.send_json(enqueue(job).public())
+            if m := re.fullmatch(r"/api/videos/([^/]+)/rebuild", path):
+                return self.send_json(rebuild_job(m[1]).public())
+            if m := re.fullmatch(r"/api/videos/([^/]+)/split", path):
+                n = int(data.get("max", 18))
+                if not 0 <= n <= 60:
+                    return self.fail(400, "max must be 0–60 characters")
+                return self.send_json(rebuild_job(m[1], split=n).public())
+            if m := re.fullmatch(r"/api/videos/([^/]+)/translate", path):
+                return self.send_json(rebuild_job(m[1], translate=True).public())
+            if m := re.fullmatch(r"/api/videos/([^/]+)/english", path):
+                p = entry_path(m[1])
+                text = str(data.get("text", "")).replace("\r\n", "\n").strip()
+                bad = [l for l in text.split("\n") if l.strip() and not re.match(r"^\s*\d+\t", l)]
+                if not text or bad:
+                    return self.fail(400, f"every line must be: number, TAB, English. First bad line: {bad[0][:60]!r}" if bad else "paste the reply first")
+                (p / "en.lines.txt").write_text(text + "\n", encoding="utf-8")
+                (p / ".english-auto").unlink(missing_ok=True)      # now a hand-made translation
+                return self.send_json(rebuild_job(m[1]).public())
+            if m := re.fullmatch(r"/api/videos/([^/]+)/open", path):
+                subprocess.Popen(["open", str(entry_path(m[1]))])
+                return self.send_json({"ok": True})
+            self.fail(404, "not found")
+        except (ValueError, FileNotFoundError) as e:
+            self.fail(404, str(e))
+        except json.JSONDecodeError:
+            self.fail(400, "bad JSON")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--port", type=int, default=8770)
+    ap.add_argument("--library", type=Path, default=CFG["library"], help="where videos live (default ~/Movies/mandarin)")
+    ap.add_argument("--browser", default=CFG["browser"], help="browser whose login yt-dlp may use (default brave)")
+    ap.add_argument("--no-browser", action="store_true", help="don't open the app in a browser")
+    a = ap.parse_args()
+    CFG.update(library=a.library.expanduser().resolve(), browser=a.browser)
+    CFG["library"].mkdir(parents=True, exist_ok=True)
+    threading.Thread(target=worker, daemon=True).start()
+    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    url = f"http://127.0.0.1:{a.port}/app.html"
+    print(f"Mandarin Kit → {url}\nlibrary: {CFG['library']}\nCtrl+C to stop.")
+    if not a.no_browser:
+        webbrowser.open(url)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped.")
+
+
+if __name__ == "__main__":
+    main()

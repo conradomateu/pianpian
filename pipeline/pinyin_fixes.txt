@@ -1,0 +1,49 @@
+# Pinyin corrections for the subtitle tracks (srt_tool.py pinyin / words).
+# One per line: word, TAB (or spaces), the pinyin you want. Spaces inside the pinyin are ignored.
+# The word wins wherever it appears, also inside a longer word (早上 fixes 早上好).
+# After editing, press Rebuild in the app (or re-run study_video.sh): the pinyin is redone.
+#
+# 长 read zhǎng instead of cháng
+长椅	cháng yǐ
+长凳	cháng dèng
+# sentence-final particle
+咯	lo
+# 一 changes tone before another syllable, as the textbook writes it (yì before tones 1–3, yí before 4)
+一些	yì xiē
+一天	yì tiān
+一条	yì tiáo
+一边	yì biān
+一邊	yì biān
+# neutral tones pypinyin misses
+早上	zǎo shang
+地方	dì fang
+# neutral tones, erhua and capitalised names where pypinyin differs from the textbook reading
+# (moved here 22 Oct 2026 from the HSK 1 word list, which stays outside this repo)
+爸爸	bàba
+不客气	bú kèqi
+东西	dōngxi
+对不起	duìbuqǐ
+多少	duōshao
+汉语	Hànyǔ
+妈妈	māma
+没关系	méi guānxi
+名字	míngzi
+哪儿	nǎr
+女儿	nǚ'ér
+朋友	péngyou
+漂亮	piàoliang
+认识	rènshi
+时候	shíhou
+喜欢	xǐhuan
+先生	xiānsheng
+谢谢	xièxie
+学生	xuésheng
+衣服	yīfu
+一点儿	yìdiǎnr
+汉字	Hànzì
+回来	huílai
+那儿	nàr
+这儿	zhèr
+北京	Běijīng
+美国	Měiguó
+中国	Zhōngguó
