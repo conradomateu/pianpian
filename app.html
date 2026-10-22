@@ -106,7 +106,6 @@ body { overflow:hidden; }
       </div>
       <details class="opts"><summary>options</summary>
         <label class="check"><input type="checkbox" name="cookies" checked> Use my Brave login <span class="muted">(Bilibili's AI subtitles)</span></label>
-        <label class="check"><input type="checkbox" name="burned"> Chinese is burned into the picture</label>
         <label class="check"><input type="checkbox" name="translate" checked> English too <span class="muted">(local model, 1 GB the first time)</span></label>
       </details>
       <div class="msg" id="addmsg"></div>
@@ -331,7 +330,7 @@ $('add').onsubmit = async e => {
   const f = e.target;
   $('addmsg').textContent = '';
   try {
-    await api('/api/add', { url: f.url.value.trim(), cookies: f.cookies.checked, burned: f.burned.checked, translate: f.translate.checked });
+    await api('/api/add', { url: f.url.value.trim(), cookies: f.cookies.checked, translate: f.translate.checked });
     f.url.value = '';
     poll();
   } catch (err) { $('addmsg').textContent = err.message; }

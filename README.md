@@ -20,7 +20,7 @@ tools/make_app.sh
 
 It builds `Pianpian.app` with the watermelon icon into `~/Applications`. Double-click it: the server runs inside and closing the window quits it. The app runs the code in this folder, so changes show up the next time you open it. It still needs uv, ffmpeg and yt-dlp installed, so it is not yet something to send to another Mac. Log: `~/Library/Logs/Pianpian/launcher.log`.
 
-1. Paste a Bilibili or YouTube link. Leave "English too" ticked. Tick "burned into the picture" only if the Chinese is part of the image.
+1. Paste a Bilibili or YouTube link. Leave "English too" ticked (under options).
 2. Wait for the job to finish (a 12-minute video took under 2 minutes), then watch.
 3. Lines too long? **Video ▾ → Lines: 12 / 18 / 26**, and the cuts are redone from Whisper's word timings.
 4. Wrong pinyin? Add the word to `pipeline/pinyin_fixes.txt` and press **Video ▾ → Rebuild**.
