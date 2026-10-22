@@ -278,7 +278,12 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .gr .zh ruby { ruby-align:center; margin:0 .06em; }
 .gr .zh rt { font:500 10px var(--mono); letter-spacing:0; color:var(--muted); }
 .gr .zh ruby.r-verb rt { color:var(--wm-red); } .gr .zh ruby.r-when rt { color:var(--wm-green); }
-.gr .g { background:var(--wm-pink-tint); color:var(--wm-pink); border-radius:5px; padding:0 .14em; text-decoration:none; font-weight:700; }
+/* a tense marker: plain text in a small box whose border is its tense's colour (so it never looks like the red verb) */
+.gr .g { background:none; color:var(--fg); font-weight:600; text-decoration:none; border:1.5px solid var(--line-2); border-radius:5px; padding:0 .12em; margin:0 .1em; }
+.gr .g.past { border-color:var(--wm-green); } .gr .g.future { border-color:var(--wm-pink); } .gr .g.present { border-color:var(--wm-red); }
+.gr .zh ruby.g rt { color:var(--muted); }
+.gr .key { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; font-size:12px; color:var(--muted); margin:0; }
+.gr .key .g { font-size:13px; }
 /* the card above the lines: the word's HSK level and measure word, or a tense rule in its colour */
 .ov .gl em { font-style:normal; font-size:.85em; margin-left:.45em; padding:0 .35em; border:1px solid rgba(255,255,255,.55); border-radius:.3em; white-space:nowrap; }
 .ov .gl span.rule { background:rgba(20,18,15,.92) !important; }

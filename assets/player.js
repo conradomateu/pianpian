@@ -166,6 +166,7 @@
                 <h5>Word order: always the same</h5>
                 <div class="order"><span class="r-who">Who</span><span class="r-when">When</span><span class="r-where">Where</span><span class="r-how">With / how</span><span class="r-verb">Verb</span><span class="r-what">What</span></div>
                 <div class="order zh"><span class="r-who">我<small>wǒ</small></span><span class="r-when">明天<small>míngtiān</small></span><span class="r-where">在家<small>zài jiā</small></span><span class="r-how">跟朋友<small>gēn péngyou</small></span><span class="r-verb">看<small>kàn</small></span><span class="r-what">电影<small>diànyǐng</small></span></div>
+                <p class="key"><span><i class="r-verb">red</i> verb</span><span><i class="r-when">green</i> time</span><span><b class="g">了</b> boxed: the tense marker (border: green past · pink future · red now)</span></p>
                 <p>I'll watch a film at home with friends tomorrow. Time and place go <b>before</b> the verb:
                   <span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="r-when">明天<rt>míngtiān</rt></ruby><ruby class="r-verb">去<rt>qù</rt></ruby></span> ✓ · 我去明天 ✗</p>
               </section>
