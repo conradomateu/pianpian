@@ -15,3 +15,6 @@ dist/
 uv.lock
 _site/
 build/
+
+# personal notes for AI agents on this Mac (AGENTS.md and CLAUDE.md are the shared ones)
+CLAUDE.local.md
