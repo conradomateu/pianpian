@@ -34,7 +34,11 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
   - Pinyin comes from pypinyin + jieba, corrected by `pinyin_fixes.txt`.
   - English comes from Hy-MT2-1.8B (MLX, about 1 GB, downloaded the first time).
 - **Player:** any mix of tracks, each with its own size, colour and blur. Pause after a line, loop, change speed, go fullscreen.
-- **Word links:** click a word in Chinese, pinyin or English and its partners light up, with the CC-CEDICT meaning. English is linked through the dictionary first and through the translation model's own vectors second.
+- **Word links:** click a word in Chinese, pinyin or English and its partners light up, with the CC-CEDICT meaning, its HSK 3.0 level and its measure word. English is linked through the dictionary first and through the translation model's own vectors second.
+- **Tone colours:** each pinyin syllable in its tone's colour (Subtitles ▾ → Tone colours).
+- **Tense colours:** the characters that set the time (了 过 没 在 着 会 要 快要, and time words) are coloured past / present / future; click one to see its rule (Grammar ▾, key G). Found by rules on jieba's word tags, not by a person: when a rule can't tell (会 can mean "will" or "can"), it says "maybe".
+- **Video level:** each video in the library shows an HSK level: the lowest level that covers 90% of its words.
+- **Any video:** drop a video file on the window to watch it, or add it to the library to get its subtitles, even if it wasn't downloaded here.
 
 ## Files
 
@@ -51,6 +55,8 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 | `pipeline/translate_srt.py` · `align_srt.py` | Local English translation, and English↔Chinese word links |
 | `pipeline/hardsubs_to_srt.py` · `ocr_frames.swift` | OCR for burned-in Chinese (macOS Vision) |
 | `pipeline/pinyin_fixes.txt` | Pinyin corrections, one word per line |
+| `pipeline/grammar.py` | Tense marks for the colours (tests in `tests/test_grammar.py`) |
+| `pipeline/data/hsk3.json` | Word → HSK 3.0 level, from complete-hsk-vocabulary (MIT, `hsk3.LICENSE`) |
 | `PLAN.md` | The prototype's screen and API |
 | `docs/plans/` | Desktop app design and orchestration (CI, releases, updates, Windows) |
 | `design/icons/` | Logo explorations. Chosen: `20-pianpian-watermelon.svg` (app) and `19-pianpian-mono.svg` (menu bar) |

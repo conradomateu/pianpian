@@ -233,6 +233,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .t1 { color:#FF6B6B; } .ov .t2 { color:#F5B23C; } .ov .t3 { color:#46D39A; } .ov .t4 { color:#6FA8FF; } .ov .t5 { color:#CFC7BB; }
 .t1 { color:var(--tone1); } .t2 { color:var(--tone2); } .t3 { color:var(--tone3); } .t4 { color:var(--tone4); } .t5 { color:var(--tone5); }
 .ov .w.hl s, .ov .w.hl .g { color:inherit; background:none; outline:0; box-shadow:none; }
+.ov .gl s { color:inherit; }                       /* the card has its own background: plain white pinyin there */
 .g { font-weight:inherit; }
 /* on the video (always dark): solid chips for sure marks, dashed for "maybe", an underline for time words */
 .ov .g { border-radius:.18em; padding:0 .04em; cursor:help; pointer-events:auto; }
