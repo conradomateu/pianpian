@@ -1,0 +1,34 @@
+# Builds Pianpian.app (tools/build_app.py) on Apple Silicon. Called by release-please.yml for each release,
+# which then gets Pianpian-macOS.zip attached; run it by hand (Actions → app → Run workflow) to try a build:
+# the zip is then kept as a workflow artifact for a week.
+name: app
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-14            # Apple Silicon, with Xcode's swiftc for the icon and the OCR helper
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: astral-sh/setup-uv@v6
+      - run: python3 tools/build_app.py
+      - name: Attach to the release
+        if: inputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" dist/Pianpian-macOS.zip --clobber
+      - name: Keep the build
+        if: ${{ !inputs.tag }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pianpian-macOS
+          path: dist/Pianpian-macOS.zip
+          retention-days: 7

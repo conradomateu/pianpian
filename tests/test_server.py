@@ -1,12 +1,16 @@
 """The local server: pages, the library API and the guard on writes, on a throwaway library."""
 import json
+import os
 import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+os.environ.setdefault("PIANPIAN_HOME", tempfile.mkdtemp())   # logs and settings in a throwaway folder, not your ~/Library
+os.environ["PIANPIAN_NO_UPDATE_CHECK"] = "1"                 # and no calls to GitHub from a test
 import server  # noqa: E402
 
 
@@ -28,11 +32,13 @@ def test_server(tmp_path):
             raise AssertionError("POST without X-Kit was accepted")
         except urllib.error.HTTPError as e:
             assert e.code == 403
-        # files outside the app folder and the library are not served
-        try:
-            urllib.request.urlopen(base + "/../../etc/passwd")
-            raise AssertionError("path outside the app was served")
-        except urllib.error.HTTPError as e:
-            assert e.code == 404
+        # files outside the app folder and the library are not served, however the path is written
+        for bad in ("/../../etc/passwd", "/%2e%2e/%2e%2e/etc/passwd", "/assets/../../server.py", "/.git/HEAD",
+                    "/assets/%2e%2e/app.html", "/design//icons/x.svg"):
+            try:
+                urllib.request.urlopen(base + bad)
+                raise AssertionError(f"{bad} was served")
+            except urllib.error.HTTPError as e:
+                assert e.code == 404, bad
     finally:
         srv.shutdown()

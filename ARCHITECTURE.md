@@ -39,6 +39,20 @@ then the Python running the server.
   transcript). Nothing is sent until the person presses Submit on GitHub. Logs live in
   `~/Library/Logs/Pianpian`.
 
+## Packaging and releases
+
+`tools/build_app.py` (`dev.py build`) freezes `launcher.py` with PyInstaller into `dist/Pianpian.app`:
+the window, the server, the pages, the pipeline scripts, both locks, `uv`, the OCR helper compiled
+from `ocr_frames.swift`, and a `VERSION` file. About 110 MB, 27 MB zipped. The engine and the models
+are not inside: the first run installs them. The bundle is signed ad hoc; without a paid Developer ID,
+macOS asks once before opening it. Inside the app, `engine.python()` never falls back to
+`sys.executable` (that would open a second window), and the server checks static paths by name,
+because PyInstaller links the files from `Contents/Frameworks` into `Contents/Resources`.
+
+Releases: merging release-please's pull request tags a version and creates the GitHub release; then
+`.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
+`Pianpian-macOS.zip`, which the website's Download button and the in-app update card point at.
+
 ## Models
 
 `pipeline/models.py` downloads the two models once into `~/.cache/mandarin-kit/models`

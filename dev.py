@@ -7,7 +7,8 @@
     python3 dev.py lint       # ruff (real mistakes only) + node --check on the JavaScript
     python3 dev.py test       # pytest (tests/)
     python3 dev.py serve      # the app at http://127.0.0.1:8770
-    python3 dev.py app        # build Pianpian.app into ~/Applications (macOS)
+    python3 dev.py app        # a dev Pianpian.app in ~/Applications that runs this checkout (macOS)
+    python3 dev.py build      # the real Pianpian.app and Pianpian-macOS.zip in dist/ (what releases ship)
     python3 dev.py site       # the website into _site/ (landing page + live demo)
     python3 dev.py preview    # build it and serve it at http://127.0.0.1:8765
     python3 dev.py shots      # README and website screenshots from the demo (needs Chrome or Brave)
@@ -61,6 +62,7 @@ TASKS = {
     "lock": lock,
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
+    "build": lambda: run(sys.executable, "tools/build_app.py"),
     "site": lambda: run(sys.executable, "tools/build_site.py"),
     "preview": lambda: run(sys.executable, "tools/build_site.py", "--serve"),
     "shots": lambda: run(sys.executable, "tools/shots.py"),

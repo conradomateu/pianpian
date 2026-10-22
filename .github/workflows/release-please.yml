@@ -1,6 +1,7 @@
 # On main: keeps a "release v0.x.y" pull request up to date (version + CHANGELOG from feat:/fix: commits).
-# Merging it tags the version and creates the GitHub release. Needs: Settings → Actions → General →
-# "Allow GitHub Actions to create and approve pull requests".
+# Merging it tags the version and creates the GitHub release; then the app is built on Apple Silicon and
+# Pianpian-macOS.zip is attached to that release (the website's Download button points at it).
+# Needs: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
 name: release-please
 on:
   push:
@@ -11,8 +12,19 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  app:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/app.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

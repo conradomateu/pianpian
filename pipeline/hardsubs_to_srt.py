@@ -14,6 +14,7 @@ and translation steps. Standard library only; needs ffmpeg and the Xcode command
 import argparse
 import difflib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,14 @@ def stamp(t: float) -> str:
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
+def ffmpeg() -> str:
+    """Homebrew's ffmpeg if there is one, else the engine's (imageio-ffmpeg)."""
+    if exe := shutil.which("ffmpeg"):
+        return exe
+    import imageio_ffmpeg
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video")
@@ -38,9 +47,12 @@ def main() -> None:
     a = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", a.video, "-vf",
+        subprocess.run([ffmpeg(), "-loglevel", "error", "-y", "-i", a.video, "-vf",
                         f"fps={a.fps},crop=iw:ih*{a.crop}:0:ih*{1 - a.crop},scale=1280:-1", f"{tmp}/%05d.png"], check=True)
-        ocr = subprocess.run(["swift", str(HERE / "ocr_frames.swift"), tmp], check=True, capture_output=True, text=True).stdout
+        # the app ships ocr_frames compiled (tools/build_app.py); from a checkout it runs with swift
+        built = HERE / "bin" / "ocr_frames"
+        cmd = [str(built), tmp] if built.exists() else ["swift", str(HERE / "ocr_frames.swift"), tmp]
+        ocr = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
 
     frames = []  # (time, text)
     for line in ocr.splitlines():

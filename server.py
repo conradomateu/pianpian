@@ -16,6 +16,7 @@ import mimetypes
 import os
 import queue
 import re
+import socketserver
 import subprocess
 import threading
 import time
@@ -46,7 +47,8 @@ mimetypes.add_type("application/json; charset=utf-8", ".json")
 
 CFG = {"library": Path(engine.config()["library"]).expanduser()}
 _m = re.search(r'^version = "([^"]+)"', (HERE / "pyproject.toml").read_text(encoding="utf-8"), re.M) if (HERE / "pyproject.toml").exists() else None
-VERSION = os.environ.get("PIANPIAN_VERSION") or (_m[1] if _m else "dev")
+_v = HERE / "VERSION"                                       # written into the app by tools/build_app.py
+VERSION = os.environ.get("PIANPIAN_VERSION") or (_v.read_text().strip() if _v.exists() else _m[1] if _m else "dev")
 
 
 # ---------------------------------------------------------------- library
@@ -288,9 +290,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_file(f)
                 return self.fail(404, "not found")
             # the app's own page and assets
+            # checked by name, not by resolving links: inside Pianpian.app the files are links into Contents/Resources
             rel = path.lstrip("/") or "app.html"
-            f = (HERE / rel).resolve()
-            if f.is_file() and HERE in f.parents and not any(part.startswith(".") for part in f.relative_to(HERE).parts) \
+            parts = Path(rel).parts
+            f = HERE.joinpath(*parts) if parts else HERE / "app.html"
+            if parts and not any(part in ("..", "") or part.startswith(".") or "\\" in part for part in parts) and f.is_file() \
                     and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md"):
                 return self.send_file(f)
             self.fail(404, "not found")
@@ -448,6 +452,8 @@ def downloader_job() -> "Job | None":
 
 def keep_up_to_date() -> None:
     """In the background: a new Pianpian (once a day), and the downloader (once a week)."""
+    if os.environ.get("PIANPIAN_NO_UPDATE_CHECK"):            # tests, and anyone who'd rather not
+        return
     while True:
         UPDATE["app"] = updates.check_app(VERSION)
         if engine.STATE["engine"] and updates.ytdlp_due() and not any(j.kind == "update" and j.state in ("queued", "running") for j in JOBS):
@@ -459,6 +465,15 @@ def installed_browsers() -> list[str]:
     """The browsers on this Mac that yt-dlp can borrow a Bilibili login from (Safari is always there)."""
     apps = [Path("/Applications"), Path.home() / "Applications"]
     return [k for k, name in BROWSERS.items() if k == "safari" or any((a / f"{name}.app").exists() for a in apps)]
+
+
+class LocalServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer without its reverse DNS lookup of the host (socket.getfqdn), which can hang for
+    many seconds on slow networks before the window shows anything. It only ever listens on 127.0.0.1."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
 
 
 def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
@@ -474,7 +489,7 @@ def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     CFG["library"].mkdir(parents=True, exist_ok=True)
     os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())      # the pipeline's jobs find the models there
     threading.Thread(target=lambda: (engine.check(), keep_up_to_date()), daemon=True).start()
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)      # raises OSError if the port is taken
+    srv = LocalServer(("127.0.0.1", port), Handler)            # raises OSError if the port is taken
     threading.Thread(target=worker, daemon=True).start()
     return srv
 

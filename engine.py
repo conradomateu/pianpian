@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
+FROZEN = getattr(sys, "frozen", False)                       # running inside Pianpian.app (tools/build_app.py)
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
 SUPPORT = Path(os.environ.get("PIANPIAN_HOME") or Path.home() / "Library" / "Application Support" / "Pianpian")
 CONFIG = SUPPORT / "config.json"
@@ -87,7 +88,8 @@ def python() -> str:
     for p in (engine_dir() / "bin" / "python", HERE / ".venv" / "bin" / "python"):
         if p.exists():
             return str(p)
-    return sys.executable
+    # inside the packaged app, sys.executable is the app itself: running it would open a second window
+    return str(engine_dir() / "bin" / "python") if FROZEN else sys.executable
 
 
 def uv() -> str | None:
