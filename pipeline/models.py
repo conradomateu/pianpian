@@ -7,9 +7,9 @@
 models.lock.json pins every file of every model (name, size, SHA-256) and the exact revision on both
 sites, so everyone gets the same files and a release can change a model on purpose. Files come from
 ModelScope first (fast from mainland China), then Hugging Face, and each is checked against the lock.
-A stopped download resumes. A model already in the Hugging Face cache (~/.cache/huggingface) or in
-~/.cache/mandarin-kit/models (the command-line tools' folder) is used where it is when its files match.
-Folder: $PIANPIAN_MODELS (the app sets it to <data>/models), else ~/.cache/mandarin-kit/models.
+A stopped download resumes. A model already in the Hugging Face cache ($HF_HUB_CACHE, $HF_HOME/hub or
+~/.cache/huggingface/hub) or in ~/.cache/mandarin-kit/models (older versions) is used where it is when its files match.
+Folder: $PIANPIAN_MODELS (the app sets it to <data>/models), else ~/.cache/pianpian/models.
 
 Progress lines, for the installer:  @progress {"model": …, "file": …, "done": bytes, "total": bytes}
 """
@@ -24,7 +24,7 @@ from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
 LOCKFILE = HERE / "models.lock.json"
-LEGACY = Path.home() / ".cache" / "mandarin-kit" / "models"
+LEGACY = Path.home() / ".cache" / "mandarin-kit" / "models"           # older versions: read, never written
 NEEDED = re.compile(r"\.(json|safetensors|jinja|model|tiktoken|npz)$")       # weights, config, tokenizer; no images
 CATALOG = [
     # size: what the download weighs, for the setup page before anything is fetched
@@ -34,7 +34,7 @@ CATALOG = [
 
 
 def cache() -> Path:
-    return Path(os.environ.get("PIANPIAN_MODELS") or LEGACY)
+    return Path(os.environ.get("PIANPIAN_MODELS") or Path.home() / ".cache" / "pianpian" / "models")
 
 
 def folder_name(repo: str) -> str:
@@ -94,7 +94,8 @@ def matches(folder: Path, entry: dict) -> bool:
 
 def hf_cached(repo: str, entry: dict | None) -> Path | None:
     """A complete snapshot in the Hugging Face cache, if one is there (no download needed)."""
-    snaps = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{repo.replace('/', '--')}" / "snapshots"
+    hub = Path(os.environ.get("HF_HUB_CACHE") or Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub")
+    snaps = hub / f"models--{repo.replace('/', '--')}" / "snapshots"
     for snap in sorted(snaps.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True) if snaps.exists() else []:
         if entry and matches(snap, entry):
             return snap

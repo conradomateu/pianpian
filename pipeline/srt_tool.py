@@ -24,6 +24,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import re
 import sys
 import tarfile
@@ -104,14 +105,17 @@ def word_pinyin(word: str) -> str:
 
 
 # ---------- meanings: CC-CEDICT (CC BY-SA 4.0), fetched once from the npm package cedict-json ----------
-CACHE = Path.home() / ".cache" / "mandarin-kit"
+# $PIANPIAN_CACHE (the app sets it to <data>/cache), else ~/.cache/pianpian; older versions kept it in ~/.cache/mandarin-kit
+CACHE = Path(os.environ.get("PIANPIAN_CACHE") or Path.home() / ".cache" / "pianpian")
 CEDICT = CACHE / "cedict.v3.json"                    # { simplified: [[tones, "gloss; gloss", "个 gè"], …] }, one per reading
+OLD_CEDICT = Path.home() / ".cache" / "mandarin-kit" / "cedict.v3.json"
 SKIP_GLOSS = re.compile(r"^(CL:|variant of|old variant|see |also pr|Taiwan pr|surname|\(phonetic\)|used in|abbr\. for|\(old\))", re.I)
 
 
 def ensure_cedict() -> dict[str, str]:
-    if CEDICT.exists():
-        return json.loads(CEDICT.read_text(encoding="utf-8"))
+    for have in (CEDICT, OLD_CEDICT):
+        if have.exists():
+            return json.loads(have.read_text(encoding="utf-8"))
     for registry in ("https://registry.npmmirror.com", "https://registry.npmjs.org"):   # the first is fast from China
         try:
             meta = json.load(urlopen(f"{registry}/cedict-json/latest", timeout=30))

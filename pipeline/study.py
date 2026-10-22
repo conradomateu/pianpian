@@ -45,6 +45,11 @@ def ffmpeg() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
+def literal(path: Path) -> str:
+    """A path for yt-dlp's output options, where % starts a template: a folder named "100% chinese" stays one."""
+    return str(path).replace("%", "%%")
+
+
 def ffmpeg_on_path() -> None:
     """Some steps call a program named exactly `ffmpeg` (mlx_whisper reads the audio that way). On a Mac without
     Homebrew there is none, so the engine's is linked as `ffmpeg` next to this Python and that folder goes first
@@ -85,7 +90,7 @@ def get_video(src: str, browser: str) -> Path:
         # H.264 first, because AV1 does not play in every browser or player
         run(*ytdlp, "-f", "bv*[height<=1080][vcodec^=avc]+ba/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
             "--write-subs", "--sub-langs", "ai-zh,zh-Hans,zh-CN,zh,zh-Hant", "--convert-subs", "srt",
-            "--print-to-file", "%(title)s", work / "title.txt", "--no-playlist", "-o", work / "source.%(ext)s", src)
+            "--print-to-file", "%(title)s", literal(work / "title.txt"), "--no-playlist", "-o", literal(work) + "/source.%(ext)s", src)
     (work / "source.url").write_text(src + "\n", encoding="utf-8")
     return work
 

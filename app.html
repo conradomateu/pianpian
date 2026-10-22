@@ -193,7 +193,7 @@ const api = async (path, body) => {
 
 const player = SubPlayer.mount($('player'), {
   hint: OFFLINE
-    ? '<div><b>Drop a video and its subtitle files here</b>The server is off, so there is no library. Start it with <code>python3 ~/code/pianpian/server.py</code></div>'
+    ? '<div><b>Drop a video and its subtitle files here</b>The server is off, so there is no library. Open the Pianpian app, or run <code>python3 server.py</code> in its folder.</div>'
     : '<div><b>Pick a video on the left, paste a link, or drop files here</b>A video plus its <code>.srt</code> files (and <code>zh.words.json</code>) play straight from disk.</div>',
   keys: ' · <b>B</b> library · <b>T</b> transcript',
   list: $('transcript'),
@@ -479,7 +479,7 @@ async function poll() {
 const hashId = () => decodeURIComponent((location.hash.match(/v=([^&]+)/) || [])[1] || '');
 if (OFFLINE) {
   $('add').hidden = true; document.querySelector('.libh').hidden = true;
-  $('lib').innerHTML = '<p class="note warn" style="margin:0">The server is off, so there is no library. You can still <b>Open files…</b> or drop a video and its <code>.srt</code> files on the window.<br><br>Start it in Terminal: <code>python3 ~/code/pianpian/server.py</code></p>';
+  $('lib').innerHTML = '<p class="note warn" style="margin:0">The server is off, so there is no library. You can still <b>Open files…</b> or drop a video and its <code>.srt</code> files on the window.<br><br>Open the Pianpian app, or run <code>python3 server.py</code> in its folder.</p>';
   $('status').className = 'dot off'; $('status').textContent = 'offline';
 } else {
   window.addEventListener('hashchange', () => { const id = hashId(); if (id && (!current || current.id !== id)) select(id); });

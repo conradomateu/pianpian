@@ -55,8 +55,8 @@ Releases: merging release-please's pull request tags a version and creates the G
 
 ## Models
 
-`pipeline/models.py` downloads the two models once into `~/.cache/mandarin-kit/models`
-(or `$PIANPIAN_MODELS`): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB), pinned file by file
+`pipeline/models.py` downloads the two models once into `<data>/models` (`$PIANPIAN_MODELS`;
+`~/.cache/pianpian/models` from the command line): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB), pinned file by file
 in `pipeline/models.lock.json` (`dev.py lock`). Each file comes
 from ModelScope first, which is fast from mainland China, then Hugging Face, and is checked against the
 size and SHA-256 Hugging Face publishes. Stopped downloads resume. A model already in the Hugging Face

@@ -76,6 +76,16 @@ def models_dir() -> Path:
     return Path(os.environ.get("PIANPIAN_MODELS") or data_dir() / "models")
 
 
+def cache_dir() -> Path:
+    """The dictionary and other small downloads."""
+    return Path(os.environ.get("PIANPIAN_CACHE") or data_dir() / "cache")
+
+
+def pipeline_env() -> dict:
+    """Where the pipeline finds the models and the dictionary: set for every job and setup step."""
+    return {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
+
+
 def engine_dir() -> Path:
     return data_dir() / "engine"
 
@@ -227,13 +237,13 @@ class Setup:
                 (eng / ".pianpian-requirements").write_text(requirements_id() + "\n")
                 self._say("fetching the dictionary (CC-CEDICT)")
                 self._exec([str(eng / "bin" / "python"), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",
-                            str(HERE / "pipeline")], {"PYTHONWARNINGS": "ignore::SyntaxWarning"}, "engine")
+                            str(HERE / "pipeline")], {"PYTHONWARNINGS": "ignore::SyntaxWarning", **pipeline_env()}, "engine")
             self._say("checking the engine (the first start prepares its packages: about a minute)")
             check()
             self._step("engine", state="done")
             for s in self.steps[1:]:
                 self._step(s["id"], state="running")
-                self._exec([python(), str(MODELS_PY), "ensure", s["id"]], {"PIANPIAN_MODELS": str(models_dir()), **net}, s["id"])
+                self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])
             if getattr(self, "cleanup", False):
                 os.environ["PIANPIAN_MODELS"] = str(models_dir())

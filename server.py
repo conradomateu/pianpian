@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pianpian local server. Python standard library only.
 
-    python3 server.py                 # http://127.0.0.1:8770 · library ~/Movies/mandarin · opens the browser
+    python3 server.py                 # http://127.0.0.1:8770 · the library chosen in the setup · opens the browser
     python3 server.py --no-browser --library ~/Movies/other
 
 Serves the pages in this folder and the videos in the library, and runs pipeline/study.py
@@ -384,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
-                os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())
+                os.environ.update(engine.pipeline_env())
                 return self.send_json(engine.SETUP.public())
             if path == "/api/update-downloader":           # sites change; yt-dlp follows them
                 job = downloader_job()
@@ -487,7 +487,7 @@ def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     if library:
         CFG["library"] = Path(library).expanduser().resolve()
     CFG["library"].mkdir(parents=True, exist_ok=True)
-    os.environ["PIANPIAN_MODELS"] = str(engine.models_dir())      # the pipeline's jobs find the models there
+    os.environ.update(engine.pipeline_env())                      # the pipeline's jobs find the models and dictionary there
     threading.Thread(target=lambda: (engine.check(), keep_up_to_date()), daemon=True).start()
     srv = LocalServer(("127.0.0.1", port), Handler)            # raises OSError if the port is taken
     threading.Thread(target=worker, daemon=True).start()
@@ -497,7 +497,7 @@ def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8770)
-    ap.add_argument("--library", type=Path, default=CFG["library"], help="where videos live (default ~/Movies/mandarin)")
+    ap.add_argument("--library", type=Path, default=CFG["library"], help="where videos live (default: the folder chosen in the setup, else ~/Movies/Pianpian)")
     ap.add_argument("--no-browser", action="store_true", help="don't open the app in a browser")
     a = ap.parse_args()
     srv = start(a.port, a.library)
