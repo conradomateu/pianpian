@@ -3,7 +3,7 @@
     python3 tools/demo/make_demo.py --tts-python PATH --kokoro DIR
 
 Everything in it is made here: the lines are script.txt, the voice is Kokoro-82M (Apache-2.0,
-voice zf_xiaobei) run through mlx-audio, and the pictures are scenes.py rendered by Chrome. Then
+voice zm_yunxia, a young boy) run through mlx-audio, and the pictures are scenes.py rendered by Chrome. Then
 the app's own pipeline makes the subtitles, so the demo shows exactly what the app makes.
 
 --tts-python is a Python with mlx-audio and misaki[zh] installed (kept out of the app's engine);
@@ -51,7 +51,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tts-python", required=True)
     ap.add_argument("--kokoro", required=True)
-    ap.add_argument("--voice", default="zf_xiaobei")
+    ap.add_argument("--voice", default="zm_yunxia")
     a = ap.parse_args()
     lines = [s for s in (HERE / "script.txt").read_text(encoding="utf-8").splitlines() if s.strip()]
     tmp = Path(tempfile.mkdtemp(prefix="pianpian-demo-"))

@@ -10,8 +10,10 @@ changing the look.
 import base64
 import functools
 import http.server
+import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,11 +25,11 @@ OUT = ROOT / "site" / "shots"
 BROWSERS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
             "/Applications/Chromium.app/Contents/MacOS/Chromium"]
 W, H = 1440, 680
-# name: (seconds into the demo, colour scheme, what to do before the capture)
+# name: (seconds into the demo, colour scheme, what to do before the capture: hover a word on the video, or open a menu)
 SHOTS = {
     "app-dark": (13.2, "dark", None),
     "app-light": (24.6, "light", None),
-    "word": (13.2, "dark", ("hover", '#player .w[data-w]:nth-of-type(5)')),
+    "word": (13.2, "dark", ("hover", "三个")),
     "grammar": (13.2, "light", ("open", "Grammar")),
 }
 # resolves once the video has painted the frame at time T (or after 3 s, whatever happens)
@@ -40,6 +42,15 @@ READY = """new Promise(done => {
       if (v.paused) v.currentTime = T + 0.001;           // a seek makes sure a new frame is presented
     } else if (Date.now() < end) setTimeout(go, 100); else done();
   }; go();
+})"""
+
+# the middle of a word on the video, once the overlay has drawn it (it redraws just after the seek)
+FIND = """new Promise(done => {
+  const end = Date.now() + 3000, look = () => {
+    const w = [...document.querySelectorAll('#player .w')].find(e => e.textContent === 'WORD');
+    if (w) { const r = w.getBoundingClientRect(); done([r.x + r.width / 2, r.y + r.height / 2]); }
+    else if (Date.now() < end) setTimeout(look, 100); else done(null);
+  }; look();
 })"""
 
 
@@ -92,8 +103,26 @@ def main() -> None:
     subprocess.run([sys.executable, str(ROOT / "tools" / "build_site.py")], check=True)
 
     class Quiet(http.server.SimpleHTTPRequestHandler):
+        """Quiet, and with byte ranges: without them Chrome can't seek the video (GitHub Pages has them)."""
         def log_message(self, *a):
             pass
+
+        def send_head(self):
+            m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+            path = Path(self.translate_path(self.path))
+            if not m or not path.is_file():
+                return super().send_head()
+            size = path.stat().st_size
+            start, end = int(m[1]), min(int(m[2] or size - 1), size - 1)
+            f = path.open("rb")
+            f.seek(start)
+            self.send_response(206)
+            self.send_header("Content-Type", self.guess_type(str(path)))
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Content-Length", str(end - start + 1))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+            return io.BytesIO(f.read(end - start + 1))
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT / "_site")))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -111,7 +140,9 @@ def main() -> None:
                 c.js("new Promise(r => (document.readyState === 'complete' ? r() : addEventListener('load', r)))")
                 c.js(READY.replace("T", str(t)))
                 if action and action[0] == "hover":
-                    box = c.js(f"(() => {{ const r = document.querySelector('{action[1]}').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }})()")
+                    box = c.js(FIND.replace("WORD", action[1]))
+                    if not box:
+                        sys.exit(f"{name}: no word {action[1]} on screen at {t} s")
                     c.call("Input.dispatchMouseEvent", type="mouseMoved", x=box[0], y=box[1])
                 elif action and action[0] == "open":
                     c.js(f"[...document.querySelectorAll('details.dd > summary')].find(s => s.textContent.trim() === '{action[1]}').click()")

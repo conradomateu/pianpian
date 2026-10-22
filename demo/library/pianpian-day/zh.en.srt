@@ -1,31 +1,31 @@
 1
-00:00:01,120 --> 00:00:04,220
+00:00:01,160 --> 00:00:03,820
 Hello, my name is Pianpian. I'm a slice of watermelon.
 
 2
-00:00:06,700 --> 00:00:10,280
+00:00:06,320 --> 00:00:09,380
 Today the weather is great, I want to go for a walk in the park.
 
 3
-00:00:12,460 --> 00:00:16,300
-Yesterday I ate three buns, but I'm still not hungry now.
+00:00:11,580 --> 00:00:14,900
+Yesterday I ate three buns, but I'm still not hungry.
 
 4
-00:00:18,500 --> 00:00:20,360
+00:00:17,120 --> 00:00:18,840
 Have you been to China?
 
 5
-00:00:20,360 --> 00:00:21,400
-I went once.
+00:00:18,840 --> 00:00:19,800
+I've been there once.
 
 6
-00:00:23,720 --> 00:00:27,280
-I am learning Chinese, watching one video per day.
+00:00:22,120 --> 00:00:25,220
+I am learning Chinese, watching one video every day.
 
 7
-00:00:29,440 --> 00:00:33,600
+00:00:27,440 --> 00:00:31,120
 Tomorrow I will go to a friend's house, and we will cook together
 
 8
-00:00:35,700 --> 00:00:38,300
+00:00:33,220 --> 00:00:35,420
 It's about to rain, let's go home
