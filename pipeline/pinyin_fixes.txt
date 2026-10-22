@@ -1,7 +1,7 @@
 # Pinyin corrections for the subtitle tracks (srt_tool.py pinyin / words).
 # One per line: word, TAB (or spaces), the pinyin you want. Spaces inside the pinyin are ignored.
 # The word wins wherever it appears, also inside a longer word (早上 fixes 早上好).
-# After editing, press Rebuild in the app (or re-run study_video.sh): the pinyin is redone.
+# After editing, press Rebuild in the app (or run pipeline/study.py again): the pinyin is redone.
 #
 # 长 read zhǎng instead of cháng
 长椅	cháng yǐ

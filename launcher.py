@@ -4,8 +4,7 @@
 
 The local server runs inside this process, on 127.0.0.1 only, and the app opens in a native macOS
 window (WebKit, through pywebview) instead of a browser tab. Closing the window quits everything.
-The pipeline still needs what the terminal version needs (uv, ffmpeg, yt-dlp): this is the
-"show it on my Mac" step, not the installer (docs/plans/2026-10-22-desktop-app-design.md, M3).
+The pipeline runs in the engine environment server.py finds (see ENGINE_PY there).
 Log: ~/Library/Logs/Pianpian/launcher.log
 """
 import logging

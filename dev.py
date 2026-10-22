@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pianpian's task runner: the same commands on your Mac and in CI.
 
+    python3 dev.py engine     # the pipeline's environment (.venv, group "runtime"): server.py finds it
     python3 dev.py check      # lint + test: what CI runs on every push
     python3 dev.py lint       # ruff (real mistakes only) + node --check on the JavaScript
     python3 dev.py test       # pytest (tests/)
@@ -41,6 +42,7 @@ TASKS = {
     "lint": lint,
     "test": test,
     "check": lambda: (lint(), test()),
+    "engine": lambda: run("uv", "sync", "--group", "runtime"),
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
 }

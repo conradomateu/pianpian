@@ -5,15 +5,23 @@ description = "Watch Chinese videos with Chinese, pinyin and English subtitles y
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
-# The app itself needs nothing: server.py is standard library only, and each pipeline script
-# declares its own dependencies (PEP 723) and runs with `uv run`. These are for development.
+# server.py and the launcher need nothing beyond the standard library (and pywebview for the window);
+# the pipeline runs in the "runtime" environment below, which the app installs on first run.
 dependencies = []
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "jieba>=0.42", "pypinyin>=0.51", "zhconv>=1.4"]
+# the engine the app installs on first run: everything the pipeline needs, in one environment
+runtime = [
+  "pypinyin>=0.51", "jieba>=0.42", "zhconv>=1.4", "yt-dlp>=2025.1.1", "imageio-ffmpeg>=0.5",
+  "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "mlx-lm>=0.28; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 [tool.uv]
 package = false
+# mlx-whisper lists torch, but only its model-conversion tool uses it: leaving it out saves ~500 MB
+override-dependencies = ["torch; sys_platform == 'never'"]
 
 [tool.ruff]
 line-length = 160

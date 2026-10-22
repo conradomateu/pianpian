@@ -107,7 +107,8 @@ body { overflow:hidden; }
         <button class="btn primary" type="submit" title="download it and make the subtitles">Add</button>
       </div>
       <details class="opts"><summary>options</summary>
-        <label class="check"><input type="checkbox" name="cookies" checked><span>Use my Brave login <span class="muted">(Bilibili's AI subtitles)</span></span></label>
+        <label class="check" title="Bilibili shows its AI subtitles only when you are logged in: pick the browser you use Bilibili in"><span>Bilibili login from</span>
+          <select name="browser"><option value="">none</option></select></label>
         <label class="check"><input type="checkbox" name="translate" checked><span>English too <span class="muted">(local model, 1 GB the first time)</span></span></label>
       </details>
       <div class="msg" id="addmsg"></div>
@@ -199,9 +200,16 @@ player.extra.innerHTML = '<details class="dd" data-dd id="vmenu" hidden><summary
 async function status() {
   try {
     const s = await api('/api/status');
-    const missing = Object.entries(s.tools).filter(([, ok]) => !ok).map(([t]) => t);
-    $('status').className = 'dot ' + (missing.length ? 'off' : s.busy ? 'busy' : 'ok');
-    $('status').textContent = missing.length ? 'missing: ' + missing.join(', ') : s.busy ? 'working' : 'ready';
+    const broken = s.engine === false;
+    $('status').className = 'dot ' + (broken ? 'off' : s.busy ? 'busy' : 'ok');
+    $('status').textContent = broken ? 'engine not installed' : s.busy ? 'working' : 'ready';
+    const sel = $('add').browser;                     // the browsers this Mac has, the last choice remembered
+    if (sel.options.length === 1 && s.browsers) {
+      const NAMES = { safari: 'Safari', chrome: 'Chrome', brave: 'Brave', firefox: 'Firefox', edge: 'Edge', chromium: 'Chromium', opera: 'Opera', vivaldi: 'Vivaldi' };
+      s.browsers.forEach(b => sel.add(new Option(NAMES[b] || b, b)));
+      try { sel.value = localStorage.getItem('pp-browser') || ''; } catch {}
+      sel.onchange = () => { try { localStorage.setItem('pp-browser', sel.value); } catch {} };
+    }
     $('libinfo').textContent = s.library.replace(/^\/Users\/[^/]+/, '~');
   } catch { $('status').className = 'dot off'; $('status').textContent = 'server stopped'; }
 }
@@ -357,7 +365,7 @@ $('add').onsubmit = async e => {
   const f = e.target;
   $('addmsg').textContent = '';
   try {
-    await api('/api/add', { url: f.url.value.trim(), cookies: f.cookies.checked, translate: f.translate.checked });
+    await api('/api/add', { url: f.url.value.trim(), browser: f.browser.value, translate: f.translate.checked });
     f.url.value = '';
     poll();
   } catch (err) { $('addmsg').textContent = err.message; }

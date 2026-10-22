@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Mandarin Kit local server. Python standard library only.
+"""Pianpian local server. Python standard library only.
 
     python3 server.py                 # http://127.0.0.1:8770 · library ~/Movies/mandarin · opens the browser
-    python3 server.py --no-browser --library ~/Movies/other --browser chrome
+    python3 server.py --no-browser --library ~/Movies/other
 
-Serves the pages in this folder and the videos in the library, and runs pipeline/study_video.sh
+Serves the pages in this folder and the videos in the library, and runs pipeline/study.py
 (one job at a time) so the app can download a link, make subtitles and rebuild a video.
 Everything it knows about a video lives in that video's folder (see PLAN.md), so the app and
 the command line always agree. Listens on 127.0.0.1 only.
@@ -15,8 +15,8 @@ import mimetypes
 import os
 import queue
 import re
-import shutil
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -25,7 +25,15 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
-SCRIPT = HERE / "pipeline" / "study_video.sh"
+SCRIPT = HERE / "pipeline" / "study.py"
+SUPPORT = Path.home() / "Library" / "Application Support" / "Pianpian"
+# the Python that runs the pipeline: $PIANPIAN_PYTHON, else the engine the app installed, else the
+# repository's own environment (`uv sync --group runtime`), else this one
+ENGINE_PY = os.environ.get("PIANPIAN_PYTHON") or next(
+    (str(p) for p in (SUPPORT / "engine" / "bin" / "python", HERE / ".venv" / "bin" / "python") if p.exists()), sys.executable)
+# browsers yt-dlp can borrow a Bilibili login from, as macOS apps
+BROWSERS = {"safari": "Safari", "chrome": "Google Chrome", "brave": "Brave Browser", "firefox": "Firefox",
+            "edge": "Microsoft Edge", "chromium": "Chromium", "opera": "Opera", "vivaldi": "Vivaldi"}
 VIDEO_EXT = (".mp4", ".m4v", ".mkv", ".webm", ".mov")
 SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name inside the library: no slashes
 TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
@@ -35,7 +43,9 @@ mimetypes.add_type("video/x-matroska", ".mkv")
 mimetypes.add_type("text/javascript; charset=utf-8", ".js")
 mimetypes.add_type("application/json; charset=utf-8", ".json")
 
-CFG = {"library": Path.home() / "Movies" / "mandarin", "browser": "brave"}
+CFG = {"library": Path.home() / "Movies" / "mandarin"}
+_m = re.search(r'^version = "([^"]+)"', (HERE / "pyproject.toml").read_text(encoding="utf-8"), re.M) if (HERE / "pyproject.toml").exists() else None
+VERSION = os.environ.get("PIANPIAN_VERSION") or (_m[1] if _m else "dev")
 
 
 # ---------------------------------------------------------------- library
@@ -127,7 +137,7 @@ class Job:
             else:
                 self.log.append(part)
             if self.video is None and (m := re.match(r"folder: (.+)$", part)):
-                self.video = Path(m[1]).name                # study_video.sh says which folder it works in
+                self.video = Path(m[1]).name                # study.py says which folder it works in
         del self.log[:-400]
 
     def public(self, tail=60):
@@ -170,19 +180,19 @@ def rebuild_job(vid_id: str, translate=False, split=None) -> Job:
     if split is not None:
         env.update(RESPLIT="1", SPLIT_MAX=str(split))
     if p.is_file():                                           # loose video: the script makes <name>_study/
-        return enqueue(Job(f"Make subtitles · {p.name}", [str(SCRIPT), str(p)], str(p.parent), env, video=p.stem + "_study"))
+        return enqueue(Job(f"Make subtitles · {p.name}", [ENGINE_PY, str(SCRIPT), str(p)], str(p.parent), env, video=p.stem + "_study"))
     src = video_in(p)
     if not src:
         raise FileNotFoundError("no source video in " + vid_id)
     if translate:
         env["FORCE_EN"] = "1"
     verb = "Translate" if translate else f"Lines of {split or 'any'} characters" if split is not None else "Rebuild"
-    return enqueue(Job(f"{verb} · {read(p / 'title.txt') or vid_id}", [str(SCRIPT), str(src)], str(p), env, video=vid_id))
+    return enqueue(Job(f"{verb} · {read(p / 'title.txt') or vid_id}", [ENGINE_PY, str(SCRIPT), str(src)], str(p), env, video=vid_id))
 
 
 # ---------------------------------------------------------------- HTTP
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MandarinKit/1"
+    server_version = "Pianpian/1"
 
     def log_message(self, fmt, *args):                        # quiet: the app shows what matters
         pass
@@ -243,10 +253,9 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(urlparse(self.path).path)
         try:
             if path == "/api/status":
-                tools = {t: bool(shutil.which(t)) for t in ("yt-dlp", "ffmpeg", "uv", "swift")}
                 busy = any(j.state in ("queued", "running") for j in JOBS)
-                return self.send_json({"ok": True, "library": str(CFG["library"]), "browser": CFG["browser"],
-                                       "tools": tools, "busy": busy}, cors=True)
+                return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": ENGINE["ok"],
+                                       "browsers": installed_browsers(), "busy": busy}, cors=True)
             if path == "/api/videos":
                 return self.send_json(library())
             if m := re.fullmatch(r"/api/videos/([^/]+)", path):
@@ -339,7 +348,10 @@ class Handler(BaseHTTPRequestHandler):
                 url = str(data.get("url", "")).strip()
                 if not re.match(r"^https?://\S+$", url):
                     return self.fail(400, "paste a full http(s) link")
-                cmd = [str(SCRIPT), url] + ([CFG["browser"]] if data.get("cookies") else [])
+                browser = str(data.get("browser") or "")
+                if browser and browser not in BROWSERS:
+                    return self.fail(400, "unknown browser")
+                cmd = [ENGINE_PY, str(SCRIPT), url] + ([browser] if browser else [])
                 env = {**({"HARDSUBS": "1"} if data.get("burned") else {}), **({"AUTO_EN": "1"} if data.get("translate") else {})}
                 job = Job(f"Download · {url}", cmd, str(CFG["library"]), env)
                 job.kind = "add"
@@ -372,13 +384,30 @@ class Handler(BaseHTTPRequestHandler):
             self.fail(400, "bad JSON")
 
 
-def start(port: int = 8770, library: Path | None = None, browser: str | None = None) -> ThreadingHTTPServer:
+def installed_browsers() -> list[str]:
+    """The browsers on this Mac that yt-dlp can borrow a Bilibili login from (Safari is always there)."""
+    apps = [Path("/Applications"), Path.home() / "Applications"]
+    return [k for k, name in BROWSERS.items() if k == "safari" or any((a / f"{name}.app").exists() for a in apps)]
+
+
+ENGINE = {"ok": None}                                     # None until checked: can the engine's Python run the pipeline?
+
+
+def check_engine() -> None:
+    try:
+        r = subprocess.run([ENGINE_PY, "-c", "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm"],
+                           capture_output=True, timeout=120)
+        ENGINE["ok"] = r.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        ENGINE["ok"] = False
+
+
+def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     """Start the job worker and bind the server (not yet serving). launcher.py uses this too."""
     if library:
         CFG["library"] = Path(library).expanduser().resolve()
-    if browser:
-        CFG["browser"] = browser
     CFG["library"].mkdir(parents=True, exist_ok=True)
+    threading.Thread(target=check_engine, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)      # raises OSError if the port is taken
     threading.Thread(target=worker, daemon=True).start()
     return srv
@@ -388,12 +417,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8770)
     ap.add_argument("--library", type=Path, default=CFG["library"], help="where videos live (default ~/Movies/mandarin)")
-    ap.add_argument("--browser", default=CFG["browser"], help="browser whose login yt-dlp may use (default brave)")
     ap.add_argument("--no-browser", action="store_true", help="don't open the app in a browser")
     a = ap.parse_args()
-    srv = start(a.port, a.library, a.browser)
+    srv = start(a.port, a.library)
     url = f"http://127.0.0.1:{a.port}/app.html"
-    print(f"Mandarin Kit → {url}\nlibrary: {CFG['library']}\nCtrl+C to stop.")
+    print(f"Pianpian → {url}\nlibrary: {CFG['library']}\nCtrl+C to stop.")
     if not a.no_browser:
         webbrowser.open(url)
     try:

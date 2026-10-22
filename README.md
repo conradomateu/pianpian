@@ -44,6 +44,9 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 
 ## Files
 
+How the pieces fit: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+
 | Path | What it is |
 |---|---|
 | `server.py` | Local server (standard library only): serves the pages and the library, runs one job at a time |
@@ -52,19 +55,20 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 | `app.html` | The whole app on one screen: library, player, menus, files dropped from disk |
 | `player.html` | Only forwards old links to `app.html` |
 | `assets/` | `kit.css` (design tokens), `kit.js` (theme, helpers), `player.js` (the subtitle player) |
-| `pipeline/study_video.sh` | Link or file → subtitles → `study.mkv`. Calls the scripts below |
+| `pipeline/study.py` | Link or file → subtitles → `study.mkv`. Calls the scripts below |
+| `pipeline/models.py` | Downloads the two models once (ModelScope, then Hugging Face), resumable and checked |
 | `pipeline/srt_tool.py` | Pinyin, word lists, line splitting, LLM round-trip, track stacking |
 | `pipeline/translate_srt.py` · `align_srt.py` | Local English translation, and English↔Chinese word links |
 | `pipeline/hardsubs_to_srt.py` · `ocr_frames.swift` | OCR for burned-in Chinese (macOS Vision) |
 | `pipeline/pinyin_fixes.txt` | Pinyin corrections, one word per line |
 | `pipeline/grammar.py` | Tense marks for the colours (tests in `tests/test_grammar.py`) |
 | `pipeline/data/hsk3.json` | Word → HSK 3.0 level, from complete-hsk-vocabulary (MIT, `hsk3.LICENSE`) |
-| `PLAN.md` | The prototype's screen and API |
 | `design/icons/` | The logo: `20-pianpian-watermelon.svg` (app) and `19-pianpian-mono.svg` (one colour) |
 
 ## Development
 
 ```bash
+python3 dev.py engine    # the pipeline's environment in .venv (no torch, ~700 MB)
 python3 dev.py check     # lint + tests, the same as CI
 python3 dev.py serve     # the app at http://127.0.0.1:8770
 python3 dev.py app       # build Pianpian.app (macOS)

@@ -1,0 +1,81 @@
+# How Pianpian fits together
+
+```
+Pianpian.app (launcher.py, pywebview window)
+  └── server.py   127.0.0.1 only, Python standard library
+        ├── serves   app.html · assets/ · the library folder (with byte ranges, so video can seek)
+        └── runs     pipeline/study.py with the engine's Python   (one job at a time, live log)
+                       └── yt-dlp · ffmpeg · mlx-whisper or macOS OCR · srt_tool.py · Hy-MT2 (mlx-lm)
+```
+
+`python3 server.py` runs the same server in a browser tab, without the window. `app.html` opened
+straight from disk still plays video files dropped on it; it only needs the server to make subtitles.
+
+## Two Python environments
+
+- **The app** (`launcher.py`, `server.py`) needs only the standard library plus pywebview for the window.
+- **The engine** runs the pipeline. It is the `runtime` dependency group in `pyproject.toml`: pypinyin,
+  jieba, zhconv, yt-dlp, imageio-ffmpeg (a static ffmpeg, so Homebrew is not needed), mlx-whisper and
+  mlx-lm. torch is left out on purpose (mlx-whisper lists it for a conversion tool the app never uses),
+  which keeps the engine at about 700 MB.
+
+`server.ENGINE_PY` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
+`~/Library/Application Support/Pianpian/engine`, the repository's `.venv` (`uv sync --group runtime`),
+then the Python running the server.
+
+## Models
+
+`pipeline/models.py` downloads the two models once into `~/.cache/mandarin-kit/models`
+(or `$PIANPIAN_MODELS`): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB). Each file comes
+from ModelScope first, which is fast from mainland China, then Hugging Face, and is checked against the
+size and SHA-256 Hugging Face publishes. Stopped downloads resume. A model already in the Hugging Face
+cache is used where it is. Progress goes to stdout as `@progress {json}` lines.
+
+## The pipeline
+
+`pipeline/study.py <link or file> [browser]` makes one study folder. Each step is skipped when its
+output is newer than its inputs, so it can run again after `zh.srt` is fixed by hand.
+
+1. **Video**: yt-dlp, H.264 first (AV1 does not play everywhere), plus the platform's Chinese
+   subtitles if any. A browser name borrows that browser's Bilibili login for the AI subtitles.
+2. **Chinese**: the platform's subtitles, else macOS OCR when the Chinese is burned into the picture,
+   else Whisper with word timestamps. `srt_tool.py split` cuts long lines at word boundaries.
+3. **Pinyin and words**: pypinyin and jieba, with `pinyin_fixes.txt` on top. `zh.words.json` holds
+   each word's pinyin, CC-CEDICT gloss, HSK level and measure words, the tense tags from `grammar.py`
+   and Whisper's word times (for the spoken-word highlight).
+4. **English**: `translate_srt.py` runs Hy-MT2 line by line, with the title and the previous lines as
+   context, so every English line keeps its Chinese line's timing. `align_srt.py` then links English
+   words to Chinese words where the dictionary can't.
+5. **study.mkv**: every track in one file, for IINA, mpv or VLC.
+
+## State
+
+Everything lives in the video's folder, so the app and the command line always agree: `source.*`,
+`title.txt`, `source.url`, `.hardsubs`, `.english-auto`, `.from-whisper`, `.split`, the `.srt` tracks,
+`zh.words.json`, `zh.align.json`, `en.lines.txt` and `study.mkv`. Jobs live in memory.
+
+## Server API
+
+| Method | Path | Does |
+|---|---|---|
+| GET | `/api/status` | Version, library folder, engine ready or not, installed browsers, busy |
+| GET | `/api/videos` | Library folders with title, link, HSK level and the tracks they have |
+| GET | `/api/videos/<id>` | One video, plus its `zh.lines.txt` for translating by hand |
+| GET | `/api/jobs` | Recent jobs with their state and the end of their log |
+| POST | `/api/add` | `{url, browser, translate}`: download and make subtitles |
+| PUT | `/api/import?name=…` | The body is a video file: copy it into the library and make subtitles |
+| POST | `/api/videos/<id>/translate` | English from the local model, then rebuild |
+| POST | `/api/videos/<id>/english` | `{text}`: save a hand-made `en.lines.txt`, then rebuild |
+| POST | `/api/videos/<id>/split` | `{max}`: cut the lines again (0 = as transcribed) |
+| POST | `/api/videos/<id>/rebuild` | Run the pipeline again |
+| POST | `/api/videos/<id>/open` | Show the folder in Finder |
+
+Safety: the server listens on 127.0.0.1 only. Requests that change anything need an `X-Kit: 1`
+header, so other websites can't start jobs. Video ids and paths are checked, and commands run
+without a shell.
+
+## The page
+
+`app.html` is the only screen: library on the left (B), video and its menus in the middle, transcript
+on the right (T). `assets/player.js` is the player, `assets/kit.css` the design tokens and
+`assets/kit.js` small shared helpers. There is no framework and no build step.
