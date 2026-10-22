@@ -11,6 +11,7 @@
   --body:'Archivo','Avenir Next',system-ui,-apple-system,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
   --tr-pinyin:#8A5E06; --tr-en:#2A6496; --tr-other:#2F7A4C;   /* transcript lines on paper: dark enough to read */
+  --tone1:#C2352C; --tone2:#A86500; --tone3:#1B7A50; --tone4:#2B5FA6; --tone5:#8A7F74;   /* pinyin tones on paper */
   --r:12px; --r-sm:8px;
   --ease:cubic-bezier(.2,.8,.2,1);                  /* quick start, soft landing: every slide and fold uses it */
 }
@@ -21,6 +22,7 @@
   --jade:#34C795; --jade-fg:#55D9AC; --jade-tint:#10261F;
   --amber:#F5B23C; --amber-fg:#FFC96B; --amber-tint:#2B2113;
   --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
+  --tone1:#FF7B70; --tone2:#F5B23C; --tone3:#46D39A; --tone4:#79B0FF; --tone5:#9A9086;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg:#14120F; --surface:#1C1916; --surface-2:#24201C; --fg:#F2EDE4; --fg-2:#C4BBAE; --muted:#8E8479;
@@ -29,6 +31,7 @@
   --jade:#34C795; --jade-fg:#55D9AC; --jade-tint:#10261F;
   --amber:#F5B23C; --amber-fg:#FFC96B; --amber-tint:#2B2113;
   --tr-pinyin:#FFD75E; --tr-en:#9FD8FF; --tr-other:#C8F0C0;   /* on dark: the same colours as on the video */
+  --tone1:#FF7B70; --tone2:#F5B23C; --tone3:#46D39A; --tone4:#79B0FF; --tone5:#9A9086;
 } }
 
 /* ---------- base ---------- */
@@ -224,3 +227,37 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .empty { padding:18px; color:var(--muted); font-size:13px; }
 
 @media (max-width:640px) { .bar nav { display:none; } .wrap { padding:24px 16px 70px; } }
+
+/* ---------- tone colours (pinyin) and tense colours (Chinese) ---------- */
+.t1, .t2, .t3, .t4, .t5 { text-decoration:none; }
+.ov .t1 { color:#FF6B6B; } .ov .t2 { color:#F5B23C; } .ov .t3 { color:#46D39A; } .ov .t4 { color:#6FA8FF; } .ov .t5 { color:#CFC7BB; }
+.t1 { color:var(--tone1); } .t2 { color:var(--tone2); } .t3 { color:var(--tone3); } .t4 { color:var(--tone4); } .t5 { color:var(--tone5); }
+.ov .w.hl s, .ov .w.hl .g { color:inherit; background:none; outline:0; box-shadow:none; }
+.g { font-weight:inherit; }
+/* on the video (always dark): solid chips for sure marks, dashed for "maybe", an underline for time words */
+.ov .g { border-radius:.18em; padding:0 .04em; cursor:help; pointer-events:auto; }
+.ov .g.past { background:#0E8A63; color:#fff; } .ov .g.present { background:#DE3B26; color:#fff; } .ov .g.future { background:#DE9407; color:#1F1B16; }
+.ov .g.maybe { outline:.07em dashed #F5B23C; outline-offset:-.03em; } .ov .g.change { outline:.07em dashed #46D39A; outline-offset:-.03em; }
+.ov .g.time-past { box-shadow:inset 0 -.14em #46D39A; } .ov .g.time-present { box-shadow:inset 0 -.14em #FF6B54; } .ov .g.time-future { box-shadow:inset 0 -.14em #F5B23C; }
+/* in the transcript and the Grammar menu: the theme's colours */
+.cue .g, .ddp .g { padding:0 .12em; border-radius:4px; font-weight:700; }
+.cue .g.past, .ddp .g.past { color:var(--jade-fg); background:var(--jade-tint); }
+.cue .g.present, .ddp .g.present { color:var(--red-fg); background:var(--red-tint); }
+.cue .g.future, .ddp .g.future { color:var(--amber-fg); background:var(--amber-tint); }
+.cue .g.maybe, .ddp .g.maybe { color:var(--amber-fg); outline:1px dashed var(--amber); outline-offset:-1px; }
+.cue .g.change, .ddp .g.change { color:var(--jade-fg); outline:1px dashed var(--jade); outline-offset:-1px; }
+.cue .g.time-past, .ddp .g.time-past { box-shadow:inset 0 -2px var(--jade); font-weight:inherit; }
+.cue .g.time-present, .ddp .g.time-present { box-shadow:inset 0 -2px var(--red); font-weight:inherit; }
+.cue .g.time-future, .ddp .g.time-future { box-shadow:inset 0 -2px var(--amber); font-weight:inherit; }
+.ddp.grammar { width:min(460px, 92vw); }
+.legend { display:grid; gap:8px; font-size:13px; color:var(--fg-2); }
+.legend > div { display:grid; grid-template-columns:48px minmax(0,1fr); gap:10px; align-items:baseline; }
+.legend > div > .g { justify-self:start; font-size:16px; }
+.ddp .note { margin:0; font-size:12.5px; }
+/* the card above the lines: the word's HSK level and measure word, or a tense rule in its colour */
+.ov .gl em { font-style:normal; font-size:.85em; margin-left:.45em; padding:0 .35em; border:1px solid rgba(255,255,255,.55); border-radius:.3em; white-space:nowrap; }
+.ov .gl span.rule { background:rgba(20,18,15,.92) !important; }
+.ov .gl span.rule.past { background:rgba(14,138,99,.95) !important; } .ov .gl span.rule.present { background:rgba(222,59,38,.95) !important; }
+.ov .gl span.rule.future { background:rgba(222,148,7,.95) !important; color:#1F1B16 !important; }
+.ov .gl span.rule.maybe { box-shadow:inset 0 0 0 .08em #F5B23C; } .ov .gl span.rule.change { box-shadow:inset 0 0 0 .08em #46D39A; }
+.ov .gl span.rule.time-past { box-shadow:inset 0 -.18em #46D39A; } .ov .gl span.rule.time-present { box-shadow:inset 0 -.18em #FF6B54; } .ov .gl span.rule.time-future { box-shadow:inset 0 -.18em #F5B23C; }

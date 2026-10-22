@@ -28,6 +28,58 @@
   ];
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
+  /* ---- tone colours: split a word's pinyin into syllables and read each one's tone mark ----
+     Valid syllables come from pypinyin's data (423) plus lü/nü; a word's pinyin is split so it has as
+     many syllables as the word has characters (erhua: 一点儿 yìdiǎnr ends in a bare r). */
+  const SYL = new Set(('a ai an ang ao ba bai ban bang bao bei ben beng bi bian biang biao bie bin bing bo bong bu ca cai can cang cao ce cei cen ceng cha chai chan chang chao che chen cheng chi chong chou chu chua chuai chuan chuang chui chun chuo ci cong cou cu cuan cui cun cuo da dai dan dang dao de dei den deng di dia dian diao die din ding diu dong dou du duan dui dun duo e ei en eng er fa fan fang fei fen feng fiao fo fou fu ga gai gan gang gao ge gei gen geng gong gou gu gua guai guan guang gui gun guo ha hai han hang hao he hei hen heng hm hng hong hou hu hua huai huan huang hui hun huo ji jia jian jiang jiao jie jin jing jiong jiu ju juan jue jun ka kai kan kang kao ke kei ken keng kong kou ku kua kuai kuan kuang kui kun kuo la lai lan lang lao le lei len leng li lia lian liang liao lie lin ling liu lo long lou lu luan lue lun luo lv lve m ma mai man mang mao me mei men meng mi mian miao mie min ming miu mo mou mu n na nai nan nang nao ne nei nen neng ng ni nia nian niang niao nie nin ning niu nong nou nu nuan nue nun nuo nv nve o ou pa pai pan pang pao pei pen peng pi pian piao pie pin ping po pou pu qi qia qian qiang qiao qie qin qing qiong qiu qu quan que qun ran rang rao re ren reng ri rong rou ru rua ruan rui run ruo sa sai san sang sao se sen seng sha shai shan shang shao she shei shen sheng shi shou shu shua shuai shuan shuang shui shun shuo si song sou su suan sui sun suo ta tai tan tang tao te tei teng ti tian tiao tie ting tong tou tu tuan tui tun tuo wa wai wan wang wei wen weng wo wong wu xi xia xian xiang xiao xie xin xing xiong xiu xu xuan xue xun ya yan yang yao ye yi yin ying yo yong you yu yuan yue yun za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo').split(' '));
+  const TONE_MARK = { '̄': 1, '́': 2, '̌': 3, '̀': 4 };
+  function syllables(py, n) {          // "xiānsheng", 2 -> [["xiān", 1], ["sheng", 5]]; null if it can't be split
+    const chars = [...py.normalize('NFC')].map(c => {
+      const d = c.normalize('NFD');
+      return { c, base: d[0] === 'ü' || d[0] === 'Ü' || d.startsWith('ü') ? 'v' : d[0].toLowerCase(), tone: TONE_MARK[[...d].find(x => TONE_MARK[x])] || 0 };
+    });
+    const best = new Map();
+    const go = i => {                    // fewest pieces that are all syllables (with an exact count preferred)
+      if (i === chars.length) return [];
+      if (best.has(i)) return best.get(i);
+      let out = null;
+      if (chars[i].c === "'" || chars[i].c === '-') { const r = go(i + 1); best.set(i, r); return r; }
+      for (let j = Math.min(chars.length, i + 6); j > i; j--) {
+        const s = chars.slice(i, j).map(x => x.base).join('');
+        const tail = j === chars.length && s === 'r' && i > 0;          // erhua
+        if (!SYL.has(s) && !tail) continue;
+        const rest = go(j);
+        if (rest && (!out || rest.length + 1 < out.length)) out = [[i, j], ...rest];
+      }
+      best.set(i, out); return out;
+    };
+    const parts = go(0);
+    if (!parts || (n && parts.length !== n && !(parts.length === n + 1 && py.endsWith('r')))) return null;
+    return parts.map(([i, j]) => [chars.slice(i, j).map(x => x.c).join(''), chars.slice(i, j).reduce((t, x) => x.tone || t, 0) || 5]);
+  }
+  const toned = (py, zh) => {           // pinyin with each syllable in its tone's colour (falls back to plain text)
+    const n = [...zh].filter(c => /[一-鿿]/.test(c)).length;
+    const parts = syllables(py, n - (/儿$/.test(zh) && /r$/.test(py) && n > 1 ? 1 : 0));
+    return parts ? parts.map(([s, t]) => `<s class="t${t}">${esc(s)}</s>`).join('') : esc(py);
+  };
+
+  /* ---- tense marks (zh.words.json "g", made by pipeline/grammar.py) ---- */
+  const RULES = {
+    'past:le': ['past', '了 after a verb: the action is done'],
+    'past:guo': ['past', '过 after a verb: you have done it before'],
+    'past:mei': ['past', '没 / 没有 + verb: it did not happen (no 了 after it)'],
+    'present:zai': ['present', '在 / 正在 + verb: happening right now'],
+    'present:zhe': ['present', '着 after a verb: an ongoing state'],
+    'future:jiang': ['future', '将 + verb: will (formal)'],
+    'future:kuaiyao': ['future', '快要 / 就要 … 了: about to happen'],
+    'maybe:hui': ['maybe future', '会 + verb: will, or "can" (a skill). The context decides'],
+    'maybe:yao': ['maybe future', '要 + verb: going to, or "want to". The context decides'],
+    'change:le': ['new situation', '了 at the end, not after a verb: something has changed'],
+    'time-past': ['past', 'a time word for the past'],
+    'time-present': ['present', 'a time word for now'],
+    'time-future': ['future', 'a time word for the future'],
+  };
+
   function tsec(t) {
     const m = t.trim().replace(',', '.').match(/(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)/);
     return m ? (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + parseFloat(m[3]) : NaN;
@@ -85,6 +137,7 @@
               </div>
               <div class="row">
                 <button class="btn" data-ruby title="pinyin above each Chinese word (needs zh.words.json)">Pinyin above words</button>
+                <button class="btn on" data-tones title="each pinyin syllable in its tone's colour: 1 red · 2 orange · 3 green · 4 blue · light grey">Tone colours</button>
                 <button class="btn" data-raise title="lift the lines above Chinese that is burned into the picture">Raise above burned-in text</button>
                 <label class="check"><input type="checkbox" data-bg checked> dark box</label>
               </div>
@@ -107,6 +160,19 @@
                 <label class="check">Delay <input class="field" style="width:66px;padding:4px 6px" type="number" data-delay step=".1" value="0"> s</label>
               </div>
             </div></details>
+            <details class="dd" data-dd><summary>Grammar</summary><div class="ddp grammar">
+              <div class="row"><button class="btn on" data-grammar title="colour the characters that set the time (G)">Colour tenses</button></div>
+              <div class="legend">
+                <div><b class="g past">了</b><span><b>Past</b> · verb + 了: done · verb + 过: done before · 没 + verb: didn't</span></div>
+                <div><b class="g present">在</b><span><b>Present</b> · 在 / 正在 + verb: happening now · verb + 着: ongoing</span></div>
+                <div><b class="g future">要</b><span><b>Future</b> · 将 + verb · 快要 … 了: about to</span></div>
+                <div><b class="g maybe">会</b><span><b>Maybe future</b> · 会 + verb (or "can") · 要 + verb (or "want to")</span></div>
+                <div><b class="g change">了</b><span><b>New situation</b> · 了 at the end, not after a verb</span></div>
+                <div><b class="g time-past">昨天</b><span><b>Time words</b> · 昨天 past · 现在 now · 明天 future</span></div>
+              </div>
+              <p class="note">Golden rule: Chinese verbs never change. Time comes from these words, and the time word goes <b>before</b> the verb: 我明天去, not 我去明天.</p>
+              <p class="muted" style="margin:0;font-size:12px">Click a coloured character in the subtitles to see its rule. Found by rules, not by a person: when it can't tell, it says "maybe".</p>
+            </div></details>
             <span data-extra></span>
             <details class="dd" data-dd><summary>Resources</summary><div class="ddp">
               ${RESOURCES.map(([n, u, d]) => `<a class="res" href="${u}" target="_blank" rel="noopener"><b>${n}</b><small>${d}</small></a>`).join('')}
@@ -116,7 +182,7 @@
               <div><b>Space</b> play · <b>←</b><b>→</b> line · <b>R</b> replay</div>
               <div><b>L</b> loop · <b>P</b> pause after line · <b>C</b> cover band</div>
               <div><b>1</b>–<b>9</b> track on/off · <b>↑</b><b>↓</b> lift</div>
-              <div><b>T</b> transcript · <b>F</b> fullscreen${opts.keys || ''}</div>
+              <div><b>G</b> tense colours · <b>F</b> fullscreen${opts.keys || ''}</div>
             </div></details>
             <button class="ib" data-full title="fullscreen (F)">⛶</button>
           </div>
@@ -127,6 +193,7 @@
     const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = opts.list || q('[data-list]');
     let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 6;
     let words = null, align = null, ruby = false, pin = null, pinCue = -1, videoKey = '';
+    let tones = true, grammar = true;              // tone colours in pinyin, tense colours in Chinese (both on by default)
     const COVERS = 'zh-player-cover-v1';             // { videoKey: { on, b, h } }: the band differs per video
     const SHOWN = 'zh-player-shown-v1';              // { videoKey: { zh: true, pinyin: false, … } }
 
@@ -165,10 +232,19 @@
       return (out + esc(text.slice(last))).replace(/\n/g, '<br>');
     }
     let shownWords = null;                            // the zh.words.json entry of the line on screen
-    function glossFor(key) {
+    function glossFor(key) {                       // the word card: characters, pinyin, meaning, HSK level, measure words
       if (!shownWords || !key) return '';
       const [L, k] = key.split('-').map(Number), p = (shownWords.w[L] || [])[k];
-      return p ? `${esc(p[0])} <b>${esc(p[1])}</b> ${p[2] ? '— ' + esc(p[2]) : ''}` : '';
+      if (!p) return '';
+      const hsk = p[3] ? ` <em class="hsk">HSK ${p[3] === 7 ? '7–9' : p[3]}</em>` : '';
+      const cl = p[4] ? ` <em>measure word ${esc(p[4])}</em>` : '';
+      return `${esc(p[0])} <b>${tones ? toned(p[1], p[0]) : esc(p[1])}</b> ${p[2] ? '— ' + esc(p[2]) : ''}${hsk}${cl}`;
+    }
+    function ruleFor(el) {                          // the grammar card for a coloured character
+      const r = RULES[el.dataset.g]; if (!r) return '';
+      const line = el.closest('.ln, .cue'), all = line ? [...line.querySelectorAll('.g')] : [el];
+      const same = all.filter(x => x.dataset.g === el.dataset.g).map(x => x.textContent).join('');
+      return `<b>${esc(same)}</b> ${r[0]} — ${esc(r[1])}`;
     }
     function lineHTML(tr, c, inList) {
       if (tr.role === 'en') { const w = wordsAt(c); return w ? englishHTML(c.text, w, align && align[c.i]).replace(/<br>/g, inList ? ' ' : '<br>') : esc(c.text).replace(/\n/g, inList ? ' ' : '<br>'); }
@@ -176,14 +252,22 @@
       const same = w && flat(c.text) === flat(w.w.map(l => l.map(p => tr.role === 'zh' ? p[0] : p[1]).join('')).join(''));
       if (!same) return esc(c.text).replace(/\n/g, inList ? ' ' : '<br>');   // edited by hand since: show it plain
       const pyColour = (tracks.find(t => t.role === 'pinyin') || {}).colour || COLOUR.pinyin;
-      return w.w.map((line, L) => line.map(([zh, py, g], k) => {
-        const han = /[\u4e00-\u9fff]/.test(zh), key = `${L}-${k}`;
-        if (tr.role === 'pinyin') return han ? `<i class="w" data-w="${key}">${esc(py)}</i>` : esc(py);
-        if (!han) return esc(zh);
-        const tip = inList && g ? ` title="${esc(py)} — ${esc(g)}"` : '';
-        return ruby && !inList ? `<ruby class="w" data-w="${key}">${esc(zh)}<rt style="color:${pyColour}">${esc(py)}</rt></ruby>`
-                               : `<i class="w" data-w="${key}"${tip}>${esc(zh)}</i>`;
-      }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1')).join(inList ? ' ' : '<br>');
+      const py = (p, zh) => tones ? toned(p, zh) : esc(p);
+      return w.w.map((line, L) => {
+        const marks = new Map(grammar && w.g ? (w.g[L] || []) : []);   // character index in the line -> tense tag
+        let at = 0;
+        return line.map(([zh, p, g], k) => {
+          const han = /[一-鿿]/.test(zh), key = `${L}-${k}`, start = at;
+          at += zh.length;
+          if (tr.role === 'pinyin') return han ? `<i class="w" data-w="${key}">${py(p, zh)}</i>` : esc(p);
+          if (!han) return esc(zh);
+          const chars = [...zh].map((ch, n) => { const t = marks.get(start + n);
+            return t ? `<b class="g ${t.split(':')[0]}" data-g="${t}">${esc(ch)}</b>` : esc(ch); }).join('');
+          const tip = inList && g ? ` title="${esc(p)} — ${esc(g)}"` : '';
+          return ruby && !inList ? `<ruby class="w" data-w="${key}">${chars}<rt style="color:${pyColour}">${py(p, zh)}</rt></ruby>`
+                                 : `<i class="w" data-w="${key}"${tip}>${chars}</i>`;
+        }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1');
+      }).join(inList ? ' ' : '<br>');
     }
     function highlight(box, key) {
       box.querySelectorAll('.w.hl').forEach(e => e.classList.remove('hl'));
@@ -211,7 +295,8 @@
       ov.innerHTML = '<div class="gl"></div>' + shown.map(([tr, c]) =>
         `<div class="ln"><span class="${tr.blur && !v.paused ? 'blur' : ''}" style="color:${tr.colour};font-size:calc(var(--size) * ${tr.scale} * 1cqh)">` +
         `${lineHTML(tr, c)}</span></div>`).join('');
-      if (pin) highlight(ov, pin);
+      if (pin && pin.startsWith('rule:')) { const el = ov.querySelector(`.g[data-g="${pin.slice(5)}"]`); if (el) showRule(el); }
+      else if (pin) highlight(ov, pin);
       list.querySelectorAll('.cue.now').forEach(e => e.classList.remove('now'));
       const el = li >= 0 && list.children[li];
       if (el && el.classList.contains('cue')) {
@@ -270,9 +355,18 @@
       if ('scale' in e.target.dataset) { tracks[+e.target.dataset.scale].scale = +e.target.value; save(); tick(true); }
       if ('colour' in e.target.dataset) { tracks[+e.target.dataset.colour].colour = e.target.value; save(); tick(true); }
     });
-    ov.addEventListener('mouseover', e => { const w = e.target.closest('.w'); if (w && !pin) highlight(ov, w.dataset.w); });
-    ov.addEventListener('mouseout', e => { if (e.target.closest('.w') && !pin) highlight(ov, null); });
+    function showRule(el) {                         // a tense mark explains itself in the card above the lines
+      ov.querySelectorAll('.w.hl').forEach(x => x.classList.remove('hl'));
+      const gl = ov.querySelector(':scope > .gl'); if (gl) gl.innerHTML = `<span class="rule ${el.dataset.g.split(':')[0]}">${ruleFor(el)}</span>`;
+    }
+    ov.addEventListener('mouseover', e => {
+      const m = e.target.closest('.g'); if (m && !pin) return showRule(m);
+      const w = e.target.closest('.w'); if (w && !pin) highlight(ov, w.dataset.w);
+    });
+    ov.addEventListener('mouseout', e => { if (e.target.closest('.w, .g') && !pin) highlight(ov, null); });
     ov.addEventListener('click', e => {             // click a word: pin it (and pause) so you can read it
+      const m = e.target.closest('.g');
+      if (m) { e.stopPropagation(); pin = 'rule:' + m.dataset.g; pinCue = lead() ? cueAt(lead().cues, v.currentTime - delay) : -1; showRule(m); v.pause(); return; }
       const w = e.target.closest('.w'); if (!w) return;
       e.stopPropagation();
       const L = lead();
@@ -294,6 +388,8 @@
     q('[data-raise]').onclick = () => { const up = +lift.value > 12; if (!up) lowLift = +lift.value; lift.value = up ? lowLift : 17; lift.oninput(); };
     q('[data-bg]').onchange = e => { ov.classList.toggle('bg', e.target.checked); save(); };
     q('[data-ruby]').onclick = e => { ruby = !ruby; e.currentTarget.classList.toggle('on', ruby); save(); tick(true); };
+    q('[data-tones]').onclick = e => { tones = !tones; e.currentTarget.classList.toggle('on', tones); save(); renderList(); tick(true); };
+    q('[data-grammar]').onclick = e => { grammar = !grammar; e.currentTarget.classList.toggle('on', grammar); save(); renderList(); tick(true); };
 
     /* ---- cover band over burned-in subtitles (per video) ---- */
     const cover = q('.cover'), cb = q('[data-cb]'), ch = q('[data-ch]');
@@ -381,6 +477,7 @@
       else if (k === 'p' || k === 'P') q('[data-autopause]').click();
       else if (k === 'f' || k === 'F') fullscreen();
       else if (k === 'c' || k === 'C') q('[data-cover]').click();
+      else if (k === 'g' || k === 'G') q('[data-grammar]').click();
       else if (/^[1-9]$/.test(k) && tracks[+k - 1]) { tracks[+k - 1].on = !tracks[+k - 1].on; changed(); }
     });
 
@@ -389,7 +486,7 @@
       try {
         const roles = {};
         for (const t of tracks) if (t.role !== 'stacked' && !roles[t.role]) roles[t.role] = { scale: t.scale, colour: t.colour, blur: t.blur };
-        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, roles }));
+        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, tones, grammar, roles }));
         if (videoKey) {
           const shown = JSON.parse(localStorage.getItem(SHOWN) || '{}');
           shown[videoKey] = Object.fromEntries(tracks.filter(t => t.role !== 'stacked').map(t => [t.role, t.on]));
@@ -404,6 +501,8 @@
       if (p.bg !== undefined) { q('[data-bg]').checked = p.bg; ov.classList.toggle('bg', p.bg); }
       if (p.speed) { q('[data-speed]').value = p.speed; v.playbackRate = +p.speed; }
       if (p.ruby !== undefined) { ruby = p.ruby; q('[data-ruby]').classList.toggle('on', ruby); }
+      if (p.tones !== undefined) { tones = p.tones; q('[data-tones]').classList.toggle('on', tones); }
+      if (p.grammar !== undefined) { grammar = p.grammar; q('[data-grammar]').classList.toggle('on', grammar); }
       for (const t of tracks) { const { on, ...look } = (p.roles || {})[t.role] || {}; Object.assign(t, look); }   // on/off is per video, below
       let shown = {}; try { shown = (JSON.parse(localStorage.getItem(SHOWN)) || {})[videoKey] || {}; } catch {}
       for (const t of tracks) if (t.role in shown) t.on = shown[t.role];     // this video's own choice wins

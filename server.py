@@ -52,6 +52,23 @@ def read(p: Path) -> str:
         return ""
 
 
+_LEVELS: dict = {}                                       # zh.words.json path -> (mtime, video HSK level)
+
+
+def video_hsk(folder: Path) -> int:
+    """The video's HSK level from zh.words.json (srt_tool.py words), 0 if it hasn't been worked out."""
+    f = folder / "zh.words.json"
+    if not f.exists():
+        return 0
+    m = f.stat().st_mtime
+    if _LEVELS.get(f, (None,))[0] != m:
+        try:
+            _LEVELS[f] = (m, int(json.loads(f.read_text(encoding="utf-8")).get("hsk", {}).get("level", 0)))
+        except (ValueError, OSError):
+            _LEVELS[f] = (m, 0)
+    return _LEVELS[f][1]
+
+
 def describe(entry: Path) -> dict:
     """One library item: a pipeline folder, or a loose video file not processed yet."""
     if entry.is_file():
@@ -69,6 +86,7 @@ def describe(entry: Path) -> dict:
             "englishAuto": (entry / ".english-auto").exists(),
             "split": int(read(entry / ".split")) if read(entry / ".split").isdigit() else None,
             "needsEnglish": (entry / "zh.lines.txt").exists() and not has["en"],
+            "hsk": video_hsk(entry),
             "mtime": max((p.stat().st_mtime for p in entry.iterdir()), default=entry.stat().st_mtime)}
 
 

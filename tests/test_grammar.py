@@ -14,6 +14,7 @@ CASES = [
     ("我吃了饭", {"了": "past:le"}),
     ("我们昨天去了公园", {"昨": "time-past", "天": "time-past", "了": "past:le"}),
     ("我去过北京", {"过": "past:guo"}),
+    ("我也拍过这个公园", {"过": "past:guo"}),            # 过 as its own word after the verb
     ("我没吃", {"没": "past:mei"}),
     ("我在吃饭", {"在": "present:zai"}),
     ("我在家", {}),                                   # 在 + a place is not "in progress"

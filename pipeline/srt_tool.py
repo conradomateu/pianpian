@@ -36,6 +36,8 @@ from pypinyin import Style, pinyin
 jieba.setLogLevel(60)
 HERE = Path(__file__).resolve().parent
 FIXES = HERE / "pinyin_fixes.txt"
+sys.path.insert(0, str(HERE))
+import grammar  # noqa: E402  (pipeline/grammar.py: tense marks for the player)
 
 TIME = re.compile(r"^\d{2}:\d{2}:\d{2}[,.]\d{3} --> \d{2}:\d{2}:\d{2}[,.]\d{3}")
 HAN = re.compile(r"[一-鿿]")
@@ -103,7 +105,7 @@ def word_pinyin(word: str) -> str:
 
 # ---------- meanings: CC-CEDICT (CC BY-SA 4.0), fetched once from the npm package cedict-json ----------
 CACHE = Path.home() / ".cache" / "mandarin-kit"
-CEDICT = CACHE / "cedict.v2.json"                    # { simplified: [[tones, "gloss; gloss"], …] }, one per reading
+CEDICT = CACHE / "cedict.v3.json"                    # { simplified: [[tones, "gloss; gloss", "个 gè"], …] }, one per reading
 SKIP_GLOSS = re.compile(r"^(CL:|variant of|old variant|see |also pr|Taiwan pr|surname|\(phonetic\)|used in|abbr\. for|\(old\))", re.I)
 
 
@@ -129,12 +131,38 @@ def ensure_cedict() -> dict[str, str]:
     for r in rows:
         keep = [g for g in r["english"] if not SKIP_GLOSS.match(g)]
         gl = [g for g in keep if len(g) <= 48][:3] or [g[:60].rstrip() + "…" for g in keep[:1]]   # a long gloss only if it is all there is
+        cl = ", ".join(measure_words(g) for g in r["english"] if g.startswith("CL:"))
         if gl:                                       # tones of the reading, neutral left out: "di4 fang5" -> "4"
-            small.setdefault(r["simplified"], []).append(["".join(re.findall(r"[1-4]", r["pinyin"])), "; ".join(gl)])
+            small.setdefault(r["simplified"], []).append(["".join(re.findall(r"[1-4]", r["pinyin"])), "; ".join(gl), cl])
     CACHE.mkdir(parents=True, exist_ok=True)
     CEDICT.write_text(json.dumps(small, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"dictionary ready: {len(small)} entries ({CEDICT})", file=sys.stderr)
     return small
+
+
+def numbered_to_marks(syl: str) -> str:
+    """ge4 -> gè, lu:4 -> lǜ, ma5 -> ma: CC-CEDICT's numbered pinyin, as the player shows it."""
+    m = re.fullmatch(r"([a-zA-Z:]+?)([1-5])", syl)
+    if not m:
+        return syl
+    base, tone = m[1].replace("u:", "ü").replace("v", "ü"), int(m[2])
+    if tone == 5:
+        return base
+    low = base.lower()
+    i = low.find("a") if "a" in low else low.find("e") if "e" in low else low.find("o") if "ou" in low else \
+        max(low.rfind(v) for v in "iouü")
+    if i < 0:
+        return base
+    return base[:i + 1] + "\u0304\u0301\u030c\u0300"[tone - 1] + base[i + 1:]
+
+
+def measure_words(cl: str) -> str:
+    """"CL:個|个[ge4],本[ben3]" -> "个 gè, 本 běn" (simplified form, tone marks)."""
+    out = []
+    for m in re.finditer(r"(?:[^|,\[]+\|)?([^|,\[]+)\[([^\]]+)\]", cl[3:]):
+        out.append(f"{m[1].strip()} {''.join(numbered_to_marks(x) for x in m[2].split())}")
+    import unicodedata
+    return unicodedata.normalize("NFC", ", ".join(out))
 
 
 _DICT: dict[str, list] | None = None
@@ -153,7 +181,7 @@ def gloss(word: str, py: str = "") -> str:
         return gloss(m[1]).split("; ")[0] + " (a little)"
     if word in _DICT:
         readings = _DICT[word]
-        return next((g for t, g in readings if t == tones), readings[0][1])
+        return next((r[1] for r in readings if r[0] == tones), readings[0][1])
     parts, i = [], 0
     while i < len(word):                             # longest dictionary words inside it
         for n in range(min(4, len(word) - i), 0, -1):
@@ -163,6 +191,47 @@ def gloss(word: str, py: str = "") -> str:
         else:
             i += 1
     return " · ".join(parts)
+
+
+def measure(word: str, py: str = "") -> str:
+    """Measure words for this reading, from CC-CEDICT's CL: lines ("" when there are none)."""
+    if _DICT is None:
+        gloss(word, py)
+    import unicodedata
+    tones = "".join(MARKS.get(c, "") for c in unicodedata.normalize("NFD", py))
+    readings = (_DICT or {}).get(word) or []
+    hit = next((r for r in readings if r[0] == tones and len(r) > 2 and r[2]), None) or \
+        next((r for r in readings if len(r) > 2 and r[2]), None)
+    return hit[2] if hit else ""
+
+
+# ---------- HSK 3.0 levels (pipeline/data/hsk3.json, from complete-hsk-vocabulary, MIT) ----------
+HSK = json.loads((HERE / "data" / "hsk3.json").read_text(encoding="utf-8"))["levels"]   # word -> 1…7 (7 = band 7-9)
+
+
+def hsk_level(word: str) -> int:
+    """A word's HSK level; a jieba compound not in the lists (这个, 往左走) takes its hardest part's
+    level (longest listed parts first); 0 when even its parts aren't listed (names, rare words)."""
+    if word in HSK:
+        return HSK[word]
+    parts, i = [], 0
+    while i < len(word):
+        for n in range(min(4, len(word) - i), 0, -1):
+            if word[i:i + n] in HSK:
+                parts.append(HSK[word[i:i + n]]); i += n
+                break
+        else:
+            return 0
+    return max(parts) if parts else 0
+
+
+def video_level(levels: list[int]) -> dict:
+    """The lowest HSK level whose words cover 90% of the video's words; words in no list (names, rare
+    words) are left out of the count. 8 = beyond band 7-9."""
+    dist = [levels.count(n) for n in range(8)]        # index 0: not in any HSK list, even by parts
+    known = sum(dist[1:]) or 1
+    level = next((n for n in range(1, 8) if sum(dist[1:n + 1]) / known >= 0.9), 8)
+    return {"level": level, "dist": dist}
 
 
 def word_pairs(text: str) -> list[list[str]]:
@@ -236,13 +305,20 @@ def cmd_words(a):
     """The same segmentation as the pinyin track, kept as pairs so the player can link
     each Chinese word to its pinyin (hover one, both light up; or pinyin above the word)."""
     src = Path(a.srt)
-    cues = []
+    cues, levels = [], []
     for _, t, x in read_srt(src):
         start, end = t.split(" --> ")
-        lines = [[[zh, py] + ([gloss(zh, py)] if HAN.search(zh) else []) for zh, py in word_pairs(line)] for line in x.split("\n")]
-        cues.append({"s": secs(start), "e": secs(end), "w": lines})
+        lines, marks = [], []
+        for line in x.split("\n"):
+            pairs = word_pairs(line)
+            # each Chinese word: [zh, pinyin, meaning, HSK level (0: not in the lists), measure words]
+            lines.append([[zh, py, gloss(zh, py), HSK.get(zh, 0), measure(zh, py)] if HAN.search(zh) else [zh, py] for zh, py in pairs])
+            marks.append(grammar.tags("".join(zh for zh, _ in pairs)))   # character index -> tense tag
+        cues.append({"s": secs(start), "e": secs(end), "w": lines, "g": marks})
+        levels += [hsk_level(w[0]) for line in lines for w in line if len(w) > 3]
     out = Path(a.out) if a.out else src.with_suffix(".words.json")
-    out.write_text(json.dumps({"version": 1, "source": src.name, "cues": cues}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    out.write_text(json.dumps({"version": 2, "source": src.name, "hsk": video_level(levels), "cues": cues},
+                              ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {out} ({len(cues)} cues)")
 
 

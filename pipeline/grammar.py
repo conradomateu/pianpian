@@ -88,7 +88,7 @@ def tags(text: str) -> list[list]:
                 out.setdefault(c, "future:kuaiyao")
             else:
                 out.setdefault(c, "past:le" if prev_verb(c) else "change:le")
-        elif ch == "过" and w not in NOT_GUO and not w.startswith("过") and prev_verb(c):
+        elif ch == "过" and w not in NOT_GUO and not (len(w) > 1 and w.startswith("过")) and prev_verb(c):
             out.setdefault(c, "past:guo")
         elif ch == "着" and w not in NOT_ZHE and prev_verb(c):
             out.setdefault(c, "present:zhe")
