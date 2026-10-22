@@ -27,6 +27,16 @@ sys.path.insert(0, str(ROOT / "tools" / "demo"))
 from scenes import APPLE  # noqa: E402  (the same logo as on the demo video's button)
 
 
+def site_url() -> str:
+    """Where the site lives: the domain in site/CNAME once there is one, else GitHub Pages' address.
+    Link previews (og:image) need it whole."""
+    cname = ROOT / "site" / "CNAME"
+    if cname.exists() and cname.read_text().strip():
+        return f"https://{cname.read_text().strip()}/"
+    owner, name = REPO.split("/")
+    return f"https://{owner}.github.io/{name}/"
+
+
 def version() -> str:
     try:
         return json.loads((ROOT / ".release-please-manifest.json").read_text())["."]
@@ -89,7 +99,7 @@ def main() -> None:
             if text is None:
                 shutil.copy2(f, OUT / f.name)
             else:
-                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
+                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{SITE}}", site_url()).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
                 (OUT / f.name).write_text(text, encoding="utf-8")
     (OUT / ".nojekyll").touch()                           # serve the files as they are
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
