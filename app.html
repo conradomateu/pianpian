@@ -12,7 +12,8 @@
 /* one screen: the library on the left (it folds away), the video and its menus on the right */
 body { overflow:hidden; }
 .shell { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); height:100vh; overflow:hidden; }
-.side { width:300px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:12px; padding:12px; overflow:auto; background:var(--bg); }
+/* one margin everywhere (16px): the fixed toggle, the library and the video all start on the same line */
+.side { width:300px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:12px; padding:12px 16px; overflow:auto; background:var(--bg); }
 .side > * { flex-shrink:0; }
 .side > .lib { flex-shrink:1; }
 .main { grid-column:2; }
@@ -25,13 +26,17 @@ body { overflow:hidden; }
 .ready .side { transition:transform .34s var(--ease), opacity .12s ease; }
 .ready.side-closed .side { transition:transform .34s var(--ease), opacity .14s ease .2s; }
 .ready .side > * { transition:transform .32s var(--ease); }
-#show { animation:pp-fade .25s ease; }
-.main { overflow:auto; padding:12px 18px 30px; min-width:0; }
+.sidetoggle { position:fixed; top:12px; left:16px; z-index:10; width:34px; height:34px; display:grid; place-items:center; padding:0; cursor:pointer;
+  border:1px solid var(--line-2); border-radius:10px; background:var(--surface); color:var(--fg-2); transition:border-color .16s ease, color .16s ease; }
+.sidetoggle:hover { border-color:var(--red); color:var(--red-fg); }
+.sidetoggle svg { width:18px; height:18px; }
+.side-closed .vtop { padding-left:46px; }           /* the title starts after the fixed button */
+.main { overflow:auto; padding:12px 16px 30px; min-width:0; }
 @media (max-width:900px) { body { overflow:auto; } .shell { grid-template-columns:1fr; height:auto; overflow:visible; } .side { width:auto; border-right:0; border-bottom:1px solid var(--line); }
   .main { grid-column:1; overflow:visible; } .side-closed .side { display:none; } }
 
-.sidehead { display:flex; align-items:center; justify-content:space-between; }
-.sidehead .logo { display:block; margin-left:-3px; }
+.sidehead { display:flex; align-items:center; min-height:34px; padding-left:44px; }   /* room for the fixed toggle */
+.sidehead .logo { display:block; }
 .add { display:grid; gap:7px; }
 .addrow { display:flex; gap:6px; }
 .addrow .field { padding:8px 10px; }
@@ -61,7 +66,7 @@ body { overflow:hidden; }
 .sidefoot .grow { flex:1; }
 .sidefoot .ib { padding:4px 9px; font-size:11px; }
 
-.vtop { display:flex; align-items:center; gap:10px; min-height:34px; margin-bottom:8px; }
+.vtop { display:flex; align-items:center; gap:10px; height:34px; margin-bottom:8px; }   /* same height and line as the toggle */
 .vtop h1 { font:700 19px/1.25 var(--display); letter-spacing:-.01em; margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vtop a { font:500 11.5px var(--mono); white-space:nowrap; }
 #notes .note { margin:0 0 8px; padding:7px 12px; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; animation:pp-fade .3s ease; }
@@ -74,11 +79,14 @@ body { overflow:hidden; }
 </style>
 </head>
 <body>
+<!-- the one library toggle: fixed in the corner, it never moves -->
+<button class="sidetoggle" id="sidetoggle" type="button" aria-controls="side" aria-expanded="true" title="Library (B)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+</button>
 <div class="shell">
   <aside class="side" id="side">
     <div class="sidehead">
       <img class="logo" src="design/icons/20-pianpian-watermelon.svg" alt="Pianpian 片片" title="Pianpian 片片" width="30" height="30">
-      <button class="ib" id="hide" type="button" title="hide the library (B)">⟨</button>
     </div>
 
     <form class="add" id="add" autocomplete="off">
@@ -115,7 +123,6 @@ body { overflow:hidden; }
 
   <main class="main" id="main">
     <div class="vtop">
-      <button class="ib" id="show" type="button" title="show the library (B)">☰</button>
       <h1 id="vtitle">Pick a video</h1>
       <a id="vsrc" target="_blank" rel="noopener" hidden>source ↗</a>
     </div>
@@ -151,23 +158,24 @@ const player = SubPlayer.mount($('player'), {
 });
 let videos = [], current = null, lastJobs = [];
 
-/* ---------- the library folds away ---------- */
-function side(open) {
-  document.documentElement.classList.toggle('side-closed', !open);
-  $('show').hidden = open;
-  try { localStorage.setItem('pp-side', open ? 'open' : 'closed'); } catch {}
+/* ---------- the library folds away: one button, one function ---------- */
+const sideOpen = () => !document.documentElement.classList.contains('side-closed');
+function setSide(open, animate) {
+  const apply = () => {
+    document.documentElement.classList.toggle('side-closed', !open);
+    $('sidetoggle').setAttribute('aria-expanded', open);
+    try { localStorage.setItem('pp-side', open ? 'open' : 'closed'); } catch {}
+  };
+  // the title, the video and every button glide together into the space the library frees or takes
+  const gliding = [$('vtitle'), $('vsrc'), $('notes'), player.stage, ...document.querySelectorAll('.pbar > *, .pbar [data-extra] > *'), document.querySelector('.transcript')];
+  animate ? Kit.flip(gliding, apply, [player.stage]) : apply();
 }
-// the title, the note, the video and every button glide together into the space the library frees
-const gliding = () => [$('vtitle'), $('vsrc'), $('notes'), player.stage, ...document.querySelectorAll('.pbar > *, .pbar [data-extra] > *'), document.querySelector('.transcript')];
-const fold = open => Kit.flip(gliding(), () => side(open), [player.stage]);
-$('hide').onclick = () => fold(false);
-$('show').onclick = () => fold(true);
-side(!document.documentElement.classList.contains('side-closed'));
-setTimeout(() => document.documentElement.classList.add('ready'), 80);   // after the first paint (rAF can stall in a hidden window)
+$('sidetoggle').onclick = () => setSide(!sideOpen(), true);
 document.addEventListener('keydown', e => {
-  if ((e.key === 'b' || e.key === 'B') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !e.metaKey && !e.ctrlKey)
-    fold(document.documentElement.classList.contains('side-closed'));
+  if ((e.key === 'b' || e.key === 'B') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !e.metaKey && !e.ctrlKey) setSide(!sideOpen(), true);
 });
+setSide(sideOpen(), false);
+setTimeout(() => document.documentElement.classList.add('ready'), 80);   // motion only after the first paint
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */
 player.extra.innerHTML = '<details class="dd" data-dd id="vmenu" hidden><summary>Video</summary><div class="ddp" id="vpanel"></div></details>';
