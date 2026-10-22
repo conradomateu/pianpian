@@ -40,6 +40,8 @@ section { scroll-margin-top:70px; }
 .dl.small svg { width:15px; height:15px; margin-top:-2px; }
 .ghost { padding:12px 18px; border-radius:12px; border:1px solid var(--line-2); color:var(--fg); text-decoration:none; font-weight:600; }
 .ghost:hover { border-color:var(--red); color:var(--red-fg); }
+.ghost.star { display:inline-flex; align-items:center; gap:8px; }
+.ghost.star svg { width:17px; height:17px; color:#E9A23B; margin-top:-2px; }   /* GitHub's star, in gold */
 .meta { margin-top:14px; font:12.5px var(--mono); color:var(--muted); }
 .compat { display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:7px 13px; border-radius:999px; font-size:13.5px;
   background:var(--surface-2); color:var(--fg-2); border:1px solid var(--line); }
@@ -230,7 +232,7 @@ footer.site .grow { flex:1; }
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
         Download for Mac
       </a>
-      <a class="ghost" href="https://github.com/{{REPO}}">Star on GitHub</a>
+      <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>
   </div>
 
