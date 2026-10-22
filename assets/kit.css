@@ -1,4 +1,4 @@
-/* Mandarin Kit: one stylesheet for app.html and player.html.
+/* Pianpian: the one stylesheet (app.html).
    Colours are tokens; dark mode redefines the tokens only. No build step, works from disk. */
 
 :root {
@@ -11,6 +11,7 @@
   --body:'Archivo','Avenir Next',system-ui,-apple-system,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
   --r:12px; --r-sm:8px;
+  --ease:cubic-bezier(.2,.8,.2,1);                  /* quick start, soft landing: every slide and fold uses it */
 }
 :root[data-theme="dark"] {
   --bg:#14120F; --surface:#1C1916; --surface-2:#24201C; --fg:#F2EDE4; --fg-2:#C4BBAE; --muted:#8E8479;
@@ -41,6 +42,16 @@ h3 { font:600 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; 
 .sub { color:var(--muted); font-size:13.5px; margin:0 0 14px; max-width:70ch; }
 .mono { font-family:var(--mono); }
 .muted { color:var(--muted); }
+
+/* ---------- motion ---------- */
+@keyframes pp-fade { from { opacity:0; transform:translateY(3px); } }
+@keyframes pp-drop { from { opacity:0; transform:translateY(-6px) scale(.98); } }
+@keyframes pp-rise { from { opacity:0; transform:translateY(6px) scale(.98); } }
+.btn, .ib, .dd > summary, .mini, .item, .cue, .field, .thumb { transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .2s ease, opacity .2s ease; }
+.btn:active, .ib:active, .dd > summary:active { transform:scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+}
 
 /* ---------- top bar ---------- */
 .bar { position:sticky; top:0; z-index:20; background:var(--bg); border-bottom:1px solid var(--line); }
@@ -103,12 +114,22 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .tested { color:var(--jade-fg) !important; } .untested { color:var(--amber-fg) !important; }
 
 /* ---------- subtitle player (assets/player.js) ---------- */
-.pl { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; }
+.pl { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:start; transition:column-gap .32s var(--ease); }
+/* folding the transcript: the text keeps its width (never squeezes); closing fades first, then folds;
+   opening unfolds first, then fades in */
+.pl .transcript { width:320px; transition:width .3s var(--ease), opacity .2s ease .16s, border-color .2s ease .16s; }
+.pl .transcript > * { width:318px; }
+.pl.notr { column-gap:0; }
+.pl.notr .transcript { width:0; opacity:0; overflow:hidden; pointer-events:none; border-color:transparent;
+  transition:opacity .14s ease, border-color .14s ease, width .3s var(--ease) .1s; }
 @media (max-width:1100px) { .pl { grid-template-columns:1fr; } }
-.stage { position:relative; background:#000; border-radius:var(--r); overflow:hidden; aspect-ratio:16/9; container-type:size; }
+.stage { position:relative; background:#000; border-radius:var(--r); overflow:hidden; aspect-ratio:16/9; max-height:calc(100vh - 130px); container-type:size; }
 .stage video { width:100%; height:100%; display:block; background:#000; }
-.stage:fullscreen { border-radius:0; aspect-ratio:auto; width:100vw; height:100vh; }
-.stage:-webkit-full-screen { border-radius:0; aspect-ratio:auto; width:100vw; height:100vh; }
+/* fullscreen: the final size at once (no max-height left over from the page, no rounded corners
+   shrinking), so the system's own zoom animation is the only motion */
+.stage:fullscreen { border-radius:0; aspect-ratio:auto; width:100vw; height:100vh; max-height:none; transition:none; }
+.stage:-webkit-full-screen { border-radius:0; aspect-ratio:auto; width:100vw; height:100vh; max-height:none; transition:none; }
+.stage:fullscreen video, .stage:-webkit-full-screen video { object-fit:contain; }
 .vc { position:absolute; left:0; right:0; bottom:0; z-index:2; display:flex; align-items:center; gap:6px; padding:18px 12px 8px;
   background:linear-gradient(transparent, rgba(0,0,0,.72)); color:#fff; font:12px var(--mono); opacity:0; transition:opacity .25s;
   pointer-events:none; }                            /* the bar's empty space never steals clicks from subtitle words */
@@ -144,7 +165,35 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .stage .drop b { display:block; font-size:18px; color:#fff; margin-bottom:6px; }
 .stage.loaded .drop { display:none; }
 .stage.over { outline:3px dashed var(--red); outline-offset:-6px; }
-.pl .card { margin-top:12px; }
+/* the row of dropdowns under the video */
+.pbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; }
+.pbar .grow { flex:1; }
+.pbar [data-extra] { display:contents; }
+.dd { position:relative; }
+.dd > summary, .ib { list-style:none; display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; white-space:nowrap;
+  font:600 12px var(--mono); padding:6px 12px; border:1px solid var(--line-2); border-radius:20px; background:var(--surface); color:var(--fg); }
+.dd > summary::-webkit-details-marker { display:none; }
+.dd > summary::after { content:'▾'; font-size:10px; color:var(--muted); }
+.dd.icon > summary::after { content:none; }
+.dd > summary:hover, .ib:hover { border-color:var(--red); color:var(--red-fg); }
+.dd[open] > summary, .ib.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.dd[open] > summary::after { color:inherit; }
+.ib { padding:6px 10px; }
+.ddp { position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:max-content; min-width:240px; max-width:min(540px, 92vw); max-height:min(64vh, 560px); overflow:auto;
+  display:grid; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); box-shadow:0 14px 36px rgba(0,0,0,.18); }
+.ddp.wide { width:min(540px, 92vw); }
+.ddp.up { top:auto; bottom:calc(100% + 6px); }
+.dd[open] > .ddp { animation:pp-drop .18s var(--ease); transform-origin:top left; }
+.dd[open] > .ddp.up { animation-name:pp-rise; transform-origin:bottom left; }
+.stage video { transition:opacity .35s ease; }
+.stage:not(.loaded) video { opacity:0; }
+.dd.right .ddp { left:auto; right:0; }
+.ddp h5 { margin:2px 0 -4px; font:600 10px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.ddp .row + .row { margin-top:0; }
+.ddp a.res { display:block; padding:6px 8px; margin:0 -4px; border-radius:var(--r-sm); text-decoration:none; }
+.ddp a.res:hover { background:var(--surface-2); }
+.ddp a.res b { display:block; font-size:13.5px; }
+.ddp a.res small { color:var(--muted); font-size:12px; }
 .trk { display:grid; grid-template-columns:auto auto minmax(0,1fr) 92px auto auto; gap:8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface-2); }
 .trk + .trk { margin-top:6px; }
 .trk input[type=color] { width:20px; height:20px; padding:0; border:1px solid var(--line-2); border-radius:50%; background:none; cursor:pointer; }
@@ -156,10 +205,10 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .trk small { color:var(--muted); font:11px var(--mono); }
 .trk button { border:0; background:none; cursor:pointer; color:var(--muted); padding:0 3px; }
 .trk button:hover { color:var(--fg); }
-.keys { font:11px var(--mono); color:var(--muted); line-height:1.9; }
+.keys { font:11px var(--mono); color:var(--muted); line-height:1.9; gap:4px; }
 .keys b { color:var(--fg-2); background:var(--surface-2); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-weight:600; }
 .transcript { max-height:calc(100vh - 120px); overflow:auto; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); }
-@media (max-width:1100px) { .transcript { max-height:320px; } }
+@media (max-width:1100px) { .pl .transcript { width:auto; max-height:320px; } .pl .transcript > * { width:auto; } .pl.notr .transcript { display:none; } }
 .cue { padding:8px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
 .cue:last-child { border-bottom:0; }
 .cue:hover { background:var(--surface-2); }

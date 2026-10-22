@@ -14,10 +14,10 @@ It opens http://127.0.0.1:8770/app.html. Ctrl+C stops it.
 
 1. Paste a Bilibili or YouTube link. Leave "English too" ticked. Tick "burned into the picture" only if the Chinese is part of the image.
 2. Wait for the job to finish (a 12-minute video took under 2 minutes), then watch.
-3. Lines too long? Pick **Lines: 12 / 18 / 26** above the video and the cuts are redone from Whisper's word timings.
-4. Wrong pinyin? Add the word to `pipeline/pinyin_fixes.txt` and press **Rebuild**.
+3. Lines too long? **Video ▾ → Lines: 12 / 18 / 26**, and the cuts are redone from Whisper's word timings.
+4. Wrong pinyin? Add the word to `pipeline/pinyin_fixes.txt` and press **Video ▾ → Rebuild**.
 
-The library is `~/Movies/mandarin`. Without the server, [`player.html`](player.html) plays a video and its `.srt` files dropped on it.
+The library is `~/Movies/mandarin`. Everything is one screen: the library on the left (it folds away, key B), the video, and one row of menus under it (Subtitles, Playback, Video, Resources). Drop a video and its `.srt` files on the window to watch them without adding them; that also works with `app.html` opened from disk, with the server off.
 
 ## What it does
 
@@ -33,14 +33,15 @@ The library is `~/Movies/mandarin`. Without the server, [`player.html`](player.h
 | Path | What it is |
 |---|---|
 | `server.py` | Local server (standard library only): serves the pages and the library, runs one job at a time |
-| `app.html` · `player.html` | The app (library + player) and the offline player |
+| `app.html` | The whole app on one screen: library, player, menus, files dropped from disk |
+| `player.html` | Only forwards old links to `app.html` |
 | `assets/` | `kit.css` (design tokens), `kit.js` (theme, helpers), `player.js` (the subtitle player) |
 | `pipeline/study_video.sh` | Link or file → subtitles → `study.mkv`. Calls the scripts below |
 | `pipeline/srt_tool.py` | Pinyin, word lists, line splitting, LLM round-trip, track stacking |
 | `pipeline/translate_srt.py` · `align_srt.py` | Local English translation, and English↔Chinese word links |
 | `pipeline/hardsubs_to_srt.py` · `ocr_frames.swift` | OCR for burned-in Chinese (macOS Vision) |
 | `pipeline/pinyin_fixes.txt` | Pinyin corrections, one word per line |
-| `PLAN.md` | The prototype's pages and API |
+| `PLAN.md` | The prototype's screen and API |
 | `docs/plans/` | Desktop app design and orchestration (CI, releases, updates, Windows) |
 | `design/icons/` | Logo explorations. Chosen: `20-pianpian-watermelon.svg` (app) and `19-pianpian-mono.svg` (menu bar) |
 

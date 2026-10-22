@@ -249,11 +249,11 @@ class Handler(BaseHTTPRequestHandler):
                 if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]):
                     return self.send_file(f)
                 return self.fail(404, "not found")
-            # the kit's own pages and assets
+            # the app's own page and assets
             rel = path.lstrip("/") or "app.html"
             f = (HERE / rel).resolve()
             if f.is_file() and HERE in f.parents and not any(part.startswith(".") for part in f.relative_to(HERE).parts) \
-                    and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md", ".apkg"):
+                    and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md"):
                 return self.send_file(f)
             self.fail(404, "not found")
         except (ValueError, FileNotFoundError) as e:

@@ -1,5 +1,5 @@
 /* Subtitle player: one <video> with any number of .srt/.vtt tracks stacked on it.
-   Used by app.html (videos from the local server) and player.html (files dropped from disk).
+   Used by app.html, for videos from the local server and for files dropped on the window.
 
      const p = SubPlayer.mount(element, { hint: 'html shown before a video is loaded' });
      p.load({ video: url-or-File, subs: [{ name, text }], words: zh.words.json (optional),
@@ -19,6 +19,13 @@
   const LABEL = { zh: '中文', pinyin: 'Pinyin', en: 'English', stacked: 'stacked', other: 'track' };
   const ORDER = { zh: 0, pinyin: 1, en: 2, stacked: 3, other: 4 };
   const PREFS = 'zh-player-v2';
+  const RESOURCES = [                               // the Resources dropdown: free, well-known references
+    ['Pleco', 'https://www.pleco.com', 'Dictionary app for phone: handwriting, flashcards'],
+    ['MDBG', 'https://www.mdbg.net/chinese/dictionary', 'Online dictionary (CC-CEDICT, the one the player uses)'],
+    ['Chinese Grammar Wiki', 'https://resources.allsetlearning.com/chinese/grammar/', 'Grammar points by HSK level, with examples'],
+    ['Anki', 'https://apps.ankiweb.net', 'Spaced-repetition flashcards'],
+    ['Bilibili search', 'https://search.bilibili.com', 'Find videos to paste into the library'],
+  ];
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
   function tsec(t) {
@@ -50,9 +57,10 @@
   }
 
   function mount(root, opts = {}) {
+    // Everything below the video is one row of dropdowns ([data-extra] is where a page adds its own).
     root.innerHTML = `
       <div class="pl">
-        <div>
+        <div class="pmain">
           <div class="stage" style="--size:5.2;--lift:6">
             <video playsinline></video><div class="cover" hidden></div><div class="ov bg"></div>
             <div class="vc">
@@ -65,34 +73,53 @@
             </div>
             <div class="drop">${opts.hint || ''}</div>
           </div>
-          <div class="card">
-            <h4>Show</h4>
-            <div class="row" data-presets></div>
-            <div class="row">
-              <label class="check">Size <input type="range" data-size min="2.5" max="9" step=".1" value="5.2"></label>
-              <label class="check">Lift <input type="range" data-lift min="0" max="40" step=".5" value="6"></label>
-              <button class="btn" data-raise title="lift the lines above Chinese that is burned into the picture">Raise for burned-in text</button>
-              <button class="btn" data-ruby title="pinyin above each Chinese word (needs zh.words.json)">Pinyin above words</button>
-            </div>
-            <div class="row">
-              <button class="btn" data-cover title="hide subtitles that are part of the picture behind a blurred band (C)">Cover burned-in text</button>
-              <span class="row" data-coverctl hidden>
-                <label class="check">Band from bottom <input type="range" data-cb min="0" max="70" step=".5" value="5"></label>
-                <label class="check">height <input type="range" data-ch min="4" max="60" step=".5" value="25"></label>
-              </span>
-              <label class="check"><input type="checkbox" data-bg checked> dark box</label>
-            </div>
-            <div class="row">
-              <button class="btn" data-prev>◀ line</button><button class="btn" data-replay>↺ replay</button><button class="btn" data-next>line ▶</button>
-              <button class="btn" data-loop title="repeat the current line">loop line</button>
-              <button class="btn" data-autopause title="pause at the end of every line, for shadowing">pause after line</button>
-              <label class="check">Speed <select data-speed><option>0.5</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option></select></label>
-              <label class="check">Delay <input class="field" style="width:66px;padding:4px 6px" type="number" data-delay step=".1" value="0"> s</label>
-              <button class="btn" data-full>Fullscreen</button>
-            </div>
+          <div class="pbar">
+            <details class="dd" data-dd><summary>Subtitles</summary><div class="ddp wide">
+              <div class="row" data-presets></div>
+              <h5>Tracks · top to bottom · size · colour · blur while playing</h5>
+              <div data-tracks><span class="muted">No subtitles loaded.</span></div>
+              <div class="row">
+                <label class="check">Size <input type="range" data-size min="2.5" max="9" step=".1" value="5.2"></label>
+                <label class="check">Lift <input type="range" data-lift min="0" max="40" step=".5" value="6"></label>
+              </div>
+              <div class="row">
+                <button class="btn" data-ruby title="pinyin above each Chinese word (needs zh.words.json)">Pinyin above words</button>
+                <button class="btn" data-raise title="lift the lines above Chinese that is burned into the picture">Raise above burned-in text</button>
+                <label class="check"><input type="checkbox" data-bg checked> dark box</label>
+              </div>
+              <div class="row">
+                <button class="btn" data-cover title="hide subtitles that are part of the picture behind a blurred band (C)">Cover burned-in text</button>
+                <span class="row" data-coverctl hidden>
+                  <label class="check">from bottom <input type="range" data-cb min="0" max="70" step=".5" value="5"></label>
+                  <label class="check">height <input type="range" data-ch min="4" max="60" step=".5" value="25"></label>
+                </span>
+              </div>
+            </div></details>
+            <details class="dd" data-dd><summary>Playback</summary><div class="ddp">
+              <div class="row"><button class="btn" data-prev>◀ line</button><button class="btn" data-replay>↺ replay</button><button class="btn" data-next>line ▶</button></div>
+              <div class="row">
+                <button class="btn" data-loop title="repeat the current line (L)">loop line</button>
+                <button class="btn" data-autopause title="pause at the end of every line, for shadowing (P)">pause after line</button>
+              </div>
+              <div class="row">
+                <label class="check">Speed <select data-speed><option>0.5</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option></select></label>
+                <label class="check">Delay <input class="field" style="width:66px;padding:4px 6px" type="number" data-delay step=".1" value="0"> s</label>
+              </div>
+            </div></details>
+            <span data-extra></span>
+            <details class="dd" data-dd><summary>Resources</summary><div class="ddp">
+              ${RESOURCES.map(([n, u, d]) => `<a class="res" href="${u}" target="_blank" rel="noopener"><b>${n}</b><small>${d}</small></a>`).join('')}
+            </div></details>
+            <span class="grow"></span>
+            <button class="ib" data-transcript title="show or hide the transcript (T)">☰</button>
+            <details class="dd icon right" data-dd><summary title="keyboard shortcuts">?</summary><div class="ddp keys">
+              <div><b>Space</b> play · <b>←</b><b>→</b> line · <b>R</b> replay</div>
+              <div><b>L</b> loop · <b>P</b> pause after line · <b>C</b> cover band</div>
+              <div><b>1</b>–<b>9</b> track on/off · <b>↑</b><b>↓</b> lift</div>
+              <div><b>T</b> transcript · <b>F</b> fullscreen${opts.keys || ''}</div>
+            </div></details>
+            <button class="ib" data-full title="fullscreen (F)">⛶</button>
           </div>
-          <div class="card"><h4>Tracks · top to bottom · size · colour · blur while playing</h4><div data-tracks><span class="muted">No subtitles loaded.</span></div></div>
-          <div class="card keys"><b>Space</b> play · <b>←</b><b>→</b> line · <b>R</b> replay · <b>L</b> loop · <b>P</b> pause after line · <b>1</b>–<b>9</b> track · <b>↑</b><b>↓</b> lift · <b>F</b> fullscreen</div>
         </div>
         <div class="transcript" data-list><div class="empty">The transcript appears here. Click a line to jump to it.</div></div>
       </div>`;
@@ -305,6 +332,22 @@
       else (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
     };
     q('[data-full]').onclick = fullscreen;
+    /* ---- the dropdowns: one open at a time; outside click or Esc closes ---- */
+    const dds = () => root.querySelectorAll('details.dd[open]');
+    root.addEventListener('toggle', e => {
+      if (!e.target.matches('details.dd') || !e.target.open) return;
+      dds().forEach(d => { if (d !== e.target) d.open = false; });
+      // open downwards so the video and its subtitles stay visible; upwards only when there is no room
+      const panel = e.target.querySelector('.ddp'), r = e.target.getBoundingClientRect();
+      const below = innerHeight - r.bottom - 14, above = r.top - 14, up = below < 220 && above > below;
+      panel.classList.toggle('up', up);
+      panel.style.maxHeight = Math.max(160, up ? above : below) + 'px';
+    }, true);
+    document.addEventListener('click', e => { if (!e.target.closest('details.dd')) dds().forEach(d => d.open = false); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') dds().forEach(d => d.open = false); });
+    const pl = q('.pl'), trBtn = q('[data-transcript]');
+    const showTranscript = on => { pl.classList.toggle('notr', !on); trBtn.classList.toggle('on', on); };
+    trBtn.onclick = () => { showTranscript(pl.classList.contains('notr')); save(); };
     q('[data-vfull]').onclick = fullscreen;
     const playPause = () => v.paused ? v.play() : v.pause();
     q('[data-play]').onclick = playPause;
@@ -341,6 +384,7 @@
       else if (k === 'p' || k === 'P') q('[data-autopause]').click();
       else if (k === 'f' || k === 'F') fullscreen();
       else if (k === 'c' || k === 'C') q('[data-cover]').click();
+      else if (k === 't' || k === 'T') trBtn.click();
       else if (/^[1-9]$/.test(k) && tracks[+k - 1]) { tracks[+k - 1].on = !tracks[+k - 1].on; changed(); }
     });
 
@@ -349,7 +393,7 @@
       try {
         const roles = {};
         for (const t of tracks) if (t.role !== 'stacked' && !roles[t.role]) roles[t.role] = { scale: t.scale, colour: t.colour, blur: t.blur };
-        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, roles }));
+        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, roles, transcript: !pl.classList.contains('notr') }));
         if (videoKey) {
           const shown = JSON.parse(localStorage.getItem(SHOWN) || '{}');
           shown[videoKey] = Object.fromEntries(tracks.filter(t => t.role !== 'stacked').map(t => [t.role, t.on]));
@@ -364,6 +408,7 @@
       if (p.bg !== undefined) { q('[data-bg]').checked = p.bg; ov.classList.toggle('bg', p.bg); }
       if (p.speed) { q('[data-speed]').value = p.speed; v.playbackRate = +p.speed; }
       if (p.ruby !== undefined) { ruby = p.ruby; q('[data-ruby]').classList.toggle('on', ruby); }
+      showTranscript(p.transcript !== false);
       for (const t of tracks) { const { on, ...look } = (p.roles || {})[t.role] || {}; Object.assign(t, look); }   // on/off is per video, below
       let shown = {}; try { shown = (JSON.parse(localStorage.getItem(SHOWN)) || {})[videoKey] || {}; } catch {}
       for (const t of tracks) if (t.role in shown) t.on = shown[t.role];     // this video's own choice wins
@@ -390,7 +435,7 @@
       tracks = (append ? tracks.concat(added) : added).sort((a, b) => ORDER[a.role] - ORDER[b.role]);
       restore(); renderTracks(); renderList(); tick(true);
     }
-    return { load, stage, video: v, get tracks() { return tracks; } };
+    return { load, stage, video: v, extra: q('[data-extra]'), get tracks() { return tracks; } };
   }
 
   window.SubPlayer = { mount, parse, roleOf };
