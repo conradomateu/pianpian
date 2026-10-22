@@ -12,6 +12,14 @@ python3 ~/code/pianpian/server.py
 
 It opens http://127.0.0.1:8770/app.html. Ctrl+C stops it.
 
+**Or as an app, in its own window** (proof of concept, this Mac only):
+
+```bash
+tools/make_app.sh
+```
+
+It builds `Pianpian.app` with the watermelon icon into `~/Applications`. Double-click it: the server runs inside and closing the window quits it. The app runs the code in this folder, so changes show up the next time you open it. It still needs uv, ffmpeg and yt-dlp installed, so it is not yet something to send to another Mac. Log: `~/Library/Logs/Pianpian/launcher.log`.
+
 1. Paste a Bilibili or YouTube link. Leave "English too" ticked. Tick "burned into the picture" only if the Chinese is part of the image.
 2. Wait for the job to finish (a 12-minute video took under 2 minutes), then watch.
 3. Lines too long? **Video ▾ → Lines: 12 / 18 / 26**, and the cuts are redone from Whisper's word timings.
@@ -33,6 +41,8 @@ The library is `~/Movies/mandarin`. Everything is one screen: the library on the
 | Path | What it is |
 |---|---|
 | `server.py` | Local server (standard library only): serves the pages and the library, runs one job at a time |
+| `launcher.py` | The app in its own window: the server inside, a native macOS window (pywebview) |
+| `tools/make_app.sh` · `tools/svg2png.swift` | Build `Pianpian.app` (icon from the SVG, small Python environment, bundle) |
 | `app.html` | The whole app on one screen: library, player, menus, files dropped from disk |
 | `player.html` | Only forwards old links to `app.html` |
 | `assets/` | `kit.css` (design tokens), `kit.js` (theme, helpers), `player.js` (the subtitle player) |

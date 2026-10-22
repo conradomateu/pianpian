@@ -319,6 +319,18 @@ class Handler(BaseHTTPRequestHandler):
             self.fail(400, "bad JSON")
 
 
+def start(port: int = 8770, library: Path | None = None, browser: str | None = None) -> ThreadingHTTPServer:
+    """Start the job worker and bind the server (not yet serving). launcher.py uses this too."""
+    if library:
+        CFG["library"] = Path(library).expanduser().resolve()
+    if browser:
+        CFG["browser"] = browser
+    CFG["library"].mkdir(parents=True, exist_ok=True)
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)      # raises OSError if the port is taken
+    threading.Thread(target=worker, daemon=True).start()
+    return srv
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8770)
@@ -326,10 +338,7 @@ def main():
     ap.add_argument("--browser", default=CFG["browser"], help="browser whose login yt-dlp may use (default brave)")
     ap.add_argument("--no-browser", action="store_true", help="don't open the app in a browser")
     a = ap.parse_args()
-    CFG.update(library=a.library.expanduser().resolve(), browser=a.browser)
-    CFG["library"].mkdir(parents=True, exist_ok=True)
-    threading.Thread(target=worker, daemon=True).start()
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    srv = start(a.port, a.library, a.browser)
     url = f"http://127.0.0.1:{a.port}/app.html"
     print(f"Mandarin Kit → {url}\nlibrary: {CFG['library']}\nCtrl+C to stop.")
     if not a.no_browser:

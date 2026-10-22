@@ -7,3 +7,6 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+
+# built apps (tools/make_app.sh)
+dist/
