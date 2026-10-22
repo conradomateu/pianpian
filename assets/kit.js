@@ -39,6 +39,9 @@
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { change(); return; }
     const before = new Map(els.map(e => [e, e.getBoundingClientRect()]));
     change();
+    // while things glide, scroll areas must not clip them (they would pop in cut at the edge)
+    const root = document.documentElement;
+    root.classList.add('gliding'); clearTimeout(flip.t); flip.t = setTimeout(() => root.classList.remove('gliding'), DURATION + 40);
     for (const e of els) {
       const a = before.get(e), b = e.getBoundingClientRect();
       if (!a.width || !b.width) continue;

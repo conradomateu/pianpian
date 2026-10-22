@@ -115,6 +115,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 
 /* ---------- subtitle player (assets/player.js) ---------- */
 .pl { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:start; }
+.pl.nolist { display:block; }                      /* the page shows the transcript elsewhere (app.html: right panel) */
 /* folding the transcript: it leaves the layout at once and slides out on top, while the video and
    the buttons glide into the freed space (Kit.flip in player.js). Only transform and opacity move. */
 .pl { position:relative; }

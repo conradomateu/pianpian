@@ -6,39 +6,48 @@
 <title>Pianpian 片片</title>
 <link rel="icon" href="design/icons/20-pianpian-watermelon.svg">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap" onload="this.rel='stylesheet'">
-<script>(function(){try{var t=localStorage.getItem("zh-kit-theme");if(t&&t!=="system")document.documentElement.setAttribute("data-theme",t);if(localStorage.getItem("pp-side")==="closed")document.documentElement.classList.add("side-closed");}catch(e){}})();</script>
+<script>(function(){try{var d=document.documentElement,t=localStorage.getItem("zh-kit-theme");if(t&&t!=="system")d.setAttribute("data-theme",t);
+if((localStorage.getItem("pp-left")||localStorage.getItem("pp-side"))==="closed")d.classList.add("left-closed");if(localStorage.getItem("pp-right")==="closed")d.classList.add("right-closed");}catch(e){}})();</script>
 <link rel="stylesheet" href="assets/kit.css">
 <style>
-/* one screen: the library on the left (it folds away), the video and its menus on the right */
+/* one screen, like a desktop app: library panel on the left, the video in the middle, transcript panel on
+   the right. Both panels are the same component (.panel + a fixed .ptoggle in its top corner).
+   One 16px margin and one top row (12px + the 34px toggles + 12px): everything starts on the same lines. */
 body { overflow:hidden; }
-.shell { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); height:100vh; overflow:hidden; }
-/* one margin everywhere (16px): the fixed toggle, the library and the video all start on the same line */
-.side { width:300px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:12px; padding:12px 16px; overflow:auto; background:var(--bg); }
-.side > * { flex-shrink:0; }
-.side > .lib { flex-shrink:1; }
-.main { grid-column:2; }
-/* folding the library: it leaves the layout at once and slides out on top, while the video side
-   glides into the freed space (Kit.flip below). Only transform and opacity animate.
-   Motion is on only after the first paint, so a folded library doesn't animate shut on load. */
-/* its own layer, ready before it moves (no first-frame stall), and always above the content: while the
-   title and the video glide aside they pass under the library, never across it */
-.side { position:relative; z-index:5; will-change:transform; contain:paint; }
-.side-closed .side { position:absolute; top:0; bottom:0; left:0; z-index:5; transform:translateX(-100%); opacity:0; pointer-events:none; }
-/* it moves like a solid drawer: opening shows it at once, closing keeps it opaque until it is nearly out */
-.ready .side { transition:transform .34s var(--ease), opacity .12s ease; }
-.ready.side-closed .side { transition:transform .34s var(--ease), opacity .14s ease .2s; }
-.ready .side > * { transition:transform .32s var(--ease); }
-.sidetoggle { position:fixed; top:12px; left:16px; z-index:10; width:34px; height:34px; display:grid; place-items:center; padding:0; cursor:pointer;
+.shell { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto; height:100vh; overflow:hidden; }
+.main { grid-column:2; overflow:auto; padding:58px 16px 30px; min-width:0; }
+.gliding .main { overflow:visible; }                /* during a fold the content may pass outside it, under the panel */
+.panel { display:flex; flex-direction:column; gap:12px; padding:12px 16px; overflow:auto; background:var(--bg);
+  position:relative; z-index:5; will-change:transform; contain:paint; }   /* own layer, above the content gliding under it */
+.panel > * { flex-shrink:0; }
+.panel.left { grid-column:1; width:300px; border-right:1px solid var(--line); }
+.panel.right { grid-column:3; width:340px; border-left:1px solid var(--line); }
+.panelhead { display:flex; align-items:center; height:34px; }
+.panel.left .panelhead { padding-left:44px; }        /* room for the fixed toggle */
+.panel.right .panelhead { padding-right:44px; }
+.panelhead h4 { margin:0; font:600 10px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+/* folding: the panel leaves the layout at once and slides out on top like a solid drawer, while the video
+   and its menus glide into the freed space (Kit.flip). Only transform and opacity animate, and only after
+   the first paint, so a panel that starts folded doesn't animate shut on load. */
+.left-closed .panel.left, .right-closed .panel.right { position:absolute; top:0; bottom:0; opacity:0; pointer-events:none; }
+.left-closed .panel.left { left:0; transform:translateX(-100%); }
+.right-closed .panel.right { right:0; transform:translateX(100%); }
+.ready .panel { transition:transform .34s var(--ease), opacity .12s ease; }
+.ready.left-closed .panel.left, .ready.right-closed .panel.right { transition:transform .34s var(--ease), opacity .14s ease .2s; }
+.ptoggle { position:fixed; top:12px; z-index:10; width:34px; height:34px; display:grid; place-items:center; padding:0; cursor:pointer;
   border:1px solid var(--line-2); border-radius:10px; background:var(--surface); color:var(--fg-2); transition:border-color .16s ease, color .16s ease; }
-.sidetoggle:hover { border-color:var(--red); color:var(--red-fg); }
-.sidetoggle svg { width:18px; height:18px; }
-.side-closed .vtop { padding-left:46px; }           /* the title starts after the fixed button */
-.main { overflow:auto; padding:12px 16px 30px; min-width:0; }
-@media (max-width:900px) { body { overflow:auto; } .shell { grid-template-columns:1fr; height:auto; overflow:visible; } .side { width:auto; border-right:0; border-bottom:1px solid var(--line); }
-  .main { grid-column:1; overflow:visible; } .side-closed .side { display:none; } }
+.ptoggle.left { left:16px; } .ptoggle.right { right:16px; }
+.ptoggle:hover { border-color:var(--red); color:var(--red-fg); }
+.ptoggle svg { width:18px; height:18px; }
+/* the transcript fills its panel */
+.panel.right .transcript { flex:1 1 auto; min-height:0; max-height:none; border:0; border-radius:0; background:none; margin:0 -16px -12px; }
+@media (max-width:900px) { body { overflow:auto; } .shell { grid-template-columns:1fr; height:auto; overflow:visible; }
+  .panel.left, .panel.right { grid-column:1; width:auto; border:0; border-bottom:1px solid var(--line); }
+  .panel.right { grid-row:3; max-height:50vh; } .main { grid-column:1; overflow:visible; }
+  .left-closed .panel.left, .right-closed .panel.right { display:none; } }
 
-.sidehead { display:flex; align-items:center; min-height:34px; padding-left:44px; }   /* room for the fixed toggle */
-.sidehead .logo { display:block; }
+.panel.left > .lib { flex-shrink:1; }
+.panelhead .logo { display:block; }
 .add { display:grid; gap:7px; }
 .addrow { display:flex; gap:6px; }
 .addrow .field { padding:8px 10px; }
@@ -68,11 +77,7 @@ body { overflow:hidden; }
 .sidefoot .grow { flex:1; }
 .sidefoot .ib { padding:4px 9px; font-size:11px; }
 
-.vtop { display:flex; align-items:center; gap:10px; height:34px; margin-bottom:8px; }   /* same height and line as the toggle */
-.vtop h1 { font:700 19px/1.25 var(--display); letter-spacing:-.01em; margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vtop a { font:500 11.5px var(--mono); white-space:nowrap; }
 #notes .note { margin:0 0 8px; padding:7px 12px; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; animation:pp-fade .3s ease; }
-.vtop h1 { animation:pp-fade .3s ease; }
 #notes .note .btn { padding:4px 10px; }
 #vpanel { width:min(460px, 92vw); }
 #vpanel textarea { min-height:90px; }
@@ -81,13 +86,16 @@ body { overflow:hidden; }
 </style>
 </head>
 <body>
-<!-- the one library toggle: fixed in the corner, it never moves -->
-<button class="sidetoggle" id="sidetoggle" type="button" aria-controls="side" aria-expanded="true" title="Library (B)">
+<!-- the two panel toggles: fixed in the top corners, they never move -->
+<button class="ptoggle left" data-panel="left" type="button" aria-controls="left" aria-expanded="true" title="Library (B)">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
 </button>
+<button class="ptoggle right" data-panel="right" type="button" aria-controls="right" aria-expanded="true" title="Transcript (T)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg>
+</button>
 <div class="shell">
-  <aside class="side" id="side">
-    <div class="sidehead">
+  <aside class="panel left" id="left">
+    <div class="panelhead">
       <img class="logo" src="design/icons/20-pianpian-watermelon.svg" alt="Pianpian 片片" title="Pianpian 片片" width="30" height="30">
     </div>
 
@@ -124,13 +132,14 @@ body { overflow:hidden; }
   </aside>
 
   <main class="main" id="main">
-    <div class="vtop">
-      <h1 id="vtitle">Pick a video</h1>
-      <a id="vsrc" target="_blank" rel="noopener" hidden>source ↗</a>
-    </div>
     <div id="notes"></div>
     <div id="player"></div>
   </main>
+
+  <aside class="panel right" id="right">
+    <div class="panelhead"><h4>Transcript</h4></div>
+    <div class="transcript" id="transcript"><div class="empty">The transcript appears here. Click a line to jump to it.</div></div>
+  </aside>
 </div>
 
 <script src="assets/kit.js"></script>
@@ -156,27 +165,30 @@ const player = SubPlayer.mount($('player'), {
   hint: OFFLINE
     ? '<div><b>Drop a video and its subtitle files here</b>The server is off, so there is no library. Start it with <code>python3 ~/code/pianpian/server.py</code></div>'
     : '<div><b>Pick a video on the left, paste a link, or drop files here</b>A video plus its <code>.srt</code> files (and <code>zh.words.json</code>) play straight from disk.</div>',
-  keys: ' · <b>B</b> library',
+  keys: ' · <b>B</b> library · <b>T</b> transcript',
+  list: $('transcript'),
 });
 let videos = [], current = null, lastJobs = [];
 
-/* ---------- the library folds away: one button, one function ---------- */
-const sideOpen = () => !document.documentElement.classList.contains('side-closed');
-function setSide(open, animate) {
+/* ---------- the two panels: same component, one function (left = library, right = transcript) ---------- */
+const isOpen = side => !document.documentElement.classList.contains(side + '-closed');
+function setPanel(side, open, animate) {
   const apply = () => {
-    document.documentElement.classList.toggle('side-closed', !open);
-    $('sidetoggle').setAttribute('aria-expanded', open);
-    try { localStorage.setItem('pp-side', open ? 'open' : 'closed'); } catch {}
+    document.documentElement.classList.toggle(side + '-closed', !open);
+    document.querySelector(`.ptoggle[data-panel="${side}"]`).setAttribute('aria-expanded', open);
+    try { localStorage.setItem('pp-' + side, open ? 'open' : 'closed'); } catch {}
   };
-  // the title, the video and every button glide together into the space the library frees or takes
-  const gliding = [$('vtitle'), $('vsrc'), $('notes'), player.stage, ...document.querySelectorAll('.pbar > *, .pbar [data-extra] > *'), document.querySelector('.transcript')];
+  // the note, the video and every menu button glide together into the space the panel frees or takes
+  const gliding = [$('notes'), player.stage, ...document.querySelectorAll('.pbar > *, .pbar [data-extra] > *')];
   animate ? Kit.flip(gliding, apply, [player.stage]) : apply();
 }
-$('sidetoggle').onclick = () => setSide(!sideOpen(), true);
+document.querySelectorAll('.ptoggle').forEach(b => b.onclick = () => setPanel(b.dataset.panel, !isOpen(b.dataset.panel), true));
 document.addEventListener('keydown', e => {
-  if ((e.key === 'b' || e.key === 'B') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !e.metaKey && !e.ctrlKey) setSide(!sideOpen(), true);
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || e.metaKey || e.ctrlKey) return;
+  const side = { b: 'left', t: 'right' }[e.key.toLowerCase()];
+  if (side) setPanel(side, !isOpen(side), true);
 });
-setSide(sideOpen(), false);
+setPanel('left', isOpen('left'), false); setPanel('right', isOpen('right'), false);
 setTimeout(() => document.documentElement.classList.add('ready'), 80);   // motion only after the first paint
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */
@@ -219,10 +231,7 @@ async function select(id, keepPlayer) {
   current = v;
   history.replaceState(null, '', '#v=' + encodeURIComponent(id));
   document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === id));
-  document.title = v.title + ' · 片片';
-  if (changed) { const h = $('vtitle'); h.style.animation = 'none'; h.offsetWidth; h.style.animation = ''; }   // replay the fade
-  $('vtitle').textContent = v.title;
-  $('vsrc').hidden = !v.url; if (v.url) $('vsrc').href = v.url;
+  document.title = v.title + ' · 片片';               // the title shows in the window and the library, not above the video
   renderNotes(v); renderMenu(v);
   if (changed || !keepPlayer) {
     const base = '/library/' + encodeURIComponent(v.id) + '/';
@@ -258,6 +267,7 @@ function renderMenu(v) {
         </select></label>
       <button class="btn" data-act="rebuild" ${dis} title="run the pipeline again, e.g. after fixing zh.srt">Rebuild</button>
       <button class="btn" data-act="open">Show in Finder</button>
+      ${v.url ? `<a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Source page ↗</a>` : ''}
     </div>
     ${v.lines ? `
     <h5>English · ${v.has.en ? (v.englishAuto ? 'made by the local model' : 'made by hand') : 'none yet'}</h5>
@@ -304,8 +314,8 @@ async function openFiles(files) {
     current = null;
     history.replaceState(null, '', location.pathname);
     document.querySelectorAll('.item.on').forEach(b => b.classList.remove('on'));
-    $('vtitle').textContent = video.name; document.title = video.name + ' · 片片';
-    $('vsrc').hidden = true; $('notes').innerHTML = ''; $('vmenu').hidden = true;
+    document.title = video.name + ' · 片片';
+    $('notes').innerHTML = ''; $('vmenu').hidden = true;
   }
   player.load({ video, subs, words, align, append: !video, ...(video ? { id: video.name + ':' + video.size } : {}) });
 }
@@ -365,7 +375,6 @@ if (OFFLINE) {
   $('add').hidden = true; document.querySelector('.libh').hidden = true;
   $('lib').innerHTML = '<p class="note warn" style="margin:0">The server is off, so there is no library. You can still <b>Open files…</b> or drop a video and its <code>.srt</code> files on the window.<br><br>Start it in Terminal: <code>python3 ~/code/pianpian/server.py</code></p>';
   $('status').className = 'dot off'; $('status').textContent = 'offline';
-  $('vtitle').textContent = 'Open a video from disk';
 } else {
   window.addEventListener('hashchange', () => { const id = hashId(); if (id && (!current || current.id !== id)) select(id); });
   (async () => {

@@ -58,8 +58,9 @@
 
   function mount(root, opts = {}) {
     // Everything below the video is one row of dropdowns ([data-extra] is where a page adds its own).
+    // The transcript goes into opts.list when the page gives one (app.html: its right panel).
     root.innerHTML = `
-      <div class="pl">
+      <div class="pl${opts.list ? ' nolist' : ''}">
         <div class="pmain">
           <div class="stage" style="--size:5.2;--lift:6">
             <video playsinline></video><div class="cover" hidden></div><div class="ov bg"></div>
@@ -111,7 +112,6 @@
               ${RESOURCES.map(([n, u, d]) => `<a class="res" href="${u}" target="_blank" rel="noopener"><b>${n}</b><small>${d}</small></a>`).join('')}
             </div></details>
             <span class="grow"></span>
-            <button class="ib" data-transcript title="show or hide the transcript (T)">☰</button>
             <details class="dd icon right" data-dd><summary title="keyboard shortcuts">?</summary><div class="ddp keys">
               <div><b>Space</b> play · <b>←</b><b>→</b> line · <b>R</b> replay</div>
               <div><b>L</b> loop · <b>P</b> pause after line · <b>C</b> cover band</div>
@@ -121,10 +121,10 @@
             <button class="ib" data-full title="fullscreen (F)">⛶</button>
           </div>
         </div>
-        <div class="transcript" data-list><div class="empty">The transcript appears here. Click a line to jump to it.</div></div>
+        ${opts.list ? '' : '<div class="transcript" data-list><div class="empty">The transcript appears here. Click a line to jump to it.</div></div>'}
       </div>`;
     const q = s => root.querySelector(s);
-    const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = q('[data-list]');
+    const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = opts.list || q('[data-list]');
     let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 6;
     let words = null, align = null, ruby = false, pin = null, pinCue = -1, videoKey = '';
     const COVERS = 'zh-player-cover-v1';             // { videoKey: { on, b, h } }: the band differs per video
@@ -345,13 +345,6 @@
     }, true);
     document.addEventListener('click', e => { if (!e.target.closest('details.dd')) dds().forEach(d => d.open = false); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') dds().forEach(d => d.open = false); });
-    const pl = q('.pl'), trBtn = q('[data-transcript]');
-    const showTranscript = on => { pl.classList.toggle('notr', !on); trBtn.classList.toggle('on', on); };
-    trBtn.onclick = () => {                     // the video and the buttons glide to their new place together
-      const moving = [stage, ...q('.pbar').children];
-      (window.Kit ? Kit.flip : (_, f) => f())(moving, () => showTranscript(pl.classList.contains('notr')), [stage]);
-      save();
-    };
     q('[data-vfull]').onclick = fullscreen;
     const playPause = () => v.paused ? v.play() : v.pause();
     q('[data-play]').onclick = playPause;
@@ -388,7 +381,6 @@
       else if (k === 'p' || k === 'P') q('[data-autopause]').click();
       else if (k === 'f' || k === 'F') fullscreen();
       else if (k === 'c' || k === 'C') q('[data-cover]').click();
-      else if (k === 't' || k === 'T') trBtn.click();
       else if (/^[1-9]$/.test(k) && tracks[+k - 1]) { tracks[+k - 1].on = !tracks[+k - 1].on; changed(); }
     });
 
@@ -397,7 +389,7 @@
       try {
         const roles = {};
         for (const t of tracks) if (t.role !== 'stacked' && !roles[t.role]) roles[t.role] = { scale: t.scale, colour: t.colour, blur: t.blur };
-        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, roles, transcript: !pl.classList.contains('notr') }));
+        localStorage.setItem(PREFS, JSON.stringify({ size: size.value, lift: lift.value, bg: q('[data-bg]').checked, speed: q('[data-speed]').value, ruby, roles }));
         if (videoKey) {
           const shown = JSON.parse(localStorage.getItem(SHOWN) || '{}');
           shown[videoKey] = Object.fromEntries(tracks.filter(t => t.role !== 'stacked').map(t => [t.role, t.on]));
@@ -412,7 +404,6 @@
       if (p.bg !== undefined) { q('[data-bg]').checked = p.bg; ov.classList.toggle('bg', p.bg); }
       if (p.speed) { q('[data-speed]').value = p.speed; v.playbackRate = +p.speed; }
       if (p.ruby !== undefined) { ruby = p.ruby; q('[data-ruby]').classList.toggle('on', ruby); }
-      showTranscript(p.transcript !== false);
       for (const t of tracks) { const { on, ...look } = (p.roles || {})[t.role] || {}; Object.assign(t, look); }   // on/off is per video, below
       let shown = {}; try { shown = (JSON.parse(localStorage.getItem(SHOWN)) || {})[videoKey] || {}; } catch {}
       for (const t of tracks) if (t.role in shown) t.on = shown[t.role];     // this video's own choice wins

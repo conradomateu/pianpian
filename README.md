@@ -17,7 +17,7 @@ It opens http://127.0.0.1:8770/app.html. Ctrl+C stops it.
 3. Lines too long? **Video ▾ → Lines: 12 / 18 / 26**, and the cuts are redone from Whisper's word timings.
 4. Wrong pinyin? Add the word to `pipeline/pinyin_fixes.txt` and press **Video ▾ → Rebuild**.
 
-The library is `~/Movies/mandarin`. Everything is one screen: the library on the left (it folds away, key B), the video, and one row of menus under it (Subtitles, Playback, Video, Resources). Drop a video and its `.srt` files on the window to watch them without adding them; that also works with `app.html` opened from disk, with the server off.
+The library is `~/Movies/mandarin`. Everything is one screen: the library on the left (key B), the transcript on the right (key T), each folding away with the button in its top corner, and the video in the middle with one row of menus under it (Subtitles, Playback, Video, Resources). Drop a video and its `.srt` files on the window to watch them without adding them; that also works with `app.html` opened from disk, with the server off.
 
 ## What it does
 
