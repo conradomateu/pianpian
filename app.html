@@ -154,7 +154,7 @@ const OFFLINE = location.protocol === 'file:';     // opened from disk: no libra
 // the server's own code), and whatever needs the engine on a Mac points to the download instead
 const DEMO = new URLSearchParams(location.search).has('demo');
 const LIB = DEMO ? 'demo/library/' : '/library/';
-const GET_APP = 'https://github.com/bytemines/pianpian/releases/latest';
+const GET_APP = 'https://github.com/conradomateu/pianpian/releases/latest';
 const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac.';
 const PROMPT = `Each line below is: an id, a TAB, then one subtitle in Chinese.
 Translate the Chinese into natural English. Output EXACTLY the same ids, one per line, as: id<TAB>English.
