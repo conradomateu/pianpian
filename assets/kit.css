@@ -262,7 +262,9 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .gl span.rule.maybe { box-shadow:inset 0 0 0 .08em #F5B23C; } .ov .gl span.rule.change { box-shadow:inset 0 0 0 .08em #46D39A; }
 .ov .gl span.rule.time-past { box-shadow:inset 0 -.18em #46D39A; } .ov .gl span.rule.time-present { box-shadow:inset 0 -.18em #FF6B54; } .ov .gl span.rule.time-future { box-shadow:inset 0 -.18em #F5B23C; }
 
-/* follow the voice: the word being spoken, softly lit (a clicked word's red wins) */
-.ov .w.say { background:rgba(255,255,255,.24); box-shadow:0 0 0 .08em rgba(255,255,255,.24); transition:background .12s ease; }
-.cue .w.say { background:var(--amber-tint); box-shadow:0 0 0 2px var(--amber-tint); }
-.ov .w.hl.say { background:var(--red); }
+/* follow the voice: the word being said, in amber (a clicked word's red wins) */
+.ov .w.say { background:#F5B23C; color:#1F1B16 !important; box-shadow:0 0 0 .08em #F5B23C; transition:background .12s ease; }
+.ov .w.say s, .ov .w.say .g { color:inherit; }
+.cue .w.say { background:var(--amber); color:#1F1B16; box-shadow:0 0 0 2px var(--amber); }
+.cue .w.say s { color:inherit; }
+.ov .w.hl.say { background:var(--red); color:#fff !important; }
