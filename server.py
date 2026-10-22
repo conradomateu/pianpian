@@ -11,6 +11,7 @@ the command line always agree. Listens on 127.0.0.1 only.
 """
 import argparse
 import json
+import logging
 import mimetypes
 import os
 import queue
@@ -20,12 +21,15 @@ import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import engine  # noqa: E402  (next to this file: the engine's Python, the settings, the first-run setup)
+import report  # noqa: E402  (problem hints and reports)
 
 HERE = Path(__file__).resolve().parent
+LOG = logging.getLogger("pianpian")
 SCRIPT = HERE / "pipeline" / "study.py"
 # browsers yt-dlp can borrow a Bilibili login from, as macOS apps
 BROWSERS = {"safari": "Safari", "chrome": "Google Chrome", "brave": "Brave Browser", "firefox": "Firefox",
@@ -138,7 +142,8 @@ class Job:
 
     def public(self, tail=60):
         return {"id": self.id, "kind": self.kind, "label": self.label, "state": self.state, "video": self.video, "log": self.log[-tail:],
-                "started": self.started, "ended": self.ended, "code": self.code}
+                "started": self.started, "ended": self.ended, "code": self.code,
+                "problem": (report.explain(self.log) or {"code": "JOB-FAILED", "hint": ""}) if self.state == "failed" else None}
 
 
 JOBS: list = []
@@ -161,6 +166,9 @@ def worker():
             job.add(f"error: {e}")
             job.state = "failed"
         job.ended = time.time()
+        LOG.info("job %s %s: %s (%.0f s)", job.id, job.kind, job.state, job.ended - job.started)
+        if job.state == "failed":                             # the whole log of a failure, for a report later
+            LOG.info("job %s log:\n%s", job.id, "\n".join(job.log[-200:]))
 
 
 def enqueue(job: Job) -> Job:
@@ -263,6 +271,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(info)
             if path == "/api/setup":                       # what the first-run setup would do, and how it is going
                 return self.send_json({**engine.SETUP.plan(), "progress": engine.SETUP.public()})
+            if path == "/api/report":                      # ?job=<id>, or the setup's failure, or a general report
+                return self.send_json(problem_report(parse_qs(urlparse(self.path).query)))
             if path == "/api/jobs":
                 return self.send_json([j.public() for j in reversed(JOBS)])
             if m := re.fullmatch(r"/library/([^/]+)/thumb\.jpg", path):
@@ -396,6 +406,27 @@ class Handler(BaseHTTPRequestHandler):
             self.fail(400, "bad JSON")
 
 
+def problem_report(q: dict) -> dict:
+    """What went wrong and the details to share, redacted, plus the GitHub bug form filled in."""
+    job = next((j for j in JOBS if str(j.id) == (q.get("job") or [""])[0]), None)
+    if job is None and not q.get("setup"):
+        job = next((j for j in reversed(JOBS) if j.state == "failed"), None)
+    setup = engine.SETUP.public() if q.get("setup") else None
+    log = setup["log"] if setup else job.log if job else []
+    problem = report.explain(log) or {"code": "SETUP-FAILED" if setup else "JOB-FAILED" if job else "", "hint": ""}
+    st = engine.STATE
+    models = ", ".join(f"{m['id'].split('/')[-1]} {'ready' if m['ready'] else 'missing'}" for m in engine.models.status())
+    summary = [f"Pianpian {VERSION}", f"engine: {'ok' if st['engine'] else 'not working' if st['engine'] is False else 'not checked'}"
+               f"{'' if st['current'] in (None, True) else ', out of date'}", f"models: {models}",
+               f"what failed: {'the setup' if setup else job.kind if job else 'nothing recorded'}"
+               + (f" ({problem['code']})" if problem["code"] else ""), ""]
+    details = report.redact("\n".join(summary + log[-80:]), CFG["library"])
+    sysline = report.system()
+    title = f"{problem['code'] or 'Problem'}: " + (problem["hint"].split(".")[0] if problem["hint"] else "something went wrong")
+    return {**problem, "details": details, "system": sysline,
+            "url": report.issue_url(report.REPO, title, problem["code"], details, sysline)}
+
+
 def installed_browsers() -> list[str]:
     """The browsers on this Mac that yt-dlp can borrow a Bilibili login from (Safari is always there)."""
     apps = [Path("/Applications"), Path.home() / "Applications"]
@@ -404,6 +435,12 @@ def installed_browsers() -> list[str]:
 
 def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     """Start the job worker and bind the server (not yet serving). launcher.py uses this too."""
+    if not LOG.handlers:                                      # one rotating log: at most 3 × 1 MB
+        h = RotatingFileHandler(engine.logs_dir() / "server.log", maxBytes=1 << 20, backupCount=2, encoding="utf-8")
+        h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        LOG.addHandler(h)
+        LOG.setLevel(logging.INFO)
+    LOG.info("Pianpian %s starting, engine %s", VERSION, engine.python())
     if library:
         CFG["library"] = Path(library).expanduser().resolve()
     CFG["library"].mkdir(parents=True, exist_ok=True)

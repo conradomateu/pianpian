@@ -66,6 +66,7 @@ pre.log { max-height:240px; overflow:auto; font-size:11px; white-space:pre-wrap;
     <div class="last" id="last"></div>
     <div class="err" id="err" hidden></div>
     <div class="row"><button class="mini" type="button" id="logbtn">log</button><span style="flex:1"></span>
+      <button class="btn" type="button" id="report" hidden title="opens GitHub's bug form, filled in: you read it there before sending">Report</button>
       <button class="btn" type="button" id="retry" hidden>Try again</button>
       <a class="btn primary" href="app.html" id="open" hidden>Open Pianpian</a></div>
     <pre class="log" id="log" hidden></pre>
@@ -113,12 +114,19 @@ $('plan').onsubmit = async ev => {
   start();
 };
 async function start() {
-  $('err').hidden = true; $('retry').hidden = true;
+  $('err').hidden = true; $('retry').hidden = true; $('report').hidden = true;
   try { await api('/api/setup', lastBody); } catch (e) { $('err').hidden = false; $('err').textContent = e.message; return; }
   $('plan').hidden = true; $('run').hidden = false;
   poll();
 }
 $('retry').onclick = start;
+$('report').onclick = async () => {                   // the server redacts; GitHub shows it all before anything is sent
+  try {
+    const r = await api('/api/report?setup=1');
+    const a = Object.assign(document.createElement('a'), { href: r.url, target: '_blank', rel: 'noopener' });
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { $('err').textContent = 'Could not prepare the report: ' + e.message; }
+};
 $('logbtn').onclick = () => { $('log').hidden = !$('log').hidden; $('logbtn').classList.toggle('on', !$('log').hidden); };
 
 async function poll() {
@@ -138,7 +146,7 @@ async function poll() {
   $('runtitle').textContent = { running: 'Installing', done: 'Ready', failed: 'The setup stopped' }[p.state] || 'Installing';
   if (p.state === 'failed') {
     $('err').hidden = false; $('err').textContent = p.error + '. Try again: downloads carry on where they stopped.';
-    $('retry').hidden = false; if ($('log').hidden) $('logbtn').click();
+    $('retry').hidden = false; $('report').hidden = false; if ($('log').hidden) $('logbtn').click();
     return;
   }
   if (p.state === 'done') { $('open').hidden = false; setTimeout(() => { location.href = 'app.html'; }, 1500); return; }

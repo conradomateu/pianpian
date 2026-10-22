@@ -63,8 +63,9 @@ def get_video(src: str, browser: str) -> Path:
             shutil.copy2(f, work / f"source{f.suffix}")
         return work
     ytdlp = [PY, "-m", "yt_dlp", "--ffmpeg-location", ffmpeg(), *(["--cookies-from-browser", browser] if browser else [])]
+    # only stdout is captured: yt-dlp's errors still reach the log, where the app turns them into a hint
     vid = subprocess.run([*ytdlp, "--print", "id", "--no-warnings", "--no-playlist", src],
-                         check=True, capture_output=True, text=True).stdout.split()[0]
+                         check=True, stdout=subprocess.PIPE, text=True).stdout.split()[0]
     work = Path.cwd() / vid
     work.mkdir(exist_ok=True)
     if not list(work.glob("source.*")):

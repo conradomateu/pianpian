@@ -62,6 +62,8 @@ body { overflow:hidden; }
 .job .top { display:flex; justify-content:space-between; gap:8px; align-items:center; }
 .job .lbl { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .job .last { font:11.5px var(--mono); color:var(--muted); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.job .hint { margin-top:8px; font-size:12.5px; line-height:1.45; color:var(--fg-2); }
+.job .hint b { font:600 10.5px var(--mono); color:var(--red-fg); margin-right:4px; }
 .job pre.log { margin-top:8px; max-height:220px; overflow:auto; font-size:11px; border-radius:var(--r-sm); white-space:pre-wrap; word-break:break-all; }
 
 .libh { display:flex; justify-content:space-between; align-items:baseline; margin:4px 2px -4px; }
@@ -117,7 +119,10 @@ body { overflow:hidden; }
     <div class="card job" id="job" hidden>
       <div class="top"><span class="lbl" id="joblabel"></span><span class="pill" id="jobstate"></span></div>
       <div class="last" id="joblast"></div>
-      <div class="row" style="margin-top:8px"><button class="mini" id="logbtn" type="button">log</button><span class="muted mono" style="font-size:11px" id="jobtime"></span></div>
+      <div class="hint" id="jobhint" hidden></div>
+      <div class="row" style="margin-top:8px"><button class="mini" id="logbtn" type="button">log</button><span class="muted mono" style="font-size:11px" id="jobtime"></span>
+        <span style="flex:1"></span><button class="mini" data-report type="button" hidden title="opens GitHub's bug form, filled in: you read it there before sending">report</button>
+        <button class="mini" data-copyreport type="button" hidden title="copy the same details, to send another way">copy details</button></div>
       <pre class="log" id="joblog" hidden></pre>
     </div>
 
@@ -129,6 +134,7 @@ body { overflow:hidden; }
       <input id="pick" type="file" multiple hidden accept="video/*,audio/*,.srt,.vtt,.json,.mkv,.m4v">
       <span class="grow"></span>
       <span class="dot" id="status">checking…</span>
+      <button class="ib" data-report type="button" title="report a problem: opens GitHub's bug form, filled in; nothing is sent until you press Submit there">Report</button>
       <button class="ib" data-theme-toggle type="button">Auto</button>
     </div>
   </aside>
@@ -394,6 +400,20 @@ $('add').onsubmit = async e => {
   } catch (err) { $('addmsg').textContent = err.message; }
 };
 
+/* ---------- reporting a problem: the server redacts, GitHub's form shows it all before anything is sent ---------- */
+async function problem(job) { return api('/api/report' + (job ? '?job=' + encodeURIComponent(job) : '')); }
+document.addEventListener('click', async e => {
+  const rep = e.target.closest('[data-report]'), cp = e.target.closest('[data-copyreport]');
+  if (!rep && !cp) return;
+  if (DEMO) return demoNote();
+  try {
+    const r = await problem((rep || cp).dataset.job);
+    if (cp) return Kit.copy(`${r.code ? r.code + ': ' : ''}${r.hint}\n\n${r.details}\n\n${r.system}`, cp);
+    const a = Object.assign(document.createElement('a'), { href: r.url, target: '_blank', rel: 'noopener' });
+    document.body.appendChild(a); a.click(); a.remove();              // the system browser, also from the app window
+  } catch (err) { $('addmsg').textContent = 'Could not prepare the report: ' + err.message; }
+});
+
 /* ---------- jobs ---------- */
 let timer = null, openLog = false;
 $('logbtn').onclick = () => { openLog = !openLog; $('joblog').hidden = !openLog; $('logbtn').classList.toggle('on', openLog); };
@@ -415,6 +435,10 @@ async function poll() {
     const log = $('joblog'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
     log.textContent = active.log.join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
     if (active.state === 'failed' && !openLog) $('logbtn').click();
+    const pr = active.state === 'failed' && active.problem;
+    $('jobhint').hidden = !pr;
+    if (pr) $('jobhint').innerHTML = `<b>${esc(pr.code)}</b>${esc(pr.hint || 'Something went wrong: the log below says where.')}`;
+    box.querySelectorAll('[data-report],[data-copyreport]').forEach(b => { b.hidden = !pr; b.dataset.job = active.id; });
   } else box.hidden = true;
   const working = jobs.some(j => j.state === 'running' || j.state === 'queued');
   if (finished.length || working) await loadLibrary();

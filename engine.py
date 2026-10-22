@@ -60,6 +60,13 @@ def save_config(**changes) -> dict:
     return cfg
 
 
+def logs_dir() -> Path:
+    """macOS keeps app logs in ~/Library/Logs; with $PIANPIAN_HOME they stay next to everything else."""
+    d = SUPPORT / "logs" if os.environ.get("PIANPIAN_HOME") else Path.home() / "Library" / "Logs" / "Pianpian"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def data_dir() -> Path:
     return Path(config()["data"]).expanduser()
 

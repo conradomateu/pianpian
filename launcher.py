@@ -15,8 +15,9 @@ HERE = Path(__file__).resolve().parent
 ICON = HERE / "design" / "icons" / "20-pianpian-watermelon.svg"
 PORT = 8771          # not 8770, so it can run next to `python3 server.py`; fixed, so the page's saved settings persist
 
-LOG = Path.home() / "Library" / "Logs" / "Pianpian"
-LOG.mkdir(parents=True, exist_ok=True)
+import engine  # noqa: E402  (stdlib only: the paths, including the logs folder)
+
+LOG = engine.logs_dir()
 logging.basicConfig(filename=LOG / "launcher.log", level=logging.INFO, format="%(asctime)s %(message)s")
 
 try:                 # the name in the menu bar: "Pianpian", not "Python" (must happen before the window exists)
