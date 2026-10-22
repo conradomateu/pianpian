@@ -58,10 +58,15 @@ def lock_id(entry: dict) -> str:
     return hashlib.sha256(json.dumps(sorted((f["name"], f["sha256"]) for f in entry["files"])).encode()).hexdigest()[:16]
 
 
-def sources(repo: str, entry: dict | None) -> list[str]:
-    """Where the files come from, pinned to the locked revision when there is one."""
-    ms, hf = (entry or {}).get("modelscope", "master"), (entry or {}).get("huggingface", "main")
-    return [f"https://www.modelscope.cn/models/{repo}/resolve/{ms}/", f"https://huggingface.co/{repo}/resolve/{hf}/"]
+def sources(repo: str, entry: dict | None, f: dict) -> list[str]:
+    """Where one file comes from: ModelScope at the revision that file was pinned at (each file has its own:
+    the commit that last changed it), ModelScope's current copy, then Hugging Face's pinned revision.
+    The SHA-256 check makes sure that whichever answers, it is the pinned file."""
+    ms, hf = f.get("modelscope", "master"), (entry or {}).get("huggingface", "main")
+    urls = [f"https://www.modelscope.cn/models/{repo}/resolve/{ms}/", f"https://huggingface.co/{repo}/resolve/{hf}/"]
+    if ms != "master":
+        urls.insert(1, f"https://www.modelscope.cn/models/{repo}/resolve/master/")
+    return [u + f["name"] for u in urls]
 
 
 def make_lock() -> dict:
@@ -70,15 +75,14 @@ def make_lock() -> dict:
     for m in CATALOG:
         repo = m["id"]
         ms = json.load(urlopen(f"https://www.modelscope.cn/api/v1/models/{repo}/repo/files?Recursive=true", timeout=30))["Data"]["Files"]
-        files = [{"name": f["Path"], "size": f["Size"], "sha256": f["Sha256"]} for f in ms
+        files = [{"name": f["Path"], "size": f["Size"], "sha256": f["Sha256"], "modelscope": f.get("Revision") or "master"} for f in ms
                  if f["Type"] == "blob" and NEEDED.search(f["Path"]) and "/" not in f["Path"] and f["Path"] != "configuration.json"]
-        revision = next((f["Revision"] for f in ms if f.get("Revision")), "master")
         hf = json.load(urlopen(f"https://huggingface.co/api/models/{repo}?blobs=true", timeout=60))
         hf_sha = {s["rfilename"]: (s.get("lfs") or {}).get("sha256") for s in hf["siblings"]}
         for f in files:                                       # small files have no LFS hash on Hugging Face: sizes only
             if hf_sha.get(f["name"]) and hf_sha[f["name"]] != f["sha256"]:
                 sys.exit(f"{repo}/{f['name']}: ModelScope and Hugging Face serve different files; not locking")
-        out[repo] = {"modelscope": revision, "huggingface": hf["sha"], "files": files}
+        out[repo] = {"huggingface": hf["sha"], "files": files}
     return out
 
 
@@ -191,13 +195,13 @@ def ensure(repo: str) -> str:
     for f in files:
         target = dest / f["name"]
         ok = target.exists() and target.stat().st_size == f["size"] and (not f.get("sha256") or sha256(target) == f["sha256"])
-        for base in sources(repo, entry) * 2:                 # each site twice: a dropped connection resumes where it stopped
+        for url in sources(repo, entry, f) * 2:               # each source twice: a dropped connection resumes where it stopped
             if ok:
                 break
             try:
-                fetch(base + f["name"], target, f["size"], repo)
+                fetch(url, target, f["size"], repo)
             except OSError as e:
-                print(f"  {f['name']}: {base.split('/')[2]}: {e}, trying again", flush=True)
+                print(f"  {f['name']}: {url.split('/')[2]}: {e}, trying the next source", flush=True)
                 continue
             ok = not f.get("sha256") or sha256(target) == f["sha256"]
             if not ok:

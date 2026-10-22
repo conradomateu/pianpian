@@ -56,4 +56,4 @@ def test_lock_pins_every_catalog_model():
     lock = models.lock()
     assert {m["id"] for m in models.CATALOG} <= set(lock)
     for entry in lock.values():
-        assert entry["files"] and all(f["sha256"] and f["size"] for f in entry["files"])
+        assert entry["files"] and all(f["sha256"] and f["size"] and f.get("modelscope") for f in entry["files"])
