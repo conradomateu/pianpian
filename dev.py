@@ -2,6 +2,7 @@
 """Pianpian's task runner: the same commands on your Mac and in CI.
 
     python3 dev.py engine     # the pipeline's environment (.venv, group "runtime"): server.py finds it
+    python3 dev.py version    # the next release's version and why: patch, minor or major, from the commits since the last one
     python3 dev.py lock       # pin the engine's packages (pipeline/requirements.txt) and the models (pipeline/models.lock.json)
     python3 dev.py check      # lint + test: what CI runs on every push
     python3 dev.py lint       # ruff (real mistakes only) + node --check on the JavaScript
@@ -60,6 +61,7 @@ TASKS = {
     "check": lambda: (lint(), test()),
     "engine": lambda: run("uv", "sync", "--group", "runtime"),
     "lock": lock,
+    "version": lambda: run(sys.executable, "tools/next_version.py"),
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
     "build": lambda: run(sys.executable, "tools/build_app.py"),

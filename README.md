@@ -92,10 +92,14 @@ python3 dev.py check      # lint and tests, the same as CI
 | `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8765 |
 | `python3 dev.py shots` | The screenshots above, taken from the demo |
 | `python3 dev.py lock` | Pin the engine's packages and the models again |
+| `python3 dev.py version` | Preview the next release: its version, and which commits decide it |
 
 From mainland China, set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple` first.
 Commit messages and pull request titles start with `feat:`, `fix:`, `docs:` or `chore:`: release-please
-writes the changelog and the version from them, and each release builds the app.
+writes the changelog and the version from them, and each release builds the app. `fix:` makes a patch
+release (0.1.0 → 0.1.1), `feat:` a minor one (0.2.0), `feat!:` a major one (a minor while we are on 0.x), and
+`docs:`/`chore:` none. `python3 dev.py version` shows what the commits so far would make; a line
+`Release-As: 0.1.1` at the end of a commit message forces the number.
 
 ## Licence and credits
 
