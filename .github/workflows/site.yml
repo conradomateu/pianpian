@@ -20,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 tools/build_site.py
+        env:
+          GH_TOKEN: ${{ github.token }}      # to ask which files the latest release has: the Download button follows them
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
