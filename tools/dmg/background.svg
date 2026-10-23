@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <rect width="660" height="400" fill="#FBF8F3"/>
+  <circle cx="330" cy="190" r="120" fill="#FCEAE7" opacity=".7"/>
+  <text x="330" y="62" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Helvetica,sans-serif" font-size="23" font-weight="700" fill="#17130F">Drag Pianpian to Applications</text>
+  <text x="330" y="86" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Helvetica,sans-serif" font-size="14" fill="#8A7F74">片片 · one slice a day</text>
+  <path d="M264 190 H382" stroke="#DE3B26" stroke-width="5" stroke-linecap="round" stroke-dasharray="0.1 13"/>
+  <path d="M368 171 L394 190 L368 209" fill="none" stroke="#DE3B26" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="330" y="338" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Helvetica,sans-serif" font-size="12" fill="#8A7F74">First time? If macOS says it can't check the app: System Settings → Privacy &amp; Security → Open Anyway.</text>
+</svg>

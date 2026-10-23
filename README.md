@@ -14,7 +14,7 @@ Chinese, pinyin and English subtitles for any Bilibili or YouTube video, made on
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-8A7F74)](LICENSE)
 
-[**Download for Mac**](https://github.com/conradomateu/pianpian/releases/latest/download/Pianpian-macOS.zip) · [**Try it in your browser**](https://conradomateu.github.io/pianpian/) · [What's new](https://github.com/conradomateu/pianpian/releases)
+[**Download for Mac**](https://github.com/conradomateu/pianpian/releases/latest) · [**Try it in your browser**](https://conradomateu.github.io/pianpian/) · [What's new](https://github.com/conradomateu/pianpian/releases)
 
 <img src="site/shots/app-dark.png" alt="Pianpian: the library on the left, a video with Chinese, pinyin and English subtitles in the middle, the transcript on the right" width="100%">
 
@@ -47,7 +47,7 @@ And also:
 
 ## Install
 
-1. [Download `Pianpian-macOS.zip`](https://github.com/conradomateu/pianpian/releases/latest/download/Pianpian-macOS.zip), unzip it and drag **Pianpian** to Applications.
+1. Download **Pianpian-macOS.dmg** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest), open it and drag **Pianpian** onto the Applications folder in the window.
 2. Open it. Pianpian isn't signed with a paid Apple developer certificate yet, so the first time macOS says it can't check it: go to **System Settings → Privacy & Security** and press **Open Anyway**.
 3. The first start asks where to keep your videos and its tools, then downloads them once, with progress: its engine (about 650 MB) and the speech and translation models (1.6 GB and 1 GB). From mainland China it picks faster mirrors by itself.
 

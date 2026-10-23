@@ -1,4 +1,4 @@
-"""Build Pianpian.app, the one people download: dist/Pianpian.app and dist/Pianpian-macOS.zip.
+"""Build Pianpian.app, the one people download: dist/Pianpian.app, Pianpian-macOS.dmg and Pianpian-macOS.zip.
 
     python3 dev.py build          # needs macOS on Apple Silicon, uv, and Xcode's command-line tools (swiftc)
 
@@ -7,7 +7,8 @@ pipeline scripts, both locks, the compiled OCR helper, uv and the version inside
 models are not: the app installs them on first run (engine.py, setup.html), which keeps the download
 small. The bundle is signed ad hoc, which Apple Silicon needs to run it at all; without a paid Developer
 ID, macOS asks once before opening it (System Settings → Privacy & Security → Open Anyway).
-The GitHub release workflow runs this and attaches the zip to each release.
+The DMG (window and arrow: tools/dmg/) is what people open and drag to Applications; the zip is what the app's
+updater and package managers will take. The GitHub release workflow runs this and attaches both to each release.
 """
 import json
 import plistlib
@@ -50,6 +51,19 @@ def icon(tmp: Path) -> Path:
     return tmp / "AppIcon.icns"
 
 
+DMGBUILD = "dmgbuild==1.6.7"                                       # pure Python: lays out the window itself, no Finder or screen needed
+
+
+def make_dmg() -> Path:
+    """dist/Pianpian-macOS.dmg: the app and a shortcut to Applications, on the picture from tools/dmg/."""
+    dmg = DIST / "Pianpian-macOS.dmg"
+    dmg.unlink(missing_ok=True)
+    run("uv", "run", "--isolated", "--no-project", "--python", "3.12", "--with", DMGBUILD, "dmgbuild",
+        "-s", ROOT / "tools" / "dmg" / "settings.py", "-D", f"app={APP}", "-D", f"icon={APP / 'Contents' / 'Resources' / 'AppIcon.icns'}",
+        "Pianpian", dmg, cwd=ROOT)
+    return dmg
+
+
 def main() -> None:
     if sys.platform != "darwin":
         sys.exit("Pianpian.app is built on macOS")
@@ -88,11 +102,14 @@ def main() -> None:
                  "NSHumanReadableCopyright": "Pianpian 片片 · MIT licence"})
     plist.write_bytes(plistlib.dumps(info))
     run("codesign", "--force", "--deep", "--sign", "-", APP)       # ad hoc: required on Apple Silicon
+    run("codesign", "--verify", "--deep", "--strict", APP)          # fail here, not on someone's Mac
     zip_path = DIST / "Pianpian-macOS.zip"
     zip_path.unlink(missing_ok=True)
     run("ditto", "-c", "-k", "--keepParent", APP, zip_path)       # ditto keeps the bundle's links and signature
+    dmg = make_dmg()
     size = sum(f.stat().st_size for f in APP.rglob("*") if f.is_file())
-    print(f"\n{APP.relative_to(ROOT)}: {size / 1e6:.0f} MB · {zip_path.relative_to(ROOT)}: {zip_path.stat().st_size / 1e6:.0f} MB · v{ver}")
+    print(f"\n{APP.relative_to(ROOT)}: {size / 1e6:.0f} MB · {dmg.relative_to(ROOT)}: {dmg.stat().st_size / 1e6:.0f} MB · "
+          f"{zip_path.relative_to(ROOT)}: {zip_path.stat().st_size / 1e6:.0f} MB · v{ver}")
 
 
 if __name__ == "__main__":

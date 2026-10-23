@@ -13,11 +13,13 @@ import html
 import http.server
 import io
 import json
+import os
 import re
 import shutil
 import sys
 import threading
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "_site"
@@ -35,6 +37,19 @@ def site_url() -> str:
         return f"https://{cname.read_text().strip()}/"
     owner, name = REPO.split("/")
     return f"https://{owner}.github.io/{name}/"
+
+
+def download_file() -> str:
+    """The file the Download button points at: the DMG once the latest release has one (people open it and drag the app
+    to Applications), else the zip every release has. Asked at build time, so the button never points at nothing."""
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    req = Request(f"https://api.github.com/repos/{REPO}/releases/latest",
+                  headers={"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})})
+    try:
+        names = [a["name"] for a in json.load(urlopen(req, timeout=10)).get("assets", [])]
+    except (OSError, ValueError, KeyError):
+        return "Pianpian-macOS.zip"
+    return "Pianpian-macOS.dmg" if "Pianpian-macOS.dmg" in names else "Pianpian-macOS.zip"
 
 
 def version() -> str:
@@ -79,7 +94,7 @@ def testimonials() -> str:
 
 
 def main() -> None:
-    ver = version()
+    ver, download = version(), download_file()
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
@@ -99,11 +114,11 @@ def main() -> None:
             if text is None:
                 shutil.copy2(f, OUT / f.name)
             else:
-                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{SITE}}", site_url()).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
+                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{SITE}}", site_url()).replace("{{DOWNLOAD}}", download).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
                 (OUT / f.name).write_text(text, encoding="utf-8")
     (OUT / ".nojekyll").touch()                           # serve the files as they are
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
-    print(f"_site/: version {ver}, {size / 1e6:.1f} MB")
+    print(f"_site/: version {ver}, {size / 1e6:.1f} MB, Download -> {download}")
 
 
 class RangedHandler(http.server.SimpleHTTPRequestHandler):

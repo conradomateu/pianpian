@@ -1,5 +1,5 @@
 # Builds Pianpian.app (tools/build_app.py) on Apple Silicon. Called by release-please.yml for each release,
-# which then gets Pianpian-macOS.zip attached; run it by hand (Actions → app → Run workflow) to try a build:
+# which then gets Pianpian-macOS.dmg (what people open) and Pianpian-macOS.zip (what updaters take) attached; run it by hand (Actions → app → Run workflow) to try a build:
 # the zip is then kept as a workflow artifact for a week.
 name: app
 on:
@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write          # to rebuild the website once the files are attached (its download button follows them)
 jobs:
   build:
     runs-on: macos-14            # Apple Silicon, with Xcode's swiftc for the icon and the OCR helper
@@ -24,11 +25,18 @@ jobs:
         if: inputs.tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" dist/Pianpian-macOS.zip --clobber
+        run: gh release upload "${{ inputs.tag }}" dist/Pianpian-macOS.dmg dist/Pianpian-macOS.zip --clobber
+      - name: Rebuild the website (its Download button points at the new file)
+        if: inputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml --ref main
       - name: Keep the build
         if: ${{ !inputs.tag }}
         uses: actions/upload-artifact@v4
         with:
           name: Pianpian-macOS
-          path: dist/Pianpian-macOS.zip
+          path: |
+            dist/Pianpian-macOS.dmg
+            dist/Pianpian-macOS.zip
           retention-days: 7

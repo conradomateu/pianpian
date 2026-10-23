@@ -34,11 +34,12 @@ def test_github_is_asked_once_a_day(monkeypatch, tmp_path):
     def fake(req, timeout):
         calls.append(req.full_url)
         body = {"tag_name": "pianpian-v0.3.0", "html_url": "https://github.com/x/y/releases/tag/pianpian-v0.3.0", "body": "- faster\n- nicer",
-                "assets": [{"name": "Pianpian-macOS.zip", "browser_download_url": "https://example.com/Pianpian-macOS.zip"}]}
+                "assets": [{"name": "Pianpian-macOS.zip", "browser_download_url": "https://example.com/Pianpian-macOS.zip"},
+                           {"name": "Pianpian-macOS.dmg", "browser_download_url": "https://example.com/Pianpian-macOS.dmg"}]}
         return io.BytesIO(json.dumps(body).encode())
     monkeypatch.setattr(u, "urlopen", fake)
     first = u.check_app("0.2.0")
-    assert first["version"] == "0.3.0" and first["download"].endswith("Pianpian-macOS.zip")
+    assert first["version"] == "0.3.0" and first["download"].endswith("Pianpian-macOS.dmg")
     assert u.check_app("0.2.0") == first and len(calls) == 1     # the second time comes from updates.json
     assert u.check_app("0.3.0") is None                          # already on it
 

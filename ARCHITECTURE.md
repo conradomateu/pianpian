@@ -49,6 +49,11 @@ macOS asks once before opening it. Inside the app, `engine.python()` never falls
 `sys.executable` (that would open a second window), and the server checks static paths by name,
 because PyInstaller links the files from `Contents/Frameworks` into `Contents/Resources`.
 
+`Pianpian-macOS.dmg` (the window with the arrow: `tools/dmg/`, built by dmgbuild, which lays the window out itself so it
+works on a build server) is what people open and drag to Applications; `Pianpian-macOS.zip` is for updaters and package
+managers. The build verifies the signature, and the app never writes `.pyc` files into itself (`engine.py`): that would
+break the signature after the first run.
+
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
 `Pianpian-macOS.zip`, which the website's Download button and the in-app update card point at.
