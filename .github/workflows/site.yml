@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 tools/build_site.py
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
   deploy:
