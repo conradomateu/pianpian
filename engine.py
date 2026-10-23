@@ -22,6 +22,12 @@ from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
 FROZEN = getattr(sys, "frozen", False)                       # running inside Pianpian.app (tools/build_app.py)
+if FROZEN:
+    # Python writes .pyc files next to the scripts it imports. Inside the app that changes a signed bundle after it was
+    # installed: `codesign --verify` fails from then on (measured: valid after build, invalid after one run, valid again
+    # without the __pycache__ folders). The variable is inherited by the pipeline's own Python processes.
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
 SUPPORT = Path(os.environ.get("PIANPIAN_HOME") or Path.home() / "Library" / "Application Support" / "Pianpian")
 CONFIG = SUPPORT / "config.json"
