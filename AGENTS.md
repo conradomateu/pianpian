@@ -41,6 +41,7 @@ A Mandarin study app: a video becomes Chinese + pinyin + English subtitles you c
 5. **Pinyin fixes go in `pipeline/pinyin_fixes.txt`**, not in code.
 6. **Prefer absolute dates** (22 Oct 2026), never "next week".
 7. **Commits:** `feat:` / `fix:` / `docs:` / `chore:` prefixes (release-please reads them). No personal data in messages, and no AI co-author trailers. Plans and handoff notes stay out of the repository.
-8. **Verify UI changes in a real browser**, with a real click and not only a JS call. The video control bar once swallowed clicks on subtitle words.
+8. **Test runs live in `scratch/`** (git-ignored, inside the project): throwaway homes, downloaded videos and builds under test. Not in `/tmp`, which gets cleaned; never commit what is in there.
+9. **Verify UI changes in a real browser**, with a real click and not only a JS call. The video control bar once swallowed clicks on subtitle words.
 
 Personal, machine-specific notes go in `CLAUDE.local.md` (git-ignored), not here.

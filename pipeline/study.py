@@ -17,12 +17,17 @@ can be run again after you fix zh.srt or drop in a hand-made en.lines.txt.
 For videos you are allowed to watch; do not re-upload them.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import links  # noqa: E402
+
 PY = sys.executable
 MODEL = os.environ.get("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 FIXES = HERE / "pinyin_fixes.txt"
@@ -31,6 +36,49 @@ os.environ.setdefault("PYTHONWARNINGS", "ignore::SyntaxWarning")   # jieba 0.42 
 
 def run(*cmd, **kw) -> None:
     subprocess.run([str(c) for c in cmd], check=True, **kw)
+
+
+# Failures that come and go. Bilibili's anti-bot check answers HTTP 412 at random: 6 of 14 searches in one test
+# on 23 Oct 2026, and issues yt-dlp #14830, #16962 and #17605 describe the same. So these are tried again.
+TRANSIENT = re.compile(r"HTTP Error (412|429|5\d\d)|Precondition Failed|Too Many Requests|timed? ?out|Connection (reset|aborted)|"
+                       r"Remote end closed|IncompleteRead|Temporary failure in name resolution", re.I)
+TRIES, WAITS = 3, (3, 9)
+
+
+def again(n: int, output: str) -> bool:
+    """After attempt n failed with this output: say so and wait, if it looks temporary and tries are left."""
+    why = TRANSIENT.search(output)
+    if n >= TRIES or not why:
+        return False
+    print(f"the site said '{why[0]}', which comes and goes: trying again in {WAITS[n - 1]} s ({n}/{TRIES - 1})", flush=True)
+    time.sleep(WAITS[n - 1])
+    return True
+
+
+def ytdlp_out(cmd: list) -> str:
+    """yt-dlp's standard output (for --print), trying again when it fails for a temporary reason."""
+    for n in range(1, TRIES + 1):
+        r = subprocess.run([str(c) for c in cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if r.stderr:
+            print(r.stderr, end="", flush=True)
+        if r.returncode == 0:
+            return r.stdout
+        if not again(n, r.stderr):
+            raise subprocess.CalledProcessError(r.returncode, cmd, r.stdout, r.stderr)
+
+
+def ytdlp_stream(cmd: list) -> None:
+    """yt-dlp with its output live in the log, trying again when it fails for a temporary reason."""
+    for n in range(1, TRIES + 1):
+        p = subprocess.Popen([str(c) for c in cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        tail = []
+        for line in p.stdout:
+            print(line, end="", flush=True)
+            tail = (tail + [line])[-40:]
+        if p.wait() == 0:
+            return
+        if not again(n, "".join(tail)):
+            raise subprocess.CalledProcessError(p.returncode, cmd)
 
 
 def tool(*args) -> None:
@@ -81,16 +129,15 @@ def get_video(src: str, browser: str) -> Path:
         return work
     ytdlp = [PY, "-m", "yt_dlp", "--ffmpeg-location", ffmpeg(), *(["--cookies-from-browser", browser] if browser else [])]
     # only stdout is captured: yt-dlp's errors still reach the log, where the app turns them into a hint
-    vid = subprocess.run([*ytdlp, "--print", "id", "--no-warnings", "--no-playlist", src],
-                         check=True, stdout=subprocess.PIPE, text=True).stdout.split()[0]
+    vid = ytdlp_out([*ytdlp, "--print", "id", "--no-warnings", "--no-playlist", src]).split()[0]
     work = Path.cwd() / vid
     work.mkdir(exist_ok=True)
     if not list(work.glob("source.*")):
         # ai-zh = Bilibili's AI subtitles (usually only visible when logged in);
         # H.264 first, because AV1 does not play in every browser or player
-        run(*ytdlp, "-f", "bv*[height<=1080][vcodec^=avc]+ba/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
-            "--write-subs", "--sub-langs", "ai-zh,zh-Hans,zh-CN,zh,zh-Hant", "--convert-subs", "srt",
-            "--print-to-file", "%(title)s", literal(work / "title.txt"), "--no-playlist", "-o", literal(work) + "/source.%(ext)s", src)
+        ytdlp_stream([*ytdlp, "-f", "bv*[height<=1080][vcodec^=avc]+ba/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
+                      "--write-subs", "--sub-langs", "ai-zh,zh-Hans,zh-CN,zh,zh-Hant", "--convert-subs", "srt",
+                      "--print-to-file", "%(title)s", literal(work / "title.txt"), "--no-playlist", "-o", literal(work) + "/source.%(ext)s", src])
     (work / "source.url").write_text(src + "\n", encoding="utf-8")
     return work
 
@@ -140,6 +187,11 @@ def main() -> None:
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     src, browser = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "")
+    if not Path(src).exists():
+        try:                                                  # tracking removed, short links followed (the server did the first part)
+            src = links.normalize(src, resolve=True)
+        except ValueError:
+            pass                                              # not a link either: yt-dlp will say so
     ffmpeg_on_path()
     env = os.environ.get
     work = get_video(src, browser)

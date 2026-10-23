@@ -12,13 +12,22 @@ import platform
 import re
 import subprocess
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 REPO = "conradomateu/pianpian"                          # where reports go, and where releases come from
 # (code, pattern in the log, what to do): the first match from the end of the log wins
 KNOWN = [
-    ("DL-LOGIN", r"HTTP Error 412|login required|Sign in to confirm|requires? (a )?log ?in|members[- ]only",
+    # 412 is Bilibili's anti-bot check: it comes and goes per connection (yt-dlp issues #14830, #16962, #17605)
+    ("DL-BLOCKED", r"HTTP Error 412|Precondition Failed|-412|request was banned|HTTP Error 429|Too Many Requests",
+     "The site refused the request. Bilibili does this at random to connections it finds suspicious, and Pianpian already tried three times. "
+     "Wait a few minutes and try again; picking the browser you use for Bilibili, under options, often helps."),
+    ("DL-LOGIN", r"login required|Sign in to confirm|requires? (a )?log ?in|members[- ]only|大会员",
      "The site wants a login. Under options, pick the browser you are logged in with, then try again."),
+    ("DL-REGION", r"geo.?restrict|not available in your (country|region)|only available (for|in)\b|所在地区|仅限",
+     "This video is limited to some countries (many Bilibili shows are only for mainland China). Pianpian can't change that."),
+    ("DL-NOFORMATS", r"No video formats found|Requested format is not available",
+     "No video could be found to download. Often it is a members-only or region-limited episode: picking your browser under options, "
+     "if you are logged in there, sometimes fixes it."),
     ("DL-COOKIES", r"could not find .* cookies database|Failed to decrypt|cookies from browser",
      "Couldn't read that browser's login. Quit the browser and try again, or pick another one."),
     ("DL-UNSUPPORTED", r"Unsupported URL", "That link isn't a video page Pianpian can download."),
@@ -42,8 +51,20 @@ KNOWN = [
      "The video file couldn't be read: it may be damaged, or in a format ffmpeg can't open."),
 ]
 TRANSCRIPT = re.compile(r"^\s*\[\d\d:\d\d[.:]\d\d\d? --> ")                 # Whisper prints what it hears
-URL = re.compile(r"\b(https?://)([^/\s'\"<>]+)[^\s'\"<>]*")
+URL = re.compile(r"https?://[^\s'\"<>]+")
+# first path words that only say what kind of page it is (never a person or a title)
+KIND = {"video", "bangumi", "watch", "shorts", "live", "play", "embed", "playlist", "list", "cheese", "medialist", "s", "e"}
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def _shape(m) -> str:
+    """A link as its kind only: https://www.bilibili.com/bangumi/…?spm_id_from=…&p=…  (the site, the kind of page and
+    the names of the parameters, never the video or the values). That is enough to see which link shapes fail."""
+    u = urlsplit(m[0])
+    segs = [s for s in u.path.split("/") if s]
+    path = (f"/{segs[0]}/…" if len(segs) > 1 and segs[0] in KIND else "/…") if segs else ""
+    names = [q.split("=")[0] for q in u.query.split("&") if q][:8]
+    return f"{u.scheme}://{u.netloc}{path}" + ("?" + "&".join(f"{n}=…" for n in names) if names else "")
 
 
 def explain(lines: list[str]) -> dict | None:
@@ -64,7 +85,7 @@ def redact(text: str, library: Path | None = None) -> str:
         text = text.replace(str(library), "<library>")
     text = text.replace(home, "~")
     text = re.sub(rf"\b{re.escape(user)}\b", "<user>", text) if len(user) > 2 else text
-    text = URL.sub(lambda m: m[1] + m[2] + ("/…" if len(m[0]) > len(m[1] + m[2]) else ""), text)
+    text = URL.sub(_shape, text)
     return EMAIL.sub("<email>", text)
 
 

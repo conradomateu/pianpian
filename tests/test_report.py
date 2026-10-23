@@ -8,7 +8,10 @@ import report  # noqa: E402
 
 
 def test_hints_for_known_failures():
-    assert report.explain(["ERROR: [BiliBili] BV1: HTTP Error 412: Precondition Failed"])["code"] == "DL-LOGIN"
+    assert report.explain(["ERROR: [BiliBili] BV1: HTTP Error 412: Precondition Failed"])["code"] == "DL-BLOCKED"
+    assert report.explain(["ERROR: [BiliBili] 1: Unable to download webpage: HTTP Error 412"])["code"] == "DL-BLOCKED"
+    assert report.explain(["ERROR: [BiliBiliBangumi] 790639: No video formats found!"])["code"] == "DL-NOFORMATS"
+    assert report.explain(["ERROR: This video requires login (大会员 only)"])["code"] == "DL-LOGIN"
     assert report.explain(["ERROR: Unsupported URL: https://example.com"])["code"] == "DL-UNSUPPORTED"
     assert report.explain(["OSError: [Errno 28] No space left on device"])["code"] == "DISK-FULL"
     assert report.explain(["FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'"])["code"] == "TOOL-MISSING"
@@ -30,8 +33,9 @@ def test_redact_removes_what_is_personal():
         "contact me at someone@example.com",
     ])
     out = report.redact(text, lib)
-    assert home not in out and "SECRET" not in out and "spm" not in out
-    assert "https://www.bilibili.com/…" in out
+    assert home not in out and "SECRET" not in out and "BV1xx" not in out
+    # the link keeps its shape (kind of page, parameter names) so a failing shape can be seen, never the video or values
+    assert "https://www.bilibili.com/video/…?spm=…&token=…" in out
     assert "<library>/<video>" in out and "BV1xx" not in out
     assert "现在这个地方" not in out and "SESSDATA" not in out and "<email>" in out
 

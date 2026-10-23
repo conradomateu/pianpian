@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import engine  # noqa: E402  (next to this file: the engine's Python, the settings, the first-run setup)
 import report  # noqa: E402  (problem hints and reports)
 import updates  # noqa: E402  (a new app version, a fresh downloader)
+import links  # noqa: E402  (pipeline/links.py: pasted text to a link; engine.py put pipeline/ on the path)
 
 HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("pianpian")
@@ -361,9 +362,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = self.body()
             if path == "/api/add":
-                url = str(data.get("url", "")).strip()
-                if not re.match(r"^https?://\S+$", url):
-                    return self.fail(400, "paste a full http(s) link")
+                try:                                       # a bare link, or the text a Share button copies; tracking removed
+                    url = links.normalize(str(data.get("url", "")))
+                except ValueError:
+                    return self.fail(400, "paste a link (the text a Share button copies works too)")
                 browser = str(data.get("browser") or "")
                 if browser and browser not in BROWSERS:
                     return self.fail(400, "unknown browser")
