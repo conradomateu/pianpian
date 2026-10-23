@@ -22,6 +22,9 @@ def test_versions():
     assert updates.newer("0.10.0", "0.9.3") and updates.newer("v1.0.0", "0.99.0")
     assert not updates.newer("0.2.0", "0.2.0") and not updates.newer("0.1.9", "0.2.0")
     assert not updates.newer("9.9.9", "dev")                   # a developer's checkout is never nagged
+    # release-please names tags after the package: the number is what counts
+    assert updates.clean_version("pianpian-v0.2.0") == "0.2.0" and updates.clean_version("v1.0.0") == "1.0.0"
+    assert updates.newer(updates.clean_version("pianpian-v0.2.0"), "0.1.0")
 
 
 def test_github_is_asked_once_a_day(monkeypatch, tmp_path):
@@ -30,7 +33,7 @@ def test_github_is_asked_once_a_day(monkeypatch, tmp_path):
 
     def fake(req, timeout):
         calls.append(req.full_url)
-        body = {"tag_name": "v0.3.0", "html_url": "https://github.com/x/y/releases/tag/v0.3.0", "body": "- faster\n- nicer",
+        body = {"tag_name": "pianpian-v0.3.0", "html_url": "https://github.com/x/y/releases/tag/pianpian-v0.3.0", "body": "- faster\n- nicer",
                 "assets": [{"name": "Pianpian-macOS.zip", "browser_download_url": "https://example.com/Pianpian-macOS.zip"}]}
         return io.BytesIO(json.dumps(body).encode())
     monkeypatch.setattr(u, "urlopen", fake)

@@ -39,9 +39,16 @@ def _save(state: dict) -> None:
     STATE_FILE().write_text(json.dumps(state, indent=1), encoding="utf-8")
 
 
+def clean_version(tag: str) -> str:
+    """The number inside a release tag: 'v0.2.0' and 'pianpian-v0.2.0' (release-please names tags after the
+    package) both give '0.2.0'. A tag without one stays as it is."""
+    m = re.search(r"\d+\.\d+\.\d+", tag or "")
+    return m[0] if m else (tag or "")
+
+
 def version_tuple(v: str) -> tuple:
-    """'v0.12.1' -> (0, 12, 1); anything that isn't a version sorts first."""
-    m = re.match(r"v?(\d+)\.(\d+)\.(\d+)", v or "")
+    """'0.12.1' -> (0, 12, 1); anything that isn't a version sorts first."""
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", v or "")
     return tuple(int(x) for x in m.groups()) if m else (-1,)
 
 
@@ -58,7 +65,7 @@ def check_app(current: str, force: bool = False) -> dict | None:
                 req = Request(f"https://api.github.com/repos/{report.REPO}/releases/latest", headers={"Accept": "application/vnd.github+json"})
                 rel = json.load(urlopen(req, timeout=10))
                 asset = next((a["browser_download_url"] for a in rel.get("assets", []) if a["name"].endswith("-macOS.zip")), None)
-                state["app"] = {"version": rel["tag_name"].lstrip("v"), "url": rel["html_url"], "download": asset,
+                state["app"] = {"version": clean_version(rel["tag_name"]), "url": rel["html_url"], "download": asset,
                                 "notes": "\n".join((rel.get("body") or "").splitlines()[:12])}
             except (OSError, ValueError, KeyError):
                 pass                                          # offline, rate-limited or no release yet: try again tomorrow
