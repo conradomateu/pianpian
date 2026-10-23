@@ -1,6 +1,6 @@
 [project]
 name = "pianpian"
-version = "0.1.0"
+version = "0.1.1"
 description = "Watch Chinese videos with Chinese, pinyin and English subtitles you can mix and click, made on your Mac with local models."
 readme = "README.md"
 license = "MIT"

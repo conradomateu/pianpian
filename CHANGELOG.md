@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.1](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.0...pianpian-v0.1.1) (2026-10-23)
+
+
+### Features
+
+* a DMG to drag Pianpian to Applications, next to the zip ([0bdddba](https://github.com/conradomateu/pianpian/commit/0bdddba160d92d35feb1471cd6345900edea861e))
+* pasted links work: share text, short links, tracking removed, temporary failures retried ([57b2da1](https://github.com/conradomateu/pianpian/commit/57b2da141ef6198156441dbb4847bfcde5f3a0aa))
+
+
+### Bug Fixes
+
+* the new-version card works with release-please's tags ([c6ab920](https://github.com/conradomateu/pianpian/commit/c6ab9207d436d9e2217139968eefba9a520c67c3))
+* the packaged app no longer breaks its own signature by writing bytecode into itself ([e63d26d](https://github.com/conradomateu/pianpian/commit/e63d26daaed6844f690548a6b8557f41f72a9434))
+* the release workflow can attach the DMG and rebuild the website ([8fc2cd7](https://github.com/conradomateu/pianpian/commit/8fc2cd77ff3a3ee3ffb324fc73777d23cf35653a))
+
 ## [0.1.0](https://github.com/conradomateu/pianpian/compare/pianpian-v0.0.1...pianpian-v0.1.0) (2026-10-23)
 
 
