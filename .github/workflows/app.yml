@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: macos-14            # Apple Silicon, with Xcode's swiftc for the icon and the OCR helper
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
       - uses: astral-sh/setup-uv@v7
