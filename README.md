@@ -101,6 +101,12 @@ release (0.1.0 → 0.1.1), `feat:` a minor one (0.2.0), `feat!:` a major one (a 
 `docs:`/`chore:` none. `python3 dev.py version` shows what the commits so far would make; a line
 `Release-As: 0.1.1` at the end of a commit message forces the number.
 
+## Contributing
+
+Fixes, pinyin corrections and ideas are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) says how to start, what a
+pull request needs and what you agree to when you send one (your code goes in under the MIT licence, and you
+keep your copyright). Security problems: [SECURITY.md](SECURITY.md).
+
 ## Licence and credits
 
 Pianpian is [MIT licensed](LICENSE). The name and the watermelon logo are not part of the licence:
