@@ -31,10 +31,8 @@ From mainland China set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simp
 
 ## Licence
 
-Pianpian is [MIT licensed](LICENSE). By sending a pull request you confirm that you wrote the change or have
-the right to send it, and that it goes in under the same MIT licence. **You keep your copyright**; there is no
-contributor agreement to sign. The project may receive donations and offer paid services (for example hosted
-processing): contributing doesn't give a share of that money, and any paid work would be agreed in writing first.
+Pianpian is [MIT licensed](LICENSE). By sending a pull request you agree that your contribution goes in under
+the same licence, and you confirm you wrote it or have the right to send it.
 
 The name Pianpian 片片 and the watermelon logo are not part of the licence. Say "based on Pianpian" and link
 to it, but give your own version its own name and logo.
