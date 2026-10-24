@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.1...pianpian-v0.1.2) (2026-10-24)
+
+
+### Documentation
+
+* how to contribute, how to report a security problem, and a pull request template ([#8](https://github.com/conradomateu/pianpian/issues/8)) ([a6ae1a8](https://github.com/conradomateu/pianpian/commit/a6ae1a8588987f7cabb98555f877a8609920a1df))
+
 ## [0.1.1](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.0...pianpian-v0.1.1) (2026-10-23)
 
 
