@@ -5,8 +5,9 @@
     python pipeline/models.py lock                                     # write models.lock.json (python3 dev.py lock)
 
 models.lock.json pins every file of every model (name, size, SHA-256) and the exact revision on both
-sites, so everyone gets the same files and a release can change a model on purpose. Files come from
-ModelScope first (fast from mainland China), then Hugging Face, and each is checked against the lock.
+sites, so everyone gets the same files and a release can change a model on purpose. It has one section
+per platform (backend.NAME), and so do the catalog rows. Files come from ModelScope first (fast from
+mainland China), then Hugging Face, and each is checked against the lock.
 A stopped download resumes. A model already in the Hugging Face cache ($HF_HUB_CACHE, $HF_HOME/hub or
 ~/.cache/huggingface/hub) or in ~/.cache/mandarin-kit/models (older versions) is used where it is when its files match.
 Folder: $PIANPIAN_MODELS (the app sets it to <data>/models), else ~/.cache/pianpian/models.
@@ -22,15 +23,26 @@ import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+import backend  # backend.NAME: which rows and lock section are this platform's
+
 HERE = Path(__file__).resolve().parent
+
 LOCKFILE = HERE / "models.lock.json"
 LEGACY = Path.home() / ".cache" / "mandarin-kit" / "models"           # older versions: read, never written
 NEEDED = re.compile(r"\.(json|safetensors|jinja|model|tiktoken|npz)$")       # weights, config, tokenizer; no images
-CATALOG = [
+CATALOG = [m for m in [
     # size: what the download weighs, for the setup page before anything is fetched
-    {"id": "mlx-community/whisper-large-v3-turbo", "task": "transcribe", "about": "Whisper large-v3-turbo: Chinese speech to text", "size": 1_614_000_000},
-    {"id": "mlx-community/Hy-MT2-1.8B-4bit", "task": "translate", "about": "Hy-MT2 1.8B (4-bit): Chinese to English, and the word links", "size": 1_017_000_000},
-]
+    {"id": "mlx-community/whisper-large-v3-turbo", "platform": "darwin", "task": "transcribe", "about": "Whisper large-v3-turbo: Chinese speech to text", "size": 1_614_000_000},
+    {"id": "mlx-community/Hy-MT2-1.8B-4bit", "platform": "darwin", "task": "translate", "about": "Hy-MT2 1.8B (4-bit): Chinese to English, and the word links", "size": 1_017_000_000},
+] if m["platform"] == backend.NAME]
+
+
+def default(task: str) -> str:
+    """The catalog's model for a task ("transcribe" or "translate") on this platform."""
+    for m in CATALOG:
+        if m["task"] == task:
+            return m["id"]
+    raise LookupError(f"no {task} model in the catalog for {backend.NAME}")
 
 
 def cache() -> Path:
@@ -47,9 +59,10 @@ def progress(**kw) -> None:
 
 # ---------------------------------------------------------------- the lock
 def lock() -> dict:
+    """This platform's section of models.lock.json: {repo: {"huggingface": revision, "files": [...]}}."""
     try:
-        return json.loads(LOCKFILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return json.loads(LOCKFILE.read_text(encoding="utf-8"))["platforms"].get(backend.NAME, {})
+    except (OSError, ValueError, KeyError):
         return {}
 
 
@@ -70,7 +83,8 @@ def sources(repo: str, entry: dict | None, f: dict) -> list[str]:
 
 
 def make_lock() -> dict:
-    """Ask both sites for every catalog model, check they serve the same files, and pin them."""
+    """Ask both sites for every catalog model, check they serve the same files, and pin them in this
+    platform's section (the other sections stay as they are)."""
     out = {}
     for m in CATALOG:
         repo = m["id"]
@@ -83,7 +97,11 @@ def make_lock() -> dict:
             if hf_sha.get(f["name"]) and hf_sha[f["name"]] != f["sha256"]:
                 sys.exit(f"{repo}/{f['name']}: ModelScope and Hugging Face serve different files; not locking")
         out[repo] = {"huggingface": hf["sha"], "files": files}
-    return out
+    try:
+        sections = json.loads(LOCKFILE.read_text(encoding="utf-8"))["platforms"]
+    except (OSError, ValueError, KeyError):
+        sections = {}
+    return {"platforms": {**sections, backend.NAME: out}}
 
 
 # ---------------------------------------------------------------- ready or not
@@ -176,12 +194,32 @@ def files_of(repo: str) -> list[dict]:
     return [f for f in files if NEEDED.search(f["name"]) and "/" not in f["name"] and f["name"] != "configuration.json"]
 
 
-def sha256(path: Path) -> str:
+def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
         while chunk := fh.read(1 << 22):
             h.update(chunk)
     return h.hexdigest()
+
+
+def download(urls: list[str], target: Path, size: int | None, sha256: str | None, label: str) -> None:
+    """One pinned file from the first source that serves the right bytes; raises OSError when none does.
+    sha256 is the pinned hash; small files have none, and then the size decides."""
+    ok = target.exists() and target.stat().st_size == size and (not sha256 or file_sha256(target) == sha256)
+    for url in urls * 2:                                      # each source twice: a dropped connection resumes where it stopped
+        if ok:
+            break
+        try:
+            fetch(url, target, size, label)
+        except OSError as e:
+            print(f"  {target.name}: {url.split('/')[2]}: {e}, trying the next source", flush=True)
+            continue
+        ok = not sha256 or file_sha256(target) == sha256
+        if not ok:
+            print(f"  {target.name}: checksum does not match the lock; deleted, trying the next source", flush=True)
+            target.unlink()
+    if not ok:
+        raise OSError(f"no source served {target.name}")
 
 
 def ensure(repo: str) -> str:
@@ -194,21 +232,9 @@ def ensure(repo: str) -> str:
     dest.mkdir(parents=True, exist_ok=True)
     print(f"downloading {repo} ({sum(f['size'] or 0 for f in files) / 1e9:.2f} GB), once…", flush=True)
     for f in files:
-        target = dest / f["name"]
-        ok = target.exists() and target.stat().st_size == f["size"] and (not f.get("sha256") or sha256(target) == f["sha256"])
-        for url in sources(repo, entry, f) * 2:               # each source twice: a dropped connection resumes where it stopped
-            if ok:
-                break
-            try:
-                fetch(url, target, f["size"], repo)
-            except OSError as e:
-                print(f"  {f['name']}: {url.split('/')[2]}: {e}, trying the next source", flush=True)
-                continue
-            ok = not f.get("sha256") or sha256(target) == f["sha256"]
-            if not ok:
-                print(f"  {f['name']}: checksum does not match the lock; deleted, trying the next source", flush=True)
-                target.unlink()
-        if not ok:
+        try:
+            download(sources(repo, entry, f), dest / f["name"], f["size"], f.get("sha256"), repo)
+        except OSError:
             sys.exit(f"could not download {f['name']} (check the connection and try again: it resumes)")
     (dest / ".complete").write_text((lock_id(entry) if entry else "") + "\n")
     return str(dest)

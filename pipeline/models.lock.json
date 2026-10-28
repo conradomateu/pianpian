@@ -1,72 +1,76 @@
 {
- "mlx-community/whisper-large-v3-turbo": {
-  "huggingface": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb",
-  "files": [
-   {
-    "name": "config.json",
-    "size": 268,
-    "sha256": "b34fc29e4e11e0a25e812775dd67f4dd16fc2c8eb43d28ae25ff7d660ecb6379",
-    "modelscope": "2ea465385494dbe25b7d5a2ec15f2c4fdfe3e33b"
+ "platforms": {
+  "darwin": {
+   "mlx-community/whisper-large-v3-turbo": {
+    "huggingface": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb",
+    "files": [
+     {
+      "name": "config.json",
+      "size": 268,
+      "sha256": "b34fc29e4e11e0a25e812775dd67f4dd16fc2c8eb43d28ae25ff7d660ecb6379",
+      "modelscope": "2ea465385494dbe25b7d5a2ec15f2c4fdfe3e33b"
+     },
+     {
+      "name": "weights.safetensors",
+      "size": 1613977612,
+      "sha256": "951ed3fc1203e6a62467abb2144a96ce7eafca8fa77e3704fdb8635ff3e7f8a6",
+      "modelscope": "2ea465385494dbe25b7d5a2ec15f2c4fdfe3e33b"
+     }
+    ]
    },
-   {
-    "name": "weights.safetensors",
-    "size": 1613977612,
-    "sha256": "951ed3fc1203e6a62467abb2144a96ce7eafca8fa77e3704fdb8635ff3e7f8a6",
-    "modelscope": "2ea465385494dbe25b7d5a2ec15f2c4fdfe3e33b"
+   "mlx-community/Hy-MT2-1.8B-4bit": {
+    "huggingface": "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912",
+    "files": [
+     {
+      "name": "chat_template.jinja",
+      "size": 654,
+      "sha256": "b7491ec0e9c869dfce20f2176758099bf248d979dd05530ede99deb21698acee",
+      "modelscope": "b6f9dbc2ccb2c87bfe5a8363c76ad41b76f63e43"
+     },
+     {
+      "name": "config.json",
+      "size": 1688,
+      "sha256": "63180daf56cf2ca15223b358eae0bcb5252b7fd4bfa2b2882b36e82f4c410da8",
+      "modelscope": "385b00e054f8273c28abfb2c85864bf39efc5ee9"
+     },
+     {
+      "name": "generation_config.json",
+      "size": 221,
+      "sha256": "0e28667f1cb4c7b880b9223b2d87978f88e79ed7ae037de1021f826c18d4ed6f",
+      "modelscope": "f95e986b1839faf5c771807c4ebff61d585c2f5d"
+     },
+     {
+      "name": "mlx_manifest.json",
+      "size": 375,
+      "sha256": "73de5f79e38fc86ec2a0a3a7e7ad830c049064b8de09686bb2c4de92a7819c35",
+      "modelscope": "a470a06f9481ebe0b926f8a89216cb217d1294f0"
+     },
+     {
+      "name": "model.safetensors",
+      "size": 1007776125,
+      "sha256": "a9cecbc77050b86b2fa3df3a8941d34ed3585cdbcce07bd64b3da289d50537c6",
+      "modelscope": "e7fcda0b2393379172f8efea77d29bc1dda9e057"
+     },
+     {
+      "name": "model.safetensors.index.json",
+      "size": 57380,
+      "sha256": "6026955be1656bf6cf7b9ffd56aac91c88287ba13fbab8b9f140655464b9de4b",
+      "modelscope": "969641a6e7b4c5730d77c27950848d5157ba1f69"
+     },
+     {
+      "name": "tokenizer.json",
+      "size": 9527287,
+      "sha256": "b475bbef1b0b2fd57dcb865332b546475bd1ede2deb3bb91bafd0c047a8a530a",
+      "modelscope": "925278dd3d496a090c15bd2f14b43aff94abf30d"
+     },
+     {
+      "name": "tokenizer_config.json",
+      "size": 359,
+      "sha256": "9c8fad86305966b62964ad3f4b56d00fb3234141028a31710ca312ba3e417cd9",
+      "modelscope": "9b86cb44f236e1bb7298adbdb2fb7f2eb46ed814"
+     }
+    ]
    }
-  ]
- },
- "mlx-community/Hy-MT2-1.8B-4bit": {
-  "huggingface": "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912",
-  "files": [
-   {
-    "name": "chat_template.jinja",
-    "size": 654,
-    "sha256": "b7491ec0e9c869dfce20f2176758099bf248d979dd05530ede99deb21698acee",
-    "modelscope": "b6f9dbc2ccb2c87bfe5a8363c76ad41b76f63e43"
-   },
-   {
-    "name": "config.json",
-    "size": 1688,
-    "sha256": "63180daf56cf2ca15223b358eae0bcb5252b7fd4bfa2b2882b36e82f4c410da8",
-    "modelscope": "385b00e054f8273c28abfb2c85864bf39efc5ee9"
-   },
-   {
-    "name": "generation_config.json",
-    "size": 221,
-    "sha256": "0e28667f1cb4c7b880b9223b2d87978f88e79ed7ae037de1021f826c18d4ed6f",
-    "modelscope": "f95e986b1839faf5c771807c4ebff61d585c2f5d"
-   },
-   {
-    "name": "mlx_manifest.json",
-    "size": 375,
-    "sha256": "73de5f79e38fc86ec2a0a3a7e7ad830c049064b8de09686bb2c4de92a7819c35",
-    "modelscope": "a470a06f9481ebe0b926f8a89216cb217d1294f0"
-   },
-   {
-    "name": "model.safetensors",
-    "size": 1007776125,
-    "sha256": "a9cecbc77050b86b2fa3df3a8941d34ed3585cdbcce07bd64b3da289d50537c6",
-    "modelscope": "e7fcda0b2393379172f8efea77d29bc1dda9e057"
-   },
-   {
-    "name": "model.safetensors.index.json",
-    "size": 57380,
-    "sha256": "6026955be1656bf6cf7b9ffd56aac91c88287ba13fbab8b9f140655464b9de4b",
-    "modelscope": "969641a6e7b4c5730d77c27950848d5157ba1f69"
-   },
-   {
-    "name": "tokenizer.json",
-    "size": 9527287,
-    "sha256": "b475bbef1b0b2fd57dcb865332b546475bd1ede2deb3bb91bafd0c047a8a530a",
-    "modelscope": "925278dd3d496a090c15bd2f14b43aff94abf30d"
-   },
-   {
-    "name": "tokenizer_config.json",
-    "size": 359,
-    "sha256": "9c8fad86305966b62964ad3f4b56d00fb3234141028a31710ca312ba3e417cd9",
-    "modelscope": "9b86cb44f236e1bb7298adbdb2fb7f2eb46ed814"
-   }
-  ]
+  }
  }
 }

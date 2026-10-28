@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mlx-lm>=0.28", "jieba>=0.42"]
+# dependencies = ["mlx-lm>=0.28; sys_platform == 'darwin'", "jieba>=0.42"]
 # ///
 """Link each English word to the Chinese word it translates, using the translation model itself.
 
@@ -13,6 +13,8 @@ Layer 10 of Hy-MT2-1.8B was chosen on your vlog: it agreed with the CC-CEDICT di
 the words both could link, and together with the dictionary 86% of English words get a link.
 Links to grammar words (的, 了…) are dropped: there the vectors are not reliable.
 The player uses these links only where the dictionary found none. About 3 s for 120 lines.
+It needs the model's hidden states, so it is MLX only: elsewhere it stops with one line and study.py
+carries on without these links.
 """
 import json
 import re
@@ -20,9 +22,13 @@ import sys
 from pathlib import Path
 
 import jieba
-import mlx.core as mx
-from mlx_lm import load
-from mlx_lm.models.base import create_attention_mask
+
+try:
+    import mlx.core as mx
+    from mlx_lm import load
+    from mlx_lm.models.base import create_attention_mask
+except ImportError as e:
+    sys.exit(f"word links from the model need MLX (Apple Silicon): {e}; the dictionary links still work")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from translate_srt import MODEL, ensure_model, read_lines   # same model, same download

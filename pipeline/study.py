@@ -6,7 +6,7 @@
     python pipeline/study.py ~/Movies/clip.mp4                            # a file: works in clip_study/
 
     AUTO_EN=1     also translate to English with the local model (FORCE_EN=1 replaces existing English)
-    HARDSUBS=1    the Chinese is burned into the picture: read it with macOS OCR instead of Whisper
+    HARDSUBS=1    the Chinese is burned into the picture: read it with OCR (macOS Vision) instead of Whisper
     RESPLIT=1 SPLIT_MAX=12   cut the lines again (0 = as transcribed)
 
 Run it with the app's Python environment (pyproject.toml, group "runtime"): every step calls the
@@ -26,10 +26,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import backend  # noqa: E402
 import links  # noqa: E402
+import models  # noqa: E402
 
 PY = sys.executable
-MODEL = os.environ.get("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
+MODEL = os.environ.get("WHISPER_MODEL") or models.default("transcribe")
 FIXES = HERE / "pinyin_fixes.txt"
 os.environ.setdefault("PYTHONWARNINGS", "ignore::SyntaxWarning")   # jieba 0.42 on Python 3.12+
 
@@ -98,18 +100,6 @@ def literal(path: Path) -> str:
     return str(path).replace("%", "%%")
 
 
-def ffmpeg_on_path() -> None:
-    """Some steps call a program named exactly `ffmpeg` (mlx_whisper reads the audio that way). On a Mac without
-    Homebrew there is none, so the engine's is linked as `ffmpeg` next to this Python and that folder goes first
-    on PATH for every step."""
-    if shutil.which("ffmpeg"):
-        return
-    link = Path(PY).parent / "ffmpeg"
-    if not link.exists():
-        link.symlink_to(ffmpeg())
-    os.environ["PATH"] = f"{link.parent}{os.pathsep}{os.environ.get('PATH', '')}"
-
-
 def newer(out: str | Path, *deps: str | Path) -> bool:
     """out exists and is newer than every dependency that exists."""
     out = Path(out)
@@ -143,21 +133,11 @@ def get_video(src: str, browser: str) -> Path:
 
 
 def transcribe(video: str) -> None:
-    sys.path.insert(0, str(HERE))
-    import models
     model = models.ensure(MODEL)
     print(f"transcribing with {MODEL}", flush=True)
     run(ffmpeg(), "-loglevel", "error", "-y", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "audio.wav")
-    # a Simplified-Chinese prompt nudges Whisper away from Traditional output; no conditioning on the
-    # previous text avoids repetition loops on long audio; word timestamps let lines be cut exactly
-    run(Path(PY).parent / "mlx_whisper", "audio.wav", "--model", model, "--language", "zh",
-        "--initial-prompt", "以下是普通话的句子，使用简体中文。",
-        "--condition-on-previous-text", "False", "--word-timestamps", "True",
-        "--output-format", "all", "--output-name", "zh", "--output-dir", ".")
-    Path("zh.srt").rename("zh.long.srt")
-    Path("zh.json").rename("zh.whisper.json")
-    for f in ("zh.txt", "zh.vtt", "zh.tsv", "audio.wav"):
-        Path(f).unlink(missing_ok=True)
+    backend.impl().transcribe(Path("audio.wav"), model, Path("zh.long.srt"), Path("zh.whisper.json"))
+    Path("audio.wav").unlink(missing_ok=True)
     Path(".from-whisper").touch()
 
 
@@ -192,7 +172,6 @@ def main() -> None:
             src = links.normalize(src, resolve=True)
         except ValueError:
             pass                                              # not a link either: yt-dlp will say so
-    ffmpeg_on_path()
     env = os.environ.get
     work = get_video(src, browser)
     os.chdir(work)
