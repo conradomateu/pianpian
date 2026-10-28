@@ -1,8 +1,8 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mlx-lm>=0.28"]
+# dependencies = ["mlx-lm>=0.28; sys_platform == 'darwin'"]
 # ///
-"""Translate zh.srt into English line by line with a small local translation model (Apple Silicon, MLX).
+"""Translate zh.srt into English line by line with a small local translation model (on a Mac: MLX).
 
     uv run translate_srt.py zh.srt                  # -> en.lines.txt next to it
     uv run translate_srt.py zh.srt -o out.txt
@@ -16,6 +16,7 @@ copy first, which is fast from mainland China, checked against Hugging Face's SH
 (80.9), and 4-bit costs it about 1.3 points (Hy-MT2 report, arXiv 2605.22064).
 Each line is translated with the video title and the previous lines as background,
 using the model card's prompt and sampling settings. Set MT_MODEL to try another.
+The model itself runs in the platform's backend (backend.py); this file keeps the prompt and the loop.
 Nothing leaves the Mac.
 """
 import argparse
@@ -25,14 +26,15 @@ import sys
 import time
 from pathlib import Path
 
-from mlx_lm import generate, load
-from mlx_lm.sample_utils import make_logits_processors, make_sampler
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import backend  # noqa: E402
+import models  # noqa: E402
+from models import ensure as ensure_model  # noqa: E402  (shared with Whisper, align_srt.py and the installer)
 
-MODEL = os.environ.get("MT_MODEL", "mlx-community/Hy-MT2-1.8B-4bit")
+MODEL = os.environ.get("MT_MODEL") or models.default("translate")
 TIME = re.compile(r"\d{2}:\d{2}:\d{2}[,.]\d{3} --> ")
 CONTEXT_LINES = 3
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from models import ensure as ensure_model  # noqa: E402  (shared with Whisper and the installer)
+HAN = re.compile(r"[\u4e00-\u9fff]")
 
 
 def read_lines(path: Path) -> list[tuple[str, str]]:
@@ -57,6 +59,26 @@ def prompt_for(text: str, background: str) -> str:
             f"【待翻译文本】\n{text}")
 
 
+def translate(lines: list[tuple[str, str]], title: str, generate) -> list[str]:
+    """["id<TAB>English"] for each line. generate(prompt, temperature, max_tokens) is the backend's model."""
+    out = []
+    for n, (cid, text) in enumerate(lines):
+        before = [t for _, t in lines[max(0, n - CONTEXT_LINES):n]]
+        background = "\n".join(([f"视频标题：{title}"] if title else []) + ([f"前文：{' '.join(before)}"] if before else []))
+        prompt = prompt_for(text, background)
+        # a lower temperature than the model card's, so names stay the same from line to line;
+        # a reply that still has Chinese in it gets one greedy retry
+        for temperature in (0.3, 0.0):
+            reply = generate(prompt, temperature, 40 + 6 * len(text))
+            english = " ".join(re.sub(r"<think>.*?</think>", "", reply, flags=re.S).split()).strip().strip('"“”')
+            if not HAN.search(english):
+                break
+        out.append(f"{cid}\t{english}")
+        if (n + 1) % 10 == 0 or n + 1 == len(lines):
+            print(f"translated {n + 1}/{len(lines)}", flush=True)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("srt")
@@ -74,28 +96,9 @@ def main() -> None:
     t0 = time.time()
     path = ensure_model(a.model)
     print(f"loading {a.model}…", flush=True)
-    model, tok = load(path)
-    # the model card's top_p/top_k/penalty, with a lower temperature so names stay the same from line to line
-    sampler = make_sampler(temp=0.3, top_p=0.6, top_k=20)
-    greedy = make_sampler(temp=0.0)
-    procs = make_logits_processors(repetition_penalty=1.05)
-    print(f"translating {len(lines)} lines…", flush=True)
-
-    out_lines = []
-    for n, (cid, text) in enumerate(lines):
-        before = [t for _, t in lines[max(0, n - CONTEXT_LINES):n]]
-        background = "\n".join(([f"视频标题：{title}"] if title else []) + ([f"前文：{' '.join(before)}"] if before else []))
-        msgs = [{"role": "user", "content": prompt_for(text, background)}]
-        prompt = tok.apply_chat_template(msgs, add_generation_prompt=True, tokenize=False)
-        for smp in (sampler, greedy):                    # a reply that still has Chinese in it gets one greedy retry
-            reply = generate(model, tok, prompt=prompt, max_tokens=40 + 6 * len(text), sampler=smp,
-                             logits_processors=procs, verbose=False)
-            english = " ".join(re.sub(r"<think>.*?</think>", "", reply, flags=re.S).split()).strip().strip('"“”')
-            if not re.search(r"[\u4e00-\u9fff]", english):
-                break
-        out_lines.append(f"{cid}\t{english}")
-        if (n + 1) % 10 == 0 or n + 1 == len(lines):
-            print(f"translated {n + 1}/{len(lines)}", flush=True)
+    with backend.impl().translator(path) as generate:
+        print(f"translating {len(lines)} lines…", flush=True)
+        out_lines = translate(lines, title, generate)
 
     out = Path(a.out) if a.out else src.with_name("en.lines.txt")
     out.write_text("\n".join(out_lines) + "\n", encoding="utf-8")

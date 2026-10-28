@@ -5,7 +5,7 @@ Pianpian.app (launcher.py, pywebview window)
   └── server.py   127.0.0.1 only, Python standard library
         ├── serves   app.html · assets/ · the library folder (with byte ranges, so video can seek)
         └── runs     pipeline/study.py with the engine's Python   (one job at a time, live log)
-                       └── yt-dlp · ffmpeg · mlx-whisper or macOS OCR · srt_tool.py · Hy-MT2 (mlx-lm)
+                       └── yt-dlp · ffmpeg · srt_tool.py · the platform's backend (backend.py: Whisper, OCR, Hy-MT2)
 ```
 
 `python3 server.py` runs the same server in a browser tab, without the window. `app.html` opened
@@ -62,7 +62,8 @@ Releases: merging release-please's pull request tags a version and creates the G
 
 `pipeline/models.py` downloads the two models once into `<data>/models` (`$PIANPIAN_MODELS`;
 `~/.cache/pianpian/models` from the command line): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB), pinned file by file
-in `pipeline/models.lock.json` (`dev.py lock`). Each file comes
+in `pipeline/models.lock.json` (`dev.py lock`). Catalog rows and lock sections are per platform
+(`backend.NAME`), and `models.default(task)` picks this platform's model. Each file comes
 from ModelScope first, which is fast from mainland China, then Hugging Face, and is checked against the
 size and SHA-256 Hugging Face publishes. Stopped downloads resume. A model already in the Hugging Face
 cache is used where it is. Progress goes to stdout as `@progress {json}` lines.
@@ -83,6 +84,15 @@ output is newer than its inputs, so it can run again after `zh.srt` is fixed by 
    context, so every English line keeps its Chinese line's timing. `align_srt.py` then links English
    words to Chinese words where the dictionary can't.
 5. **study.mkv**: every track in one file, for IINA, mpv or VLC.
+
+The model engines sit behind `pipeline/backend.py`, the only platform check in `pipeline/`:
+`backend.impl()` is `backend_mac.py` (mlx-whisper, mlx-lm, macOS OCR) and gives three functions,
+`transcribe()`, `translator()` (a context manager yielding `generate(prompt, temperature, max_tokens)`)
+and `ocr()`. The steps above call those, so the prompt, the per-line loop and the line cutting are the
+same for every engine. `tests/test_backend.py` has the checks a new backend reuses (the signature
+test and the `assert_*` output helpers) and adds its own cases to.
+`align_srt.py` reads the model's hidden states and is MLX only; elsewhere it stops and the dictionary
+links stay.
 
 ## State
 

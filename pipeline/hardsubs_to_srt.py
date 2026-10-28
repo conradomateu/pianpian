@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Turn subtitles that are burned into a video's picture into a real zh.srt (macOS only).
+"""Turn subtitles that are burned into a video's picture into a real zh.srt.
 
     python3 hardsubs_to_srt.py video.mp4 [zh.srt] [--crop 0.28] [--fps 2]
 
 When the Chinese text is part of the image, Whisper has nothing to gain from the sound (and fails
 on songs and memes). This reads the text off the picture instead: ffmpeg cuts the bottom strip of
-the video into frames, ocr_frames.swift reads them with macOS's built-in OCR, and consecutive
-frames with the same text become one cue. Timing is the frame time, so it is accurate to 1/fps s.
+the video into frames, the platform's OCR reads them (backend.py; on a Mac, ocr_frames.swift with
+macOS's built-in OCR), and consecutive frames with the same text become one cue. Timing is the frame
+time, so it is accurate to 1/fps s.
 
 Check the result by eye: OCR confuses similar characters (自/白, 窝/我). Fix zh.srt before the pinyin
-and translation steps. Standard library only; needs ffmpeg and the Xcode command line tools.
+and translation steps. Standard library only; needs ffmpeg and, on a Mac, the Xcode command line tools.
 """
 import argparse
 import difflib
@@ -21,7 +22,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-HERE = Path(__file__).parent
+import backend
+
 HAN = re.compile(r"[一-鿿]")
 
 
@@ -49,10 +51,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         subprocess.run([ffmpeg(), "-loglevel", "error", "-y", "-i", a.video, "-vf",
                         f"fps={a.fps},crop=iw:ih*{a.crop}:0:ih*{1 - a.crop},scale=1280:-1", f"{tmp}/%05d.png"], check=True)
-        # the app ships ocr_frames compiled (tools/build_app.py); from a checkout it runs with swift
-        built = HERE / "bin" / "ocr_frames"
-        cmd = [str(built), tmp] if built.exists() else ["swift", str(HERE / "ocr_frames.swift"), tmp]
-        ocr = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+        ocr = backend.impl().ocr(tmp)
 
     frames = []  # (time, text)
     for line in ocr.splitlines():

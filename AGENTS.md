@@ -23,7 +23,7 @@ A Mandarin study app: a video becomes Chinese + pinyin + English subtitles you c
 
 - `server.py`: stdlib HTTP server on 127.0.0.1 (`LocalServer`, which skips a slow reverse DNS lookup). One job queue, byte-range video streaming, an `X-Kit: 1` header guard on POSTs (CSRF) and path checks on every file it serves (by name: inside the app, files are links).
 - `engine.py` (paths, settings, first-run setup), `updates.py` (new version, yt-dlp), `report.py` (hints and redacted reports): standard library only, shared by the server and the app.
-- `pipeline/study.py` runs the steps with the engine's Python (`engine.python()`: the installed engine, or this repo's `.venv` from `python3 dev.py engine`). Each step is skipped when its output is newer than its inputs. The engine's packages are pinned in `pipeline/requirements.txt` (`python3 dev.py lock`).
+- `pipeline/study.py` runs the steps with the engine's Python (`engine.python()`: the installed engine, or this repo's `.venv` from `python3 dev.py engine`). Each step is skipped when its output is newer than its inputs. The engine's packages are pinned in `pipeline/requirements.txt` (`python3 dev.py lock`). The model engines sit behind `pipeline/backend.py` (`backend.impl()`: `transcribe`, `translator`, `ocr`; `backend_mac.py` today), the only platform check in `pipeline/`.
 - `assets/player.js` is the player (`SubPlayer.mount`); its menus are `<details class="dd">` and `app.html` adds the Video menu through `player.extra`. Word links come from `zh.words.json` (dictionary) and `zh.align.json` (model vectors).
 - **One screen only** (`app.html`), laid out like a desktop app: a library panel on the left, the video with one row of dropdowns in the middle, a transcript panel on the right. Both panels are the same component (`.panel` + a fixed `.ptoggle` in its top corner, `setPanel()`, keys B and T). Don't add pages, a nav bar or a title bar; new controls go into a dropdown.
 - Folding uses `Kit.flip` (FLIP: change the layout at once, glide with transforms). Anything that scrolls must not clip content while it glides (the `gliding` class).
@@ -36,7 +36,7 @@ A Mandarin study app: a video becomes Chinese + pinyin + English subtitles you c
 
 1. **Never present inference as fact.** Say what was tested, on what and when, and mark the rest "not tested" or "to check", in the code comments, the docs and the UI.
 2. **Keep `core` logic free of platform code.** Path handling, OCR, "reveal in Finder" and model engines live behind small interfaces so a Windows version can swap them. No hard-coded `~/Library` paths outside `engine.py`.
-3. **Models are swappable.** A new model means a catalog entry and, if needed, an adapter that passes the engine's contract tests. Don't call a specific model from UI code.
+3. **Models are swappable.** A new model means a catalog entry (`pipeline/models.py`, with its `platform`) and, if needed, a backend module checked by `tests/test_backend.py` (the signature test, the `assert_*` output helpers, and its own cases). Don't call a specific model from UI code.
 4. **Don't ship other people's content.** No Bilibili videos, textbook material or AnkiWeb decks in the repo, screenshots or tests. Use the self-made demo library.
 5. **Pinyin fixes go in `pipeline/pinyin_fixes.txt`**, not in code.
 6. **Prefer absolute dates** (22 Oct 2026), never "next week".
