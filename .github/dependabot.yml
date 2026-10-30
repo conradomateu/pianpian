@@ -1,9 +1,13 @@
-# Keeps the GitHub Actions above up to date (weekly pull requests).
+# Keeps the GitHub Actions above up to date: one grouped pull request a month,
+# merged by dependabot-automerge.yml once the checks pass.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
     commit-message:
       prefix: chore
