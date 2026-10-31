@@ -40,6 +40,12 @@ def test_redact_removes_what_is_personal():
     assert "现在这个地方" not in out and "SESSDATA" not in out and "<email>" in out
 
 
+def test_redact_covers_a_windows_library_path():
+    lib = Path(r"C:\Users\someone\Videos\Pianpian")         # a PosixPath keeps the backslashes literal
+    out = report.redact(rf"folder: {lib}\BV1xx\zh.srt failed", lib)
+    assert "<library>/<video>" in out and "someone" not in out and "BV1xx" not in out
+
+
 def test_issue_url_fills_the_bug_form_and_stays_short():
     details = "summary\n" * 4 + "\n".join(f"log line {i} " + "x" * 80 for i in range(400))
     url = report.issue_url("owner/repo", "Problem", "NET", details, "MacBook")

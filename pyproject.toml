@@ -1,7 +1,7 @@
 [project]
 name = "pianpian"
 version = "0.1.1"
-description = "Watch Chinese videos with Chinese, pinyin and English subtitles you can mix and click, made on your Mac with local models."
+description = "Watch Chinese videos with Chinese, pinyin and English subtitles you can mix and click, made on your own computer with local models."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -11,6 +11,8 @@ dependencies = []
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "jieba>=0.42", "pypinyin>=0.51", "zhconv>=1.4"]
+# the window (launcher.py): pywebview brings WebView2 on Windows and WebKit on macOS
+desktop = ["pywebview>=6.2"]
 # the engine the app installs on first run: everything the pipeline needs, in one environment
 runtime = [
   "pypinyin>=0.51", "jieba>=0.42", "zhconv>=1.4", "yt-dlp>=2025.1.1", "imageio-ffmpeg>=0.5",

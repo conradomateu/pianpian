@@ -95,7 +95,7 @@ function renderPlan() {
     plan.models.map(m => `
     <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${m.ready || !chosen || chosen.includes(m.id) ? 'checked' : ''} ${m.ready ? 'disabled' : ''}>
       <span><b>${m.task === 'transcribe' ? 'Speech recognition' : 'English translation'}</b><small>${esc(m.about)}${m.task === 'transcribe' ? '. Needed when a video has no Chinese subtitles' : '. You can also translate by hand'}</small></span>
-      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already on this Mac' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('') +
+      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already installed' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('') +
     (plan.old && plan.old.length ? `
     <label class="item"><input type="checkbox" name="cleanup" checked><span><b>Delete old models</b><small>${plan.old.map(o => esc(o.name)).join(', ')}: replaced by this version</small></span>
       <span class="sz">frees ${gb(plan.old.reduce((t, o) => t + o.bytes, 0))}</span></label>` : '');

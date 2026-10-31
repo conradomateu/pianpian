@@ -18,6 +18,7 @@ import queue
 import re
 import socketserver
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -34,9 +35,6 @@ import links  # noqa: E402  (pipeline/links.py: pasted text to a link; engine.py
 HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("pianpian")
 SCRIPT = HERE / "pipeline" / "study.py"
-# browsers yt-dlp can borrow a Bilibili login from, as macOS apps
-BROWSERS = {"safari": "Safari", "chrome": "Google Chrome", "brave": "Brave Browser", "firefox": "Firefox",
-            "edge": "Microsoft Edge", "chromium": "Chromium", "opera": "Opera", "vivaldi": "Vivaldi"}
 VIDEO_EXT = (".mp4", ".m4v", ".mkv", ".webm", ".mov")
 SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name inside the library: no slashes
 TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
@@ -266,7 +264,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
                 return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": engine.STATE["engine"], "current": engine.STATE["current"],
-                                       "browsers": installed_browsers(), "busy": busy, "update": UPDATE.get("app")}, cors=True)
+                                       "platform": "win32" if engine.WINDOWS else "darwin", "browsers": engine.installed_browsers(),
+                                       "busy": busy, "update": UPDATE.get("app")}, cors=True)
             if path == "/api/videos":
                 return self.send_json(library())
             if m := re.fullmatch(r"/api/videos/([^/]+)", path):
@@ -367,7 +366,7 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     return self.fail(400, "paste a link (the text a Share button copies works too)")
                 browser = str(data.get("browser") or "")
-                if browser and browser not in BROWSERS:
+                if browser and browser not in engine.BROWSERS:
                     return self.fail(400, "unknown browser")
                 cmd = [engine.python(), str(SCRIPT), url] + ([browser] if browser else [])
                 env = {**({"HARDSUBS": "1"} if data.get("burned") else {}), **({"AUTO_EN": "1"} if data.get("translate") else {})}
@@ -410,7 +409,7 @@ class Handler(BaseHTTPRequestHandler):
                 (p / ".english-auto").unlink(missing_ok=True)      # now a hand-made translation
                 return self.send_json(rebuild_job(m[1]).public())
             if m := re.fullmatch(r"/api/videos/([^/]+)/open", path):
-                subprocess.Popen(["open", str(entry_path(m[1]))])
+                engine.reveal(entry_path(m[1]))
                 return self.send_json({"ok": True})
             self.fail(404, "not found")
         except (ValueError, FileNotFoundError) as e:
@@ -463,12 +462,6 @@ def keep_up_to_date() -> None:
         time.sleep(6 * 3600)
 
 
-def installed_browsers() -> list[str]:
-    """The browsers on this Mac that yt-dlp can borrow a Bilibili login from (Safari is always there)."""
-    apps = [Path("/Applications"), Path.home() / "Applications"]
-    return [k for k, name in BROWSERS.items() if k == "safari" or any((a / f"{name}.app").exists() for a in apps)]
-
-
 class LocalServer(ThreadingHTTPServer):
     """ThreadingHTTPServer without its reverse DNS lookup of the host (socket.getfqdn), which can hang for
     many seconds on slow networks before the window shows anything. It only ever listens on 127.0.0.1."""
@@ -497,6 +490,14 @@ def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
 
 
 def main():
+    if engine.WINDOWS:                                     # the console may not be UTF-8: never crash on a log line
+        os.environ.setdefault("PYTHONUTF8", "1")
+        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, OSError):
+                pass
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8770)
     ap.add_argument("--library", type=Path, default=CFG["library"], help="where videos live (default: the folder chosen in the setup, else ~/Movies/Pianpian)")

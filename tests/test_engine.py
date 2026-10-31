@@ -17,6 +17,16 @@ def catalog(*ready):
     return [{"id": f"m{i}", "task": "", "about": "", "size": 1, "ready": r, "path": None} for i, r in enumerate(ready)]
 
 
+def install_fake_python(monkeypatch, e, root):
+    """A Python path for check() without needing a real venv (or a symlink privilege on Windows)."""
+    import subprocess
+    py = e.engine_python(root)
+    py.parent.mkdir(parents=True)
+    monkeypatch.setenv("PIANPIAN_PYTHON", str(py))
+    monkeypatch.setattr(e.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0))
+    return py
+
+
 def test_skipped_model_is_not_asked_for_again(monkeypatch, tmp_path):
     e = fresh(monkeypatch, tmp_path)
     monkeypatch.setattr(e.models, "status", lambda: catalog(False, True))
@@ -31,8 +41,7 @@ def test_skipped_model_is_not_asked_for_again(monkeypatch, tmp_path):
 def test_engine_from_older_requirements_needs_an_update(monkeypatch, tmp_path):
     e = fresh(monkeypatch, tmp_path)
     eng = tmp_path / "engine"
-    (eng / "bin").mkdir(parents=True)
-    (eng / "bin" / "python").symlink_to(sys.executable)
+    install_fake_python(monkeypatch, e, eng)
     monkeypatch.setattr(e, "CHECK", "pass")
     (eng / ".pianpian-requirements").write_text("old\n")
     assert e.check() == {"engine": True, "current": False}

@@ -198,7 +198,8 @@ const player = SubPlayer.mount($('player'), {
   keys: ' · <b>B</b> library · <b>T</b> transcript',
   list: $('transcript'),
 });
-let videos = [], current = null, lastJobs = [];
+let videos = [], current = null, lastJobs = [], PLATFORM = /Windows/.test(navigator.userAgent) ? 'win32' : 'darwin';
+const fileManager = () => PLATFORM === 'win32' ? 'Explorer' : 'Finder';
 
 /* ---------- the two panels: same component, one function (left = library, right = transcript) ---------- */
 const isOpen = side => !document.documentElement.classList.contains(side + '-closed');
@@ -231,17 +232,18 @@ player.extra.innerHTML = '<details class="dd" data-dd id="vmenu" hidden><summary
 async function status() {
   try {
     const s = await api('/api/status');
+    PLATFORM = s.platform || PLATFORM;
     const broken = s.engine === false;
     $('status').className = 'dot ' + (broken ? 'off' : s.busy ? 'busy' : 'ok');
     $('status').textContent = broken ? 'engine not installed' : s.busy ? 'working' : 'ready';
-    const sel = $('add').browser;                     // the browsers this Mac has, the last choice remembered
+    const sel = $('add').browser;                     // the browsers here, the last choice remembered
     if (sel.options.length === 1 && s.browsers) {
       const NAMES = { safari: 'Safari', chrome: 'Chrome', brave: 'Brave', firefox: 'Firefox', edge: 'Edge', chromium: 'Chromium', opera: 'Opera', vivaldi: 'Vivaldi' };
       s.browsers.forEach(b => sel.add(new Option(NAMES[b] || b, b)));
       try { sel.value = localStorage.getItem('pp-browser') || ''; } catch {}
       sel.onchange = () => { try { localStorage.setItem('pp-browser', sel.value); } catch {} };
     }
-    $('libinfo').textContent = DEMO ? 'demo' : s.library.replace(/^\/Users\/[^/]+/, '~');
+    $('libinfo').textContent = DEMO ? 'demo' : s.library.replace(/^\/Users\/[^/]+/, '~').replace(/^[A-Za-z]:\\Users\\[^\\]+/, '~');
     showUpdate(s.update);
     if (DEMO) { $('status').className = 'dot ok'; $('status').textContent = 'demo'; }
   } catch { $('status').className = 'dot off'; $('status').textContent = 'server stopped'; }
@@ -310,12 +312,12 @@ function renderNotes(v) {
   const busy = busyFor(v.id), dis = busy ? 'disabled' : '', n = [];
   if (v.kind === 'file') n.push(`<div class="note warn">No subtitles yet. <button class="btn primary" data-act="rebuild" ${dis}>Make subtitles</button></div>`);
   else {
-    if (v.hardsubs && v.has.zh) n.push(`<div class="note warn">The Chinese came from OCR: fix <code>zh.srt</code> (Video ▾ → Show in Finder), then Rebuild.</div>`);
+    if (v.hardsubs && v.has.zh) n.push(`<div class="note warn">The Chinese came from OCR: fix <code>zh.srt</code> (Video ▾ → Show in ${fileManager()}), then Rebuild.</div>`);
     if (v.lines && !v.has.en) n.push(`<div class="note warn">No English yet. <button class="btn primary" data-act="translate" ${dis}>Translate automatically</button> <span class="muted">or Video ▾ → by hand</span></div>`);
   }
   $('notes').innerHTML = n.join('');
 }
-// Video ▾: line length, rebuild, Finder, and the English track
+// Video ▾: line length, rebuild, the file manager, and the English track
 function renderMenu(v) {
   $('vmenu').hidden = v.kind === 'file';
   if (v.kind === 'file') return;
@@ -329,13 +331,13 @@ function renderMenu(v) {
           ${v.split == null ? '<option value="" selected>not cut yet</option>' : ''}
         </select></label>
       <button class="btn" data-act="rebuild" ${dis} title="run the pipeline again, e.g. after fixing zh.srt">Rebuild</button>
-      <button class="btn" data-act="open">Show in Finder</button>
+      <button class="btn" data-act="open">Show in ${fileManager()}</button>
       ${v.url ? `<a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Source page ↗</a>` : ''}
     </div>
     ${v.lines ? `
     <h5>English · ${v.has.en ? (v.englishAuto ? 'made by the local model' : 'made by hand') : 'none yet'}</h5>
     <div class="row"><button class="btn ${v.has.en ? '' : 'primary'}" data-act="translate" ${dis}>Translate automatically</button>
-      <span class="muted" style="font-size:12px">Hy-MT2, on this Mac, ${n} lines</span></div>
+      <span class="muted" style="font-size:12px">Hy-MT2, on this computer, ${n} lines</span></div>
     <details><summary>By hand, with ChatGPT or Claude (better for jokes)</summary><ol style="margin-top:8px">
       <li><button class="btn" data-act="copy" type="button">Copy prompt + ${n} lines</button> and paste them into the chat.</li>
       <li>Paste the reply:<textarea class="field" id="entext" placeholder="1&#9;First line in English&#10;2&#9;Second line…" style="margin-top:6px">${esc(v.english || '')}</textarea></li>

@@ -1,11 +1,10 @@
-"""Pianpian in its own window (proof of concept for the desktop app).
+"""Pianpian in its own window.
 
-    uv run --with pywebview launcher.py        # or double-click Pianpian.app, built by tools/make_app.sh
+    uv run --with pywebview launcher.py        # macOS: a WebKit window; Windows: WebView2 (Edge)
 
-The local server runs inside this process, on 127.0.0.1 only, and the app opens in a native macOS
-window (WebKit, through pywebview) instead of a browser tab. Closing the window quits everything.
-The pipeline runs in the engine environment server.py finds (see ENGINE_PY there).
-Log: ~/Library/Logs/Pianpian/launcher.log
+The local server runs inside this process, on 127.0.0.1 only, and the app opens in a native window
+through pywebview instead of a browser tab. Closing the window quits everything. The pipeline runs in
+the engine environment server.py finds. Log: engine.logs_dir()/launcher.log
 """
 import logging
 import threading
@@ -20,11 +19,12 @@ import engine  # noqa: E402  (stdlib only: the paths, including the logs folder)
 LOG = engine.logs_dir()
 logging.basicConfig(filename=LOG / "launcher.log", level=logging.INFO, format="%(asctime)s %(message)s")
 
-try:                 # the name in the menu bar: "Pianpian", not "Python" (must happen before the window exists)
-    from Foundation import NSBundle
-    NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Pianpian"
-except Exception:
-    logging.exception("could not set the app name")
+if not engine.WINDOWS:
+    try:             # the name in the menu bar: "Pianpian", not "Python" (must happen before the window exists)
+        from Foundation import NSBundle
+        NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Pianpian"
+    except Exception:
+        logging.exception("could not set the app name")
 
 import webview       # noqa: E402  (after the name is set)
 import server        # noqa: E402
@@ -43,24 +43,25 @@ def serve() -> str:
 
 
 def ready(window, url):
-    """Runs once the window exists: WebKit settings and the Dock icon, then load the app and show it."""
-    try:
-        import time
-        from AppKit import NSApplication, NSImage
-        from webview.platforms.cocoa import BrowserView
-        wv = None
-        for _ in range(200):                     # the native view appears a moment after this callback starts
-            wv = next((getattr(b, "webview", None) for b in BrowserView.instances.values()), None)
-            if wv is not None:
-                break
-            time.sleep(0.05)
-        # WebKit keeps the page's own fullscreen off inside apps; the player's ⛶ button needs it
-        wv.configuration().preferences().setElementFullscreenEnabled_(True)
-        icon = NSImage.alloc().initWithContentsOfFile_(str(ICON))
-        if icon:
-            NSApplication.sharedApplication().setApplicationIconImage_(icon)
-    except Exception:
-        logging.exception("macOS settings failed; the app still works, without page fullscreen")
+    """Runs once the window exists: on macOS the WebKit settings and the Dock icon, then the app."""
+    if not engine.WINDOWS:
+        try:
+            import time
+            from AppKit import NSApplication, NSImage
+            from webview.platforms.cocoa import BrowserView
+            wv = None
+            for _ in range(200):                 # the native view appears a moment after this callback starts
+                wv = next((getattr(b, "webview", None) for b in BrowserView.instances.values()), None)
+                if wv is not None:
+                    break
+                time.sleep(0.05)
+            # WebKit keeps the page's own fullscreen off inside apps; the player's ⛶ button needs it
+            wv.configuration().preferences().setElementFullscreenEnabled_(True)
+            icon = NSImage.alloc().initWithContentsOfFile_(str(ICON))
+            if icon:
+                NSApplication.sharedApplication().setApplicationIconImage_(icon)
+        except Exception:
+            logging.exception("macOS settings failed; the app still works, without page fullscreen")
     window.load_url(url)
     window.show()
 

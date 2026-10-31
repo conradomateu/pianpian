@@ -41,8 +41,8 @@ KNOWN = [
     ("DISK-FULL", r"No space left on device", "The disk is full. Free some space and try again."),
     ("MODEL-DOWNLOAD", r"could not download .*it resumes|checksum does not match",
      "A model didn't download completely. Try again: it carries on where it stopped."),
-    ("MEMORY", r"Killed: 9|MemoryError|\[METAL\].*(failed|out of memory)|Insufficient Memory",
-     "The Mac ran out of memory. Close other apps and try again."),
+    ("MEMORY", r"Killed: 9|MemoryError|\[METAL\].*(failed|out of memory)|Insufficient Memory|out of memory",
+     "The computer ran out of memory. Close other apps and try again."),
     ("TOOL-MISSING", r"No such file or directory: '(ffmpeg|ffprobe|swift|uv)'",
      "A tool the pipeline needs is missing. Run the setup again; if it keeps happening, please report it."),
     ("ENGINE", r"ModuleNotFoundError|No module named|engine (is )?not installed",
@@ -81,7 +81,7 @@ def redact(text: str, library: Path | None = None) -> str:
     lines = [ln for ln in text.splitlines() if not TRANSCRIPT.match(ln)]
     text = "\n".join(ln for ln in lines if not re.search(r"cookie|SESSDATA|Authorization", ln, re.I) or "cookies from browser" in ln)
     if library:
-        text = re.sub(re.escape(str(library)) + r"/[^/\s'\"]+", "<library>/<video>", text)
+        text = re.sub(re.escape(str(library)) + r"[\\/][^\\/\s'\"]+", "<library>/<video>", text)
         text = text.replace(str(library), "<library>")
     text = text.replace(home, "~")
     text = re.sub(rf"\b{re.escape(user)}\b", "<user>", text) if len(user) > 2 else text
@@ -90,7 +90,10 @@ def redact(text: str, library: Path | None = None) -> str:
 
 
 def system() -> str:
-    """Mac model, chip and macOS version: enough to reproduce, nothing personal."""
+    """Machine, chip and OS version: enough to reproduce, nothing personal."""
+    if platform.system() == "Windows":
+        return " · ".join(x for x in (platform.platform(), platform.machine(),
+                                      platform.processor() or platform.uname().processor) if x)
     def sysctl(key):
         try:
             return subprocess.run(["sysctl", "-n", key], capture_output=True, text=True, timeout=5).stdout.strip()
