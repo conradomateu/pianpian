@@ -262,6 +262,68 @@ def test_win_translator_falls_back_to_cpu(monkeypatch, tmp_path):
     assert procs[1].cmd[procs[1].cmd.index("-ngl") + 1] == "0" and procs[1].cmd[0] == "cpu/llama-server.exe"
 
 
+def test_win_translator_retries_a_gpu_launch_error(monkeypatch, tmp_path):
+    calls, procs = [], []
+
+    def start(cmd, **kw):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise OSError(193, "not a valid Win32 application")
+        procs.append(_Proc(cmd))
+        return procs[-1]
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win, "urlopen", _fake_http([]))
+    with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+        assert generate("你好", 0.0, 10) == "Hello"
+    assert [cmd[0] for cmd in calls] == ["gpu.exe", "cpu.exe"]
+    assert procs[0].terminated and not list(tmp_path.glob("*.log"))
+
+
+@pytest.mark.parametrize("failure", ["launch", "health"])
+def test_win_translator_cleans_up_when_cpu_retry_fails(monkeypatch, tmp_path, failure):
+    procs = []
+
+    def start(cmd, **kw):
+        if cmd[0] == "cpu.exe" and failure == "launch":
+            raise OSError("CPU launch failed")
+        procs.append(_Proc(cmd))
+        return procs[-1]
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: False)
+    with pytest.raises(OSError if failure == "launch" else SystemExit):
+        with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
+            pytest.fail("a failed server must not yield a translator")
+    assert procs and all(p.terminated for p in procs)
+    assert not list(tmp_path.glob("*.log"))
+
+
+def test_win_translator_retains_the_offloaded_layer_count(monkeypatch, tmp_path, capsys):
+    def start(cmd, stdout, **kw):
+        stdout.write("ggml_cuda_init: found 1 CUDA device\nllama_model_load: offloaded 33/33 layers to GPU\n")
+        stdout.flush()
+        return _Proc(cmd)
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win, "urlopen", _fake_http([]))
+    with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
+        pass
+    assert "offloaded 33/33 layers to GPU" in capsys.readouterr().out
+    assert not list(tmp_path.glob("*.log"))
+
+
 def test_win_ocr_reads_frames_with_rapidocr(monkeypatch, tmp_path):
     for name in ("00001.png", "00002.png"):
         (tmp_path / name).write_bytes(b"png")
@@ -375,6 +437,25 @@ def test_fetch_starts_over_when_the_part_file_is_too_long(monkeypatch, tmp_path)
     (tmp_path / "f.bin.part").write_bytes(data)                # fetched whole, never renamed
     models.fetch("https://example.com/f.bin", target, 100, "test")
     assert target.read_bytes() == data and seen == [{}]        # no request at all
+
+
+def test_download_restarts_after_416_and_still_checks_the_hash(monkeypatch, tmp_path, capsys):
+    from urllib.error import HTTPError
+    good, bad = b"pinned bytes", b"other bytes!"
+    seen = []
+
+    def fake(req, timeout):
+        seen.append(dict(req.headers))
+        if "Range" in req.headers:
+            raise HTTPError(req.full_url, 416, "Range Not Satisfiable", {}, None)
+        return io.BytesIO(bad if len(seen) == 2 else good)
+
+    monkeypatch.setattr(models, "urlopen", fake)
+    target = tmp_path / "f.bin"
+    target.with_suffix(".bin.part").write_bytes(good[:3])
+    models.download(["https://example.com/f.bin"], target, len(good), models.hashlib.sha256(good).hexdigest(), "test")
+    assert seen == [{"Range": "bytes=3-"}, {}, {}]
+    assert target.read_bytes() == good and "checksum does not match" in capsys.readouterr().out
 
 
 def test_download_skips_a_source_with_the_wrong_bytes(monkeypatch, tmp_path, capsys):

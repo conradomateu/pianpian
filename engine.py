@@ -7,7 +7,7 @@ The app itself is small. What it needs to make subtitles is installed on first r
      into <data>/runtime;
   3. the models you pick (pipeline/models.py), into <data>/models.
 <data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\Pianpian on Windows,
-unless you choose another folder. Downloads come from PyPI and python.org's builds, or from mirrors
+unless you choose another folder. Downloads come from PyPI and python-build-standalone, or from mirrors
 in mainland China when those are slow to reach. Settings live in <data>/config.json.
 Standard library only.
 """

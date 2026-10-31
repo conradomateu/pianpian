@@ -159,7 +159,8 @@ def worker():
         job.state, job.started = "running", time.time()
         job.add("$ " + " ".join(str(c) for c in job.cmd))
         try:
-            p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env},
+            # The native launcher bypasses main(); every job must match the UTF-8 log decoder below.
+            p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=engine.NO_WINDOW)
             while chunk := p.stdout.read1(4096):
                 job.add(chunk.decode("utf-8", "replace"))

@@ -73,7 +73,7 @@ Releases: merging release-please's pull request tags a version and creates the G
 
 `pipeline/models.py` downloads the models once into `<data>/models` (`$PIANPIAN_MODELS`;
 `~/.cache/pianpian/models` from the command line), pinned file by file in
-`pipeline/models.lock.json` (`dev.py lock`, which locks both platforms from any machine). The lock has
+`pipeline/models.lock.json` (`dev.py lock` targets both platforms; full regeneration on macOS is not tested). The lock has
 a `darwin` and a `win32` section, and so do the catalog rows (`backend.NAME`); `models.default(task)`
 picks this platform's model:
 

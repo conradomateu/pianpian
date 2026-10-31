@@ -48,9 +48,9 @@ def test() -> None:
 
 
 def lock() -> None:
-    """Pin the engine's packages with hashes for both platforms (uv resolves x86_64-pc-windows-msvc from
-    any machine; not tried from a Mac yet), then every model file of every platform in
-    pipeline/models.lock.json. The hashes hold whether the packages come from PyPI or a mirror."""
+    """Pin both platforms' packages, then their model files. Both package targets were resolved from
+    macOS on 31 Oct 2026; full model-lock regeneration there is not tested. The hashes hold whether
+    packages come from PyPI or a mirror."""
     for platform, name, note in (("aarch64-apple-darwin", "requirements.txt", ""),
                                  ("x86_64-pc-windows-msvc", "requirements-windows.txt", " for Windows x64")):
         out = ROOT / "pipeline" / name
@@ -63,7 +63,7 @@ def lock() -> None:
 
 def app() -> None:
     if WINDOWS:
-        run(UV, "run", "--group", "runtime", "--group", "desktop", sys.executable, "launcher.py")
+        run(UV, "run", "--group", "runtime", "--group", "desktop", "python", "launcher.py")
     else:
         run("sh", "tools/make_app.sh")
 

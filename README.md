@@ -39,7 +39,7 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 
 And also:
 
-- **Any video:** Bilibili, YouTube and most video sites, or a file you drop on the window. It uses the platform's subtitles when there are some; otherwise Whisper hears the Chinese, and burned-in subtitles are read with macOS's own text recognition or, on Windows, RapidOCR (not run on Windows yet).
+- **Any video:** Bilibili, YouTube and most video sites, or a file you drop on the window. It uses the platform's subtitles when there are some; otherwise Whisper hears the Chinese, and burned-in subtitles are read with macOS's own text recognition or, on Windows, RapidOCR (not tested on Windows as of 31 Oct 2026).
 - **Tone colours** on the pinyin, which can also sit right above each character.
 - **Follow the voice:** the word being said lights up as it is spoken.
 - **Your level:** each video in your library shows the HSK level that covers 90% of its words.
@@ -55,40 +55,34 @@ And also:
 
 **Needs** a Mac with Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, and about 4 GB of disk.
 
-### Windows (from source for now)
+### Windows (from source)
 
-No Windows installer yet — that is a separate piece of work. From a checkout on Windows 10/11 x64:
+The Windows installer is separate work. From a checkout:
 
 ```powershell
 git clone https://github.com/conradomateu/pianpian && cd pianpian
 python -m venv .venv
 .venv\Scripts\python -m pip install uv
 python dev.py engine
-python dev.py app        # a native window (WebView2), or: python dev.py serve for a browser tab
+python dev.py app        # a native window, or: python dev.py serve for a browser tab
 ```
 
-The first run downloads the engine (about 460 MB), the GPU runtime (whisper.cpp and llama.cpp: CUDA
-for NVIDIA, Vulkan for llama.cpp on other GPUs, CPU as fallback — a GPU build that won't start is
-retried on the CPU) and the models into `%LOCALAPPDATA%\Pianpian`; about 6 GB of disk in total with
-the CUDA runtime and both models. The models come from ModelScope first (it mirrors the Windows models
-under other ids, byte-identical to Hugging Face's — checked 31 Oct 2026), then Hugging Face, then
-hf-mirror.com, and the runtime from GitHub (`PIANPIAN_GITHUB_MIRROR` is an opt-in prefix where GitHub
-is slow).
+**Needs** Windows x64, Python 3.12 or newer, Git, and the WebView2 runtime. Windows 10 is not tested.
+Pinned models and CUDA runtime archives total about 4.1 GB to download, plus Python and its packages;
+allow extra disk space for installation. NVIDIA uses CUDA; other detected Vulkan GPUs use Vulkan for translation and CPU for
+speech. GPU startup failures retry once on CPU. Models come from ModelScope, then Hugging Face and
+hf-mirror.com; runtime binaries come from GitHub, with `PIANPIAN_GITHUB_MIRROR` as an opt-in proxy prefix.
 
-**Tested** on 24 Oct 2026: Windows 11 Pro 25H2 build 26200, Ryzen 9 7940HS, 16 GB RAM, RTX 4060 Laptop
-8 GB, driver 591.74. whisper.cpp b5454 and llama.cpp b11851 ran with CUDA on the demo video: 45 s of
-audio transcribed in 6.7 s (CPU: 41 s), 9 lines translated in 6 s, and the full pipeline (ASR, pinyin,
-words, translation, 6-track MKV) in 32 s. The llama.cpp Vulkan build also translated the same 9 lines
-through Vulkan on the RTX 4060 (34 s including first-run setup); the AMD 780M was enumerated as
-Vulkan0 but was not benchmarked.
+**Reported test on 24 Oct 2026:** the demo pipeline ran on Windows 11 Pro 25H2, Ryzen 9 7940HS,
+16 GB RAM, RTX 4060 Laptop 8 GB, driver 591.74. That result predates the rewritten integration;
+see [PR #11](https://github.com/conradomateu/pianpian/pull/11) for benchmarks and acceptance checks.
 
-**Not tested yet:** Windows 10, ARM64 Windows, AMD/Intel GPUs through Vulkan in real use (whisper.cpp
-has no official Vulkan asset, so Vulkan-only machines use its CPU build for speech), a machine without
-Python 3.12 (uv downloaded a managed Python in a clean `PIANPIAN_HOME` test, but a real fresh Windows
-install was not done), a real Bilibili/YouTube download on Windows, RapidOCR for burned-in subtitles
-on Windows, first-run downloads from mainland China, and the whisper.cpp `-mc 0` flag against long
-videos (the MLX path's equivalent avoids repetition loops; watch punctuation). The model-based
-English↔Chinese word alignment is MLX-only, so on Windows the word links come from the dictionary only.
+**Not tested on Windows as of 31 Oct 2026:** the rewritten source app on a fresh installation,
+Chinese paths through the native window, forced GPU failure, console visibility, a merged
+Bilibili/YouTube download without system ffmpeg, RapidOCR, mainland-China first-run downloads,
+AMD/Intel Vulkan inference, and the long-video comparison with/without whisper.cpp `-mc 0`.
+Windows ARM64 is unsupported. Model-based English↔Chinese alignment remains MLX-only;
+Windows word links use the dictionary.
 
 Updates: the app tells you when a new version is out, and keeps its video downloader fresh on its own.
 

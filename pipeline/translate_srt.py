@@ -10,11 +10,10 @@
 Writes the same "id<TAB>English" file as the manual ChatGPT/Claude step, so
 `srt_tool.py import` checks it and the English keeps the Chinese timings.
 
-Model: Tencent Hy-MT2-1.8B — the 4-bit MLX build on macOS (1.02 GB, ModelScope's copy first, which is
-fast from mainland China), the Q4_K_M GGUF on Windows (1.1 GB, from Hugging Face or hf-mirror.com);
-models.py downloads it once and checks every file against the lock. A translation-only model: on
-FLORES-200 Chinese↔X its 1.8B version scores XCOMET 84.3, above Microsoft Translator (83.0) and Doubao
-(80.9), and 4-bit costs it about 1.3 points (Hy-MT2 report, arXiv 2605.22064).
+Model: Tencent Hy-MT2-1.8B: the 4-bit MLX build on macOS (1.02 GB), Q4_K_M GGUF on Windows
+(1.13 GB). models.py tries ModelScope first, then Hugging Face and hf-mirror.com, and checks every
+file against the lock. Translation-quality figures for other quantizations do not establish the
+quality of the Windows Q4_K_M build; that comparison has not been measured here.
 Each line is translated with the video title and the previous lines as background,
 using the model card's prompt and sampling settings. Set MT_MODEL to try another.
 The model itself runs in the platform's backend (backend.py); this file keeps the prompt and the loop.

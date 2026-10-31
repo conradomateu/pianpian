@@ -1,8 +1,8 @@
 """The Windows engines: whisper.cpp for speech, llama.cpp for translation, RapidOCR for burned-in text.
 
 The contract is in backend.py. The pinned binaries come from runtimes.py (CUDA, Vulkan or CPU, picked
-per tool). If a GPU build won't start or crashes, the step is retried once with the CPU build, so a
-bad driver never strands the job.
+per tool). Failed GPU transcription and translation-server startup are retried once with the CPU
+build. A translation server that fails after startup ends the job; inference is not retried.
 
 whisper.cpp's JSON offsets are milliseconds; its tokens become "words" here. For Chinese a token is
 usually one or two characters, and srt_tool.py spreads each token's time over its characters.
@@ -141,24 +141,37 @@ def translator(model_dir: str):
     try:
         backend = runtimes.backend_for("llama")
         with log_path.open("w", encoding="utf-8") as log:
-            proc = _start_server(runtimes.ensure("llama"), model, port, backend, log)
-            if not _wait_ready(proc, port):
-                proc.terminate()
-                proc.wait(timeout=15)
+            exe = runtimes.ensure("llama")
+            try:
+                proc = _start_server(exe, model, port, backend, log)
+            except OSError:
+                if backend == "cpu":
+                    raise
+            if proc is None or not _wait_ready(proc, port):
+                if proc is not None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    proc = None
                 if backend == "cpu":
                     tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
                     sys.exit(f"llama-server did not start:\n{tail}")
                 print(f"the {backend} llama build did not start; trying the CPU build", flush=True)
                 backend = "cpu"
+                log.seek(0)
+                log.truncate()
                 proc = _start_server(runtimes.ensure_cpu("llama"), model, port, backend, log)
                 if not _wait_ready(proc, port):
-                    proc.terminate()
-                    proc.wait(timeout=15)
                     tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
                     sys.exit(f"llama-server did not start:\n{tail}")
-        note = next((x.strip() for x in log_path.read_text(encoding="utf-8", errors="replace").splitlines()
-                     if "CUDA" in x or "Vulkan" in x or "offload" in x.lower()), "")
-        if note:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        notes = [x.strip() for x in lines if "offload" in x.lower()]
+        if not notes:
+            notes = [next((x.strip() for x in lines if "CUDA" in x or "Vulkan" in x), "")]
+        for note in filter(None, notes):
             print(f"llama.cpp: {note}", flush=True)   # the only evidence the GPU is used
 
         def generate(prompt: str, temperature: float, max_tokens: int) -> str:
@@ -179,6 +192,7 @@ def translator(model_dir: str):
                 proc.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                proc.wait()
         log_path.unlink(missing_ok=True)
 
 
