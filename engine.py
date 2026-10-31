@@ -2,11 +2,14 @@
 
 The app itself is small. What it needs to make subtitles is installed on first run, after asking:
   1. Python 3.12 and the pipeline's packages, pinned with hashes in pipeline/requirements.txt
-     (`python3 dev.py lock`), into <data>/engine with uv;
-  2. the models you pick (pipeline/models.py), into <data>/models.
-<data> is ~/Library/Application Support/Pianpian unless you choose another folder. Downloads come from
-PyPI and python.org's builds, or from mirrors in mainland China when those are slow to reach.
-Settings live in ~/Library/Application Support/Pianpian/config.json. Standard library only.
+     (pipeline/requirements-windows.txt on Windows), into <data>/engine with uv;
+  2. on Windows, the pinned whisper.cpp and llama.cpp builds for this GPU (pipeline/runtimes.py),
+     into <data>/runtime;
+  3. the models you pick (pipeline/models.py), into <data>/models.
+<data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\Pianpian on Windows,
+unless you choose another folder. Downloads come from PyPI and python-build-standalone, or from mirrors
+in mainland China when those are slow to reach. Settings live in <data>/config.json.
+Standard library only.
 """
 import hashlib
 import json
@@ -20,23 +23,37 @@ from collections import deque
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+WINDOWS = sys.platform == "win32"            # the one platform check on the app side; the pipeline's is backend.py
 HERE = Path(__file__).resolve().parent
-FROZEN = getattr(sys, "frozen", False)                       # running inside Pianpian.app (tools/build_app.py)
+FROZEN = getattr(sys, "frozen", False)                       # running inside the packaged app (tools/build_app.py)
 if FROZEN:
     # Python writes .pyc files next to the scripts it imports. Inside the app that changes a signed bundle after it was
     # installed: `codesign --verify` fails from then on (measured: valid after build, invalid after one run, valid again
     # without the __pycache__ folders). The variable is inherited by the pipeline's own Python processes.
     sys.dont_write_bytecode = True
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+
+
+def _support() -> Path:
+    if os.environ.get("PIANPIAN_HOME"):
+        return Path(os.environ["PIANPIAN_HOME"])
+    if WINDOWS:
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Pianpian"
+    return Path.home() / "Library" / "Application Support" / "Pianpian"
+
+
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
-SUPPORT = Path(os.environ.get("PIANPIAN_HOME") or Path.home() / "Library" / "Application Support" / "Pianpian")
+SUPPORT = _support()
 CONFIG = SUPPORT / "config.json"
-REQS = HERE / "pipeline" / "requirements.txt"
+REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
-CHECK = "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm"
-ENGINE_MB = 650                                              # Python + packages on disk
+RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
+CHECK = ("import yt_dlp, pypinyin, jieba, zhconv, rapidocr_onnxruntime" if WINDOWS
+         else "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm")
+ENGINE_MB = 460 if WINDOWS else 650                          # Python + packages on disk (460 measured on Windows, 24 Oct 2026)
 # each source and its mirror in mainland China, with a file both serve to time them by
-PY_BUILD = "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz"
+PY_BUILD = ("20251014/cpython-3.12.12+20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz" if WINDOWS
+            else "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz")
 SOURCES = {
     "UV_PYTHON_INSTALL_MIRROR": ("https://github.com/astral-sh/python-build-standalone/releases/download/" + PY_BUILD,
                                  "https://registry.npmmirror.com/-/binary/python-build-standalone/" + PY_BUILD,
@@ -47,16 +64,26 @@ SOURCES = {
 
 sys.path.insert(0, str(HERE / "pipeline"))
 import models  # noqa: E402
+import runtimes  # noqa: E402  (the pinned Windows GPU builds; only used when WINDOWS)
+
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # the app is windowed: its own processes get no console
 
 
 # ---------------------------------------------------------------- settings
+def default_library() -> Path:
+    """Where videos live until someone chooses another folder in the setup."""
+    if WINDOWS:
+        return Path.home() / "Videos" / "Pianpian"
+    old = Path.home() / "Movies" / "mandarin"                # the library of the command-line days, if there is one
+    return old if old.exists() else Path.home() / "Movies" / "Pianpian"
+
+
 def config() -> dict:
     try:
         saved = json.loads(CONFIG.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         saved = {}
-    old = Path.home() / "Movies" / "mandarin"                # the library of the command-line days, if there is one
-    return {"library": saved.get("library") or str(old if old.exists() else Path.home() / "Movies" / "Pianpian"),
+    return {"library": saved.get("library") or str(default_library()),
             "data": saved.get("data") or str(SUPPORT), **{k: v for k, v in saved.items() if k not in ("library", "data")}}
 
 
@@ -68,8 +95,12 @@ def save_config(**changes) -> dict:
 
 
 def logs_dir() -> Path:
-    """macOS keeps app logs in ~/Library/Logs; with $PIANPIAN_HOME they stay next to everything else."""
-    d = SUPPORT / "logs" if os.environ.get("PIANPIAN_HOME") else Path.home() / "Library" / "Logs" / "Pianpian"
+    """macOS keeps app logs in ~/Library/Logs and Windows in <data>\logs; with $PIANPIAN_HOME they stay
+    next to everything else."""
+    if not WINDOWS and not os.environ.get("PIANPIAN_HOME"):
+        d = Path.home() / "Library" / "Logs" / "Pianpian"
+    else:
+        d = SUPPORT / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -87,13 +118,27 @@ def cache_dir() -> Path:
     return Path(os.environ.get("PIANPIAN_CACHE") or data_dir() / "cache")
 
 
+def runtime_dir() -> Path:
+    """The pinned whisper.cpp / llama.cpp builds (Windows)."""
+    return Path(os.environ.get("PIANPIAN_RUNTIME") or data_dir() / "runtime")
+
+
 def pipeline_env() -> dict:
-    """Where the pipeline finds the models and the dictionary: set for every job and setup step."""
-    return {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
+    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime: set for every
+    job and setup step."""
+    env = {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
+    if WINDOWS:
+        env["PIANPIAN_RUNTIME"] = str(runtime_dir())
+    return env
 
 
 def engine_dir() -> Path:
     return data_dir() / "engine"
+
+
+def engine_python(root: Path) -> Path:
+    """Where a virtual environment keeps its Python on this platform."""
+    return root / ("Scripts/python.exe" if WINDOWS else "bin/python")
 
 
 def python() -> str:
@@ -101,27 +146,36 @@ def python() -> str:
     .venv (`python3 dev.py engine`), else the one running this."""
     if os.environ.get("PIANPIAN_PYTHON"):
         return os.environ["PIANPIAN_PYTHON"]
-    for p in (engine_dir() / "bin" / "python", HERE / ".venv" / "bin" / "python"):
+    for p in (engine_python(engine_dir()), engine_python(HERE / ".venv")):
         if p.exists():
             return str(p)
     # inside the packaged app, sys.executable is the app itself: running it would open a second window
-    return str(engine_dir() / "bin" / "python") if FROZEN else sys.executable
+    return str(engine_python(engine_dir())) if FROZEN else sys.executable
 
 
 def uv() -> str | None:
-    """uv: the one inside the app, else one on this Mac."""
-    for p in (os.environ.get("PIANPIAN_UV"), Path(getattr(sys, "_MEIPASS", HERE)) / "uv", HERE / "bin" / "uv"):
+    """uv: the one inside the app, else one on this machine (or in the checkout's .venv)."""
+    exe = "uv.exe" if WINDOWS else "uv"
+    for p in (os.environ.get("PIANPIAN_UV"), Path(getattr(sys, "_MEIPASS", HERE)) / exe, HERE / "bin" / exe,
+              engine_python(HERE / ".venv").with_name(exe)):
         if p and Path(p).is_file() and os.access(p, os.X_OK):
             return str(p)
-    return shutil.which("uv")
+    return shutil.which(exe)
 
 
 def ffmpeg() -> str | None:
-    """Homebrew's ffmpeg, else the one in the engine (imageio-ffmpeg)."""
+    """A system ffmpeg (Homebrew, winget), else the one in the engine (imageio-ffmpeg)."""
     if exe := shutil.which("ffmpeg"):
         return exe
-    lib = Path(python()).parent.parent / "lib"
-    return next((str(f) for f in sorted(lib.glob("python3*/site-packages/imageio_ffmpeg/binaries/ffmpeg-*")) if os.access(f, os.X_OK)), None)
+    root = Path(python()).parent.parent
+    libs = [root / "Lib" / "site-packages", root / "lib" / "site-packages",
+            *sorted((root / "lib").glob("python3*/site-packages"))]
+    pattern = "imageio_ffmpeg/binaries/ffmpeg-*.exe" if WINDOWS else "imageio_ffmpeg/binaries/ffmpeg-*"
+    for lib in libs:
+        for f in sorted(lib.glob(pattern)):
+            if f.is_file() and os.access(f, os.X_OK):
+                return str(f)
+    return None
 
 
 def requirements_id() -> str:
@@ -139,7 +193,7 @@ def check() -> dict:
     """Can the engine's Python run the pipeline, and was it installed from today's requirements?"""
     py = python()
     try:
-        ok = subprocess.run([py, "-c", CHECK], capture_output=True, timeout=120).returncode == 0
+        ok = subprocess.run([py, "-c", CHECK], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         ok = False
     stamp = Path(py).parent.parent / ".pianpian-requirements"
@@ -177,9 +231,11 @@ class Setup:
         catalog = models.status()
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
+        runtime = runtimes.status() if WINDOWS else None
         os.environ["PIANPIAN_MODELS"] = str(models_dir())
         return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
-                "free": free_bytes(Path(cfg["data"])), "needed": not st["engine"] or not st["current"] or bool(missing)}
+                "runtime": runtime, "free": free_bytes(Path(cfg["data"])),
+                "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
 
     def start(self, library: str | None, data: str | None, want: list[str], cleanup: bool = False) -> None:
         with self.lock:
@@ -188,6 +244,9 @@ class Setup:
             save_config(library=library, data=data, models=want)
             self.state, self.error = "running", ""
             self.steps = [{"id": "engine", "label": "Engine: Python and the pipeline's tools", "state": "waiting", "done": 0, "total": 0}]
+            if WINDOWS:
+                r = runtimes.status()
+                self.steps.append({"id": "runtime", "label": r["label"], "state": "waiting", "done": 0, "total": r["size"]})
             self.steps += [{"id": m["id"], "label": m["about"], "state": "waiting", "done": 0, "total": m.get("size") or 0}
                            for m in models.status() if m["id"] in want]
             self.log.clear()
@@ -206,7 +265,9 @@ class Setup:
 
     def _exec(self, cmd: list[str], env: dict, sid: str) -> None:
         self._say("$ " + " ".join(Path(cmd[0]).name if i == 0 else c for i, c in enumerate(cmd)))
-        p = subprocess.Popen(cmd, env={**os.environ, **env}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        p = subprocess.Popen(cmd, env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **env},
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                             errors="replace", bufsize=1, creationflags=NO_WINDOW)
         for line in p.stdout:
             if line.startswith("@progress "):
                 try:
@@ -233,21 +294,27 @@ class Setup:
             if not (STATE["engine"] and STATE["current"]):
                 exe = uv()
                 if not exe:
-                    raise RuntimeError("uv was not found (it comes inside Pianpian.app; for the source version: brew install uv)")
+                    raise RuntimeError("uv was not found (it comes inside the app; for the source version install uv)")
                 self._step("engine", state="running")
                 eng = engine_dir()
-                if not (eng / "bin" / "python").exists():
+                py = engine_python(eng)
+                if not py.exists():
                     self._exec([exe, "venv", "--python", "3.12", str(eng)], env, "engine")
                 # sync, not install: the engine ends up exactly as pinned, packages no longer listed are removed
-                self._exec([exe, "pip", "sync", "--python", str(eng / "bin" / "python"), str(REQS)], env, "engine")
+                self._exec([exe, "pip", "sync", "--python", str(py), str(REQS)], env, "engine")
                 (eng / ".pianpian-requirements").write_text(requirements_id() + "\n")
                 self._say("fetching the dictionary (CC-CEDICT)")
-                self._exec([str(eng / "bin" / "python"), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",
+                self._exec([str(py), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",
                             str(HERE / "pipeline")], {"PYTHONWARNINGS": "ignore::SyntaxWarning", **pipeline_env()}, "engine")
             self._say("checking the engine (the first start prepares its packages: about a minute)")
             check()
             self._step("engine", state="done")
-            for s in self.steps[1:]:
+            if WINDOWS:                                     # whisper.cpp and llama.cpp for this GPU
+                r = runtimes.status()
+                self._step("runtime", state="running")
+                self._exec([python(), str(RUNTIMES_PY), "ensure"], pipeline_env(), "runtime")
+                self._step("runtime", state="done", done=r["size"])
+            for s in [x for x in self.steps if x["id"] not in ("engine", "runtime")]:
                 self._step(s["id"], state="running")
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])
@@ -298,3 +365,41 @@ def mirror_env() -> dict:
 
 
 SETUP = Setup()
+
+
+# ---------------------------------------------------------------- the desktop
+def reveal(path: Path) -> None:
+    """Show a folder in the file manager (Explorer on Windows, Finder on macOS)."""
+    if WINDOWS:
+        os.startfile(str(path))                             # noqa: S606  (Explorer, no shell command)
+    else:
+        subprocess.Popen(["open", str(path)])
+
+
+# the browsers yt-dlp can borrow a Bilibili login from (--cookies-from-browser): key -> macOS app
+BROWSERS = {"safari": "Safari", "chrome": "Google Chrome", "brave": "Brave Browser", "firefox": "Firefox",
+            "edge": "Microsoft Edge", "chromium": "Chromium", "opera": "Opera", "vivaldi": "Vivaldi"}
+
+
+def installed_browsers() -> list[str]:
+    """The browsers on this machine that yt-dlp can borrow a Bilibili login from."""
+    if not WINDOWS:                                         # macOS: the apps in /Applications (Safari is always there)
+        apps = [Path("/Applications"), Path.home() / "Applications"]
+        return [k for k, name in BROWSERS.items() if k == "safari" or any((a / f"{name}.app").exists() for a in apps)]
+    local = Path(os.environ.get("LOCALAPPDATA", ""))
+    pf = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+    pf86 = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+    homes = {
+        "chrome": [local / "Google/Chrome/Application/chrome.exe", pf / "Google/Chrome/Application/chrome.exe",
+                   pf86 / "Google/Chrome/Application/chrome.exe"],
+        "edge": [pf86 / "Microsoft/Edge/Application/msedge.exe", pf / "Microsoft/Edge/Application/msedge.exe"],
+        "brave": [local / "BraveSoftware/Brave-Browser/Application/brave.exe",
+                  pf / "BraveSoftware/Brave-Browser/Application/brave.exe"],
+        "firefox": [pf / "Mozilla Firefox/firefox.exe", pf86 / "Mozilla Firefox/firefox.exe"],
+        "chromium": [local / "Chromium/Application/chrome.exe", pf / "Chromium/Application/chrome.exe"],
+        "opera": [local / "Programs/Opera/opera.exe", pf / "Opera/opera.exe"],
+        "vivaldi": [local / "Vivaldi/Application/vivaldi.exe", pf / "Vivaldi/Application/vivaldi.exe"],
+    }
+    which = {"chrome": "chrome", "edge": "msedge", "brave": "brave", "firefox": "firefox",
+             "chromium": "chromium", "opera": "opera", "vivaldi": "vivaldi"}
+    return [k for k, paths in homes.items() if any(p.is_file() for p in paths) or shutil.which(which[k])]

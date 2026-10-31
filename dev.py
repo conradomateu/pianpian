@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Pianpian's task runner: the same commands on your Mac and in CI.
+"""Pianpian's task runner: the same commands on macOS, Windows and in CI.
 
-    python3 dev.py engine     # the pipeline's environment (.venv, group "runtime"): server.py finds it
-    python3 dev.py version    # the next release's version and why: patch, minor or major, from the commits since the last one
-    python3 dev.py lock       # pin the engine's packages (pipeline/requirements.txt) and the models (pipeline/models.lock.json)
-    python3 dev.py check      # lint + test: what CI runs on every push
-    python3 dev.py lint       # ruff (real mistakes only) + node --check on the JavaScript
-    python3 dev.py test       # pytest (tests/)
-    python3 dev.py serve      # the app at http://127.0.0.1:8770
-    python3 dev.py app        # a dev Pianpian.app in ~/Applications that runs this checkout (macOS)
-    python3 dev.py build      # the real Pianpian.app and Pianpian-macOS.zip in dist/ (what releases ship)
-    python3 dev.py site       # the website into _site/ (landing page + live demo)
-    python3 dev.py preview    # build it and serve it at http://127.0.0.1:8765
-    python3 dev.py shots      # README and website screenshots from the demo (needs Chrome or Brave)
+    python dev.py engine      # the pipeline's environment (.venv, group "runtime"): server.py finds it
+    python dev.py version     # the next release's version and why: patch, minor or major, from the commits since the last one
+    python dev.py lock        # pin the engine's packages (both platforms) and the models (pipeline/models.lock.json)
+    python dev.py check       # lint + test: what CI runs on every push
+    python dev.py lint        # ruff (real mistakes only) + node --check on the JavaScript
+    python dev.py test        # pytest (tests/)
+    python dev.py serve       # the app at http://127.0.0.1:8770
+    python dev.py app         # a dev app that runs this checkout (macOS: ~/Applications; Windows: launcher.py)
+    python dev.py build       # the real Pianpian.app and Pianpian-macOS.zip in dist/ (what releases ship)
+    python dev.py site        # the website into _site/ (landing page + live demo)
+    python dev.py preview     # build it and serve it at http://127.0.0.1:8765
+    python dev.py shots       # README and website screenshots from the demo (needs Chrome or Brave)
 
-Standard library only. Tools run through `uv run --group dev` (pyproject.toml). From China, set
-UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple first.
+Standard library only. Tools run through uv (pyproject.toml); uv is found on PATH or in .venv. From
+China, set UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple first.
 """
 import shutil
 import subprocess
@@ -23,6 +23,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+WINDOWS = sys.platform == "win32"
+UV = (shutil.which("uv.exe" if WINDOWS else "uv")
+      or str(ROOT / ".venv" / ("Scripts/uv.exe" if WINDOWS else "bin/uv")))
 
 
 def run(*cmd: str) -> None:
@@ -32,7 +35,7 @@ def run(*cmd: str) -> None:
 
 
 def lint() -> None:
-    run("uv", "run", "--group", "dev", "ruff", "check", ".")
+    run(UV, "run", "--group", "dev", "ruff", "check", ".")
     if shutil.which("node"):
         for js in sorted((ROOT / "assets").glob("*.js")):
             run("node", "--check", str(js.relative_to(ROOT)))
@@ -41,29 +44,39 @@ def lint() -> None:
 
 
 def test() -> None:
-    run("uv", "run", "--group", "dev", "pytest", "-q")
+    run(UV, "run", "--group", "dev", "pytest", "-q")
 
 
 def lock() -> None:
-    """pipeline/requirements.txt: the engine's packages for Apple Silicon (where it runs), pinned with hashes,
-    which hold whether they come from PyPI or a mirror; then pipeline/models.lock.json, every model file pinned."""
-    out = ROOT / "pipeline" / "requirements.txt"
-    run("uv", "pip", "compile", "pyproject.toml", "--group", "runtime", "--python-version", "3.12", "--python-platform", "aarch64-apple-darwin",
-        "--generate-hashes", "--no-annotate", "--no-header", "-q", "-o", str(out.relative_to(ROOT)))
-    out.write_text('# The engine\'s packages, pinned with hashes. Made by `python3 dev.py lock` from pyproject.toml (group "runtime").\n'
-                   + out.read_text(encoding="utf-8"), encoding="utf-8")
+    """Pin both platforms' packages, then their model files. Both package targets were resolved from
+    macOS on 31 Oct 2026; full model-lock regeneration there is not tested. The hashes hold whether
+    packages come from PyPI or a mirror."""
+    for platform, name, note in (("aarch64-apple-darwin", "requirements.txt", ""),
+                                 ("x86_64-pc-windows-msvc", "requirements-windows.txt", " for Windows x64")):
+        out = ROOT / "pipeline" / name
+        run(UV, "pip", "compile", "pyproject.toml", "--group", "runtime", "--python-version", "3.12", "--python-platform", platform,
+            "--generate-hashes", "--no-annotate", "--no-header", "-q", "-o", str(out.relative_to(ROOT)))
+        out.write_text("# The engine's packages" + note + ", pinned with hashes. Made by `python dev.py lock` from pyproject.toml (group \"runtime\").\n"
+                       + out.read_text(encoding="utf-8"), encoding="utf-8")
     run(sys.executable, "pipeline/models.py", "lock")          # and every model file, pinned on both sites
+
+
+def app() -> None:
+    if WINDOWS:
+        run(UV, "run", "--group", "runtime", "--group", "desktop", "python", "launcher.py")
+    else:
+        run("sh", "tools/make_app.sh")
 
 
 TASKS = {
     "lint": lint,
     "test": test,
     "check": lambda: (lint(), test()),
-    "engine": lambda: run("uv", "sync", "--group", "runtime"),
+    "engine": lambda: run(UV, "sync", "--group", "runtime", *(["--group", "desktop"] if WINDOWS else [])),
     "lock": lock,
     "version": lambda: run(sys.executable, "tools/next_version.py"),
     "serve": lambda: run(sys.executable, "server.py"),
-    "app": lambda: run("sh", "tools/make_app.sh"),
+    "app": app,
     "build": lambda: run(sys.executable, "tools/build_app.py"),
     "site": lambda: run(sys.executable, "tools/build_site.py"),
     "preview": lambda: run(sys.executable, "tools/build_site.py", "--serve"),

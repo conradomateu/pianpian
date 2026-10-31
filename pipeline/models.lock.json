@@ -71,6 +71,32 @@
      }
     ]
    }
+  },
+  "win32": {
+   "ggerganov/whisper.cpp": {
+    "huggingface": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "modelscope_repo": "OllmOne/whisper.cpp",
+    "files": [
+     {
+      "name": "ggml-large-v3-turbo.bin",
+      "size": 1624555275,
+      "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+      "modelscope": "e81a1e8a58aad0ea788ea2126a69ebaf72c7d55e"
+     }
+    ]
+   },
+   "tencent/Hy-MT2-1.8B-GGUF": {
+    "huggingface": "a0c709d9fac510f2c807aa3af52872340dc37a4a",
+    "modelscope_repo": "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF",
+    "files": [
+     {
+      "name": "Hy-MT2-1.8B-Q4_K_M.gguf",
+      "size": 1133080448,
+      "sha256": "dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699",
+      "modelscope": "ef1d40b8b315575d30d1eb6579996130b8fc0bb2"
+     }
+    ]
+   }
   }
  }
 }

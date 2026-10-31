@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "pipeline")]
 import backend  # noqa: E402
 import backend_mac  # noqa: E402  (imports on any OS: the engines load inside the functions)
+import backend_win  # noqa: E402  (same: runtimes and srt_tool are stdlib-only imports)
 import models  # noqa: E402
 import srt_tool  # noqa: E402
 import translate_srt  # noqa: E402
@@ -122,6 +123,225 @@ def test_mac_ocr_runs_the_swift_helper(monkeypatch):
     assert seen[0][-1] == "frames" and ("ocr_frames" in seen[0][0] or seen[0][0] == "swift")
 
 
+# ---------------------------------------------------------- the Windows backend (the engines are faked)
+def _cpp_json(base: Path) -> None:
+    """What whisper.cpp -ojf writes: millisecond offsets and tokens, with control tokens mixed in."""
+    Path(str(base) + ".json").write_text(json.dumps({"transcription": [{
+        "offsets": {"from": 0, "to": 1050}, "text": "你好 我叫",
+        "tokens": [{"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},
+                   {"text": "你好", "offsets": {"from": 0, "to": 530}},
+                   {"text": " 我", "offsets": {"from": 530, "to": 790}},
+                   {"text": "叫", "offsets": {"from": 790, "to": 1050}},
+                   {"text": "[_TT_1]", "offsets": {"from": 1050, "to": 1050}}]}]}), encoding="utf-8")
+
+
+def _model_dir(tmp_path: Path, name: str) -> str:
+    d = tmp_path / "model"
+    d.mkdir(exist_ok=True)
+    (d / name).write_bytes(b"weights")
+    return str(d)
+
+
+def _out(tmp_path: Path) -> tuple[Path, Path]:
+    """The folder transcribe() writes to (the contract: only the srt and the words json may be left in it)."""
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    return out / "zh.long.srt", out / "zh.whisper.json"
+
+
+def test_win_transcribe_writes_what_srt_tool_reads(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, check):
+        calls.append(cmd)
+        _cpp_json(Path(cmd[cmd.index("-of") + 1]))
+
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "whisper-cli.exe")
+    monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
+    srt, words = _out(tmp_path)
+    backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
+
+    assert_transcribe_output(srt, words)
+    assert [c for c, _, _ in srt_tool.char_times(words)] == list("你好我叫")
+    cmd = calls[0]
+    assert cmd[cmd.index("-m") + 1].endswith(backend_win.WHISPER_MODEL)
+    assert cmd[cmd.index("-mc") + 1] == "0"      # no conditioning on previous text, like the MLX path
+
+
+def test_win_transcribe_retries_on_cpu_when_the_gpu_build_fails(monkeypatch, tmp_path):
+    runs = []
+
+    def fake_run(cmd, check):
+        runs.append(cmd)
+        if len(runs) == 1:
+            raise subprocess.CalledProcessError(1, cmd)     # the CUDA build won't start
+        _cpp_json(Path(cmd[cmd.index("-of") + 1]))
+
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
+    srt, words = _out(tmp_path)
+    backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
+    assert_transcribe_output(srt, words)
+    assert len(runs) == 2 and "-ng" not in runs[0] and "-ng" in runs[1]   # GPU, then the CPU build
+
+
+class _Resp:
+    def __init__(self, payload=None, status=200):
+        self.status, self.payload = status, payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+class _Proc:
+    def __init__(self, cmd):
+        self.cmd = cmd
+        self.terminated = False
+
+    def poll(self):
+        return None
+
+    def terminate(self):
+        self.terminated = True
+
+    def wait(self, timeout=None):
+        return 0
+
+    def kill(self):
+        pass
+
+
+def _fake_http(posts):
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if url.endswith("/health"):
+            return _Resp(status=200)
+        posts.append(json.loads(req.data))
+        return _Resp({"choices": [{"message": {"content": "Hello"}}]})
+    return fake_urlopen
+
+
+def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tmp_path):
+    posts, procs = [], []
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "llama-server.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
+    monkeypatch.setattr(backend_win, "urlopen", _fake_http(posts))
+    with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+        assert generate("你好", 0.3, 52) == "Hello"
+    cmd = procs[0].cmd
+    assert "--jinja" in cmd and cmd[cmd.index("-ngl") + 1] == "999"       # the GGUF's chat template, all layers on the GPU
+    assert procs[0].terminated                                            # the server is stopped afterwards
+    body = posts[0]
+    assert body["messages"] == [{"role": "user", "content": "你好"}]
+    # the MLX path's sampling values reach the server: 0.3 then greedy (translate_srt), top_p/top_k/penalty of the card
+    assert (body["temperature"], body["top_p"], body["top_k"], body["repeat_penalty"], body["max_tokens"]) == (0.3, 0.6, 20, 1.05, 52)
+
+
+def test_win_translator_falls_back_to_cpu(monkeypatch, tmp_path):
+    posts, procs = [], []
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "vulkan")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu/llama-server.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu/llama-server.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
+    ready = iter([False, True])                                           # the Vulkan build never answers /health
+    monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: next(ready))
+    monkeypatch.setattr(backend_win, "urlopen", _fake_http(posts))
+    with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+        assert generate("你好", 0.0, 10) == "Hello"
+    assert procs[0].cmd[procs[0].cmd.index("-ngl") + 1] == "999"
+    assert procs[1].cmd[procs[1].cmd.index("-ngl") + 1] == "0" and procs[1].cmd[0] == "cpu/llama-server.exe"
+
+
+def test_win_translator_retries_a_gpu_launch_error(monkeypatch, tmp_path):
+    calls, procs = [], []
+
+    def start(cmd, **kw):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise OSError(193, "not a valid Win32 application")
+        procs.append(_Proc(cmd))
+        return procs[-1]
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win, "urlopen", _fake_http([]))
+    with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+        assert generate("你好", 0.0, 10) == "Hello"
+    assert [cmd[0] for cmd in calls] == ["gpu.exe", "cpu.exe"]
+    assert procs[0].terminated and not list(tmp_path.glob("*.log"))
+
+
+@pytest.mark.parametrize("failure", ["launch", "health"])
+def test_win_translator_cleans_up_when_cpu_retry_fails(monkeypatch, tmp_path, failure):
+    procs = []
+
+    def start(cmd, **kw):
+        if cmd[0] == "cpu.exe" and failure == "launch":
+            raise OSError("CPU launch failed")
+        procs.append(_Proc(cmd))
+        return procs[-1]
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: False)
+    with pytest.raises(OSError if failure == "launch" else SystemExit):
+        with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
+            pytest.fail("a failed server must not yield a translator")
+    assert procs and all(p.terminated for p in procs)
+    assert not list(tmp_path.glob("*.log"))
+
+
+def test_win_translator_retains_the_offloaded_layer_count(monkeypatch, tmp_path, capsys):
+    def start(cmd, stdout, **kw):
+        stdout.write("ggml_cuda_init: found 1 CUDA device\nllama_model_load: offloaded 33/33 layers to GPU\n")
+        stdout.flush()
+        return _Proc(cmd)
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win, "urlopen", _fake_http([]))
+    with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
+        pass
+    assert "offloaded 33/33 layers to GPU" in capsys.readouterr().out
+    assert not list(tmp_path.glob("*.log"))
+
+
+def test_win_ocr_reads_frames_with_rapidocr(monkeypatch, tmp_path):
+    for name in ("00001.png", "00002.png"):
+        (tmp_path / name).write_bytes(b"png")
+    rocr = type(sys)("rapidocr_onnxruntime")
+
+    class FakeRapidOCR:
+        def __call__(self, path):
+            return [([[0, 20], [10, 20], [10, 30], [0, 30]], "第二行", 0.9),
+                    ([[0, 0], [10, 0], [10, 10], [0, 10]], "第一行", 0.9),
+                    ([[0, 40], [10, 40], [10, 50], [0, 50]], "噪声", 0.4)], 1.0
+
+    rocr.RapidOCR = FakeRapidOCR
+    monkeypatch.setitem(sys.modules, "rapidocr_onnxruntime", rocr)
+    out = backend_win.ocr(str(tmp_path))
+    assert_ocr_lines(out)
+    assert out.splitlines()[0] == "00001.png\t第一行 第二行"              # reading order, and the unsure box dropped
+
+
 def test_catalog_and_lock_follow_the_platform(monkeypatch, tmp_path):
     lockfile = tmp_path / "models.lock.json"
     lockfile.write_text(json.dumps({"platforms": {"darwin": {"a/mac": {"files": []}}, "win32": {"b/win": {"files": []}}}}))
@@ -129,7 +349,11 @@ def test_catalog_and_lock_follow_the_platform(monkeypatch, tmp_path):
         monkeypatch.setattr(backend, "NAME", "win32")
         importlib.reload(models)
         monkeypatch.setattr(models, "LOCKFILE", lockfile)
-        assert models.CATALOG == [] and set(models.lock()) == {"b/win"}      # the Mac rows are not offered on Windows
+        win = {m["id"] for m in models.ROWS if m["platform"] == "win32"}
+        assert {m["id"] for m in models.CATALOG} == win      # the Mac rows are not offered on Windows
+        assert set(models.lock()) == {"b/win"}
+        assert models.default("transcribe") == "ggerganov/whisper.cpp"
+        monkeypatch.setattr(models, "CATALOG", [])
         with pytest.raises(LookupError):
             models.default("transcribe")
         monkeypatch.setattr(models, "CATALOG", [{"id": "b/win", "platform": "win32", "task": "transcribe"}])
@@ -137,27 +361,101 @@ def test_catalog_and_lock_follow_the_platform(monkeypatch, tmp_path):
     finally:
         monkeypatch.undo()
         importlib.reload(models)
-    assert models.default("transcribe") == "mlx-community/whisper-large-v3-turbo"
-    assert models.default("translate") == "mlx-community/Hy-MT2-1.8B-4bit"
+    assert {m["id"] for m in models.CATALOG} == {m["id"] for m in models.ROWS if m["platform"] == backend.NAME}
+    for task in ("transcribe", "translate"):
+        assert models.default(task) == next(m["id"] for m in models.CATALOG if m["task"] == task)
 
 
 def test_mac_installs_keep_their_models():
     # .complete holds this fingerprint: it changes only when a model update should make every Mac download again
-    lock = models.lock()
+    lock = json.loads(models.LOCKFILE.read_text(encoding="utf-8"))["platforms"]["darwin"]
     assert models.lock_id(lock["mlx-community/whisper-large-v3-turbo"]) == "950cefa3ce3484fb"
     assert models.lock_id(lock["mlx-community/Hy-MT2-1.8B-4bit"]) == "b12bda06891875f9"
 
 
-def test_make_lock_keeps_the_other_platforms(monkeypatch, tmp_path):
+def test_make_lock_pins_every_platform(monkeypatch, tmp_path):
     lockfile = tmp_path / "models.lock.json"
     lockfile.write_text(json.dumps({"platforms": {"win32": {"b/win": {"files": []}}}}))
-    ms = {"Data": {"Files": [{"Type": "blob", "Path": "config.json", "Size": 2, "Sha256": "aa", "Revision": "r1"}]}}
-    hf = {"sha": "h1", "siblings": [{"rfilename": "config.json"}]}
+    names = {"ggerganov/whisper.cpp": "ggml-large-v3-turbo.bin", "OllmOne/whisper.cpp": "ggml-large-v3-turbo.bin",
+             "tencent/Hy-MT2-1.8B-GGUF": "Hy-MT2-1.8B-Q4_K_M.gguf", "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF": "Hy-MT2-1.8B-Q4_K_M.gguf"}
+
+    def fake(url, timeout):
+        name = next((n for repo, n in names.items() if repo in url), "config.json")
+        if "modelscope" in url:
+            body = {"Data": {"Files": [{"Type": "blob", "Path": name, "Size": 2, "Sha256": "aa", "Revision": "r1"}]}}
+        else:
+            body = {"sha": "h1", "siblings": [{"rfilename": name, "size": 2, "lfs": {"sha256": "aa"}}]}
+        return io.BytesIO(json.dumps(body).encode())
+
     monkeypatch.setattr(models, "LOCKFILE", lockfile)
-    monkeypatch.setattr(models, "urlopen", lambda url, timeout: io.BytesIO(json.dumps(ms if "modelscope" in url else hf).encode()))
+    monkeypatch.setattr(models, "urlopen", fake)
     out = models.make_lock()["platforms"]
-    assert out["win32"] == {"b/win": {"files": []}}
-    assert {m["id"] for m in models.CATALOG} == set(out["darwin"])
+    assert set(out) == {"darwin", "win32"} and "b/win" not in out["win32"]
+    for m in models.ROWS:
+        entry = out[m["platform"]][m["id"]]
+        assert entry["huggingface"] == "h1"
+        assert entry["files"] and entry["files"][0]["modelscope"] == "r1"
+        assert entry.get("modelscope_repo") == m.get("modelscope_repo")
+
+
+def test_windows_models_try_modelscope_before_hugging_face():
+    entry = {"huggingface": "hf-rev", "modelscope_repo": "OllmOne/whisper.cpp",
+             "files": [{"name": "ggml-large-v3-turbo.bin", "modelscope": "ms-rev"}]}
+    urls = models.sources("ggerganov/whisper.cpp", entry, entry["files"][0])
+    assert urls == [
+        "https://www.modelscope.cn/models/OllmOne/whisper.cpp/resolve/ms-rev/ggml-large-v3-turbo.bin",
+        "https://www.modelscope.cn/models/OllmOne/whisper.cpp/resolve/master/ggml-large-v3-turbo.bin",
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/hf-rev/ggml-large-v3-turbo.bin",
+        "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/hf-rev/ggml-large-v3-turbo.bin",
+    ]
+    windows = json.loads(models.LOCKFILE.read_text(encoding="utf-8"))["platforms"]["win32"]
+    assert windows["ggerganov/whisper.cpp"]["modelscope_repo"] == "OllmOne/whisper.cpp"
+    assert windows["tencent/Hy-MT2-1.8B-GGUF"]["modelscope_repo"] == "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF"
+    assert all(f.get("modelscope") for entry in windows.values() for f in entry["files"])
+
+
+def test_fetch_starts_over_when_the_part_file_is_too_long(monkeypatch, tmp_path):
+    # seen 31 Oct 2026: two app instances appended to one .part, which grew past the pinned size and
+    # every resume then failed with HTTP 416 — the file must be restarted, not resumed
+    from urllib.error import HTTPError
+    data = b"x" * 100
+    seen = []
+
+    def fake(req, timeout):
+        seen.append(dict(req.headers))
+        if "Range" in req.headers:
+            raise HTTPError(req.full_url, 416, "Range Not Satisfiable", {}, None)
+        return io.BytesIO(data)
+
+    monkeypatch.setattr(models, "urlopen", fake)
+    target = tmp_path / "f.bin"
+    (tmp_path / "f.bin.part").write_bytes(b"y" * 150)          # longer than the pinned 100 bytes
+    models.fetch("https://example.com/f.bin", target, 100, "test")
+    assert target.read_bytes() == data and seen == [{}]        # restarted, without a Range header
+
+    target.unlink()
+    (tmp_path / "f.bin.part").write_bytes(data)                # fetched whole, never renamed
+    models.fetch("https://example.com/f.bin", target, 100, "test")
+    assert target.read_bytes() == data and seen == [{}]        # no request at all
+
+
+def test_download_restarts_after_416_and_still_checks_the_hash(monkeypatch, tmp_path, capsys):
+    from urllib.error import HTTPError
+    good, bad = b"pinned bytes", b"other bytes!"
+    seen = []
+
+    def fake(req, timeout):
+        seen.append(dict(req.headers))
+        if "Range" in req.headers:
+            raise HTTPError(req.full_url, 416, "Range Not Satisfiable", {}, None)
+        return io.BytesIO(bad if len(seen) == 2 else good)
+
+    monkeypatch.setattr(models, "urlopen", fake)
+    target = tmp_path / "f.bin"
+    target.with_suffix(".bin.part").write_bytes(good[:3])
+    models.download(["https://example.com/f.bin"], target, len(good), models.hashlib.sha256(good).hexdigest(), "test")
+    assert seen == [{"Range": "bytes=3-"}, {}, {}]
+    assert target.read_bytes() == good and "checksum does not match" in capsys.readouterr().out
 
 
 def test_download_skips_a_source_with_the_wrong_bytes(monkeypatch, tmp_path, capsys):

@@ -6,7 +6,7 @@
     python pipeline/study.py ~/Movies/clip.mp4                            # a file: works in clip_study/
 
     AUTO_EN=1     also translate to English with the local model (FORCE_EN=1 replaces existing English)
-    HARDSUBS=1    the Chinese is burned into the picture: read it with OCR (macOS Vision) instead of Whisper
+    HARDSUBS=1    the Chinese is burned into the picture: read it with OCR (macOS Vision, Windows RapidOCR) instead of Whisper
     RESPLIT=1 SPLIT_MAX=12   cut the lines again (0 = as transcribed)
 
 Run it with the app's Python environment (pyproject.toml, group "runtime"): every step calls the
@@ -133,9 +133,9 @@ def get_video(src: str, browser: str) -> Path:
 
 
 def transcribe(video: str) -> None:
+    run(ffmpeg(), "-loglevel", "error", "-y", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "audio.wav")
     model = models.ensure(MODEL)
     print(f"transcribing with {MODEL}", flush=True)
-    run(ffmpeg(), "-loglevel", "error", "-y", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "audio.wav")
     backend.impl().transcribe(Path("audio.wav"), model, Path("zh.long.srt"), Path("zh.whisper.json"))
     Path("audio.wav").unlink(missing_ok=True)
     Path(".from-whisper").touch()
@@ -190,7 +190,7 @@ def main() -> None:
             print(f"using the platform's subtitles: {existing}", flush=True)
             shutil.copy2(existing, "zh.long.srt")
         elif hardsubs:
-            print("Chinese is burned into the picture: reading it with macOS OCR (check zh.srt afterwards)", flush=True)
+            print("Chinese is burned into the picture: reading it with OCR (check zh.srt afterwards)", flush=True)
             run(PY, HERE / "hardsubs_to_srt.py", video, "zh.long.srt", "--crop", "0.15", "--fps", "4")
         else:
             print("no Chinese subtitles found", flush=True)
