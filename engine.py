@@ -2,8 +2,10 @@
 
 The app itself is small. What it needs to make subtitles is installed on first run, after asking:
   1. Python 3.12 and the pipeline's packages, pinned with hashes in pipeline/requirements.txt
-     (`python3 dev.py lock`), into <data>/engine with uv;
-  2. the models you pick (pipeline/models.py), into <data>/models.
+     (pipeline/requirements-windows.txt on Windows), into <data>/engine with uv;
+  2. on Windows, the pinned whisper.cpp and llama.cpp builds for this GPU (pipeline/runtimes.py),
+     into <data>/runtime;
+  3. the models you pick (pipeline/models.py), into <data>/models.
 <data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\Pianpian on Windows,
 unless you choose another folder. Downloads come from PyPI and python.org's builds, or from mirrors
 in mainland China when those are slow to reach. Settings live in <data>/config.json.
@@ -43,12 +45,15 @@ def _support() -> Path:
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
 SUPPORT = _support()
 CONFIG = SUPPORT / "config.json"
-REQS = HERE / "pipeline" / "requirements.txt"
+REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
-CHECK = "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm"
-ENGINE_MB = 650                                              # Python + packages on disk
+RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
+CHECK = ("import yt_dlp, pypinyin, jieba, zhconv, rapidocr_onnxruntime" if WINDOWS
+         else "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm")
+ENGINE_MB = 460 if WINDOWS else 650                          # Python + packages on disk (460 measured on Windows, 24 Oct 2026)
 # each source and its mirror in mainland China, with a file both serve to time them by
-PY_BUILD = "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz"
+PY_BUILD = ("20251014/cpython-3.12.12+20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz" if WINDOWS
+            else "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz")
 SOURCES = {
     "UV_PYTHON_INSTALL_MIRROR": ("https://github.com/astral-sh/python-build-standalone/releases/download/" + PY_BUILD,
                                  "https://registry.npmmirror.com/-/binary/python-build-standalone/" + PY_BUILD,
@@ -59,6 +64,9 @@ SOURCES = {
 
 sys.path.insert(0, str(HERE / "pipeline"))
 import models  # noqa: E402
+import runtimes  # noqa: E402  (the pinned Windows GPU builds; only used when WINDOWS)
+
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # the app is windowed: its own processes get no console
 
 
 # ---------------------------------------------------------------- settings
@@ -110,9 +118,18 @@ def cache_dir() -> Path:
     return Path(os.environ.get("PIANPIAN_CACHE") or data_dir() / "cache")
 
 
+def runtime_dir() -> Path:
+    """The pinned whisper.cpp / llama.cpp builds (Windows)."""
+    return Path(os.environ.get("PIANPIAN_RUNTIME") or data_dir() / "runtime")
+
+
 def pipeline_env() -> dict:
-    """Where the pipeline finds the models and the dictionary: set for every job and setup step."""
-    return {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
+    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime: set for every
+    job and setup step."""
+    env = {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
+    if WINDOWS:
+        env["PIANPIAN_RUNTIME"] = str(runtime_dir())
+    return env
 
 
 def engine_dir() -> Path:
@@ -176,7 +193,7 @@ def check() -> dict:
     """Can the engine's Python run the pipeline, and was it installed from today's requirements?"""
     py = python()
     try:
-        ok = subprocess.run([py, "-c", CHECK], capture_output=True, timeout=120).returncode == 0
+        ok = subprocess.run([py, "-c", CHECK], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         ok = False
     stamp = Path(py).parent.parent / ".pianpian-requirements"
@@ -214,9 +231,11 @@ class Setup:
         catalog = models.status()
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
+        runtime = runtimes.status() if WINDOWS else None
         os.environ["PIANPIAN_MODELS"] = str(models_dir())
         return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
-                "free": free_bytes(Path(cfg["data"])), "needed": not st["engine"] or not st["current"] or bool(missing)}
+                "runtime": runtime, "free": free_bytes(Path(cfg["data"])),
+                "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
 
     def start(self, library: str | None, data: str | None, want: list[str], cleanup: bool = False) -> None:
         with self.lock:
@@ -225,6 +244,9 @@ class Setup:
             save_config(library=library, data=data, models=want)
             self.state, self.error = "running", ""
             self.steps = [{"id": "engine", "label": "Engine: Python and the pipeline's tools", "state": "waiting", "done": 0, "total": 0}]
+            if WINDOWS:
+                r = runtimes.status()
+                self.steps.append({"id": "runtime", "label": r["label"], "state": "waiting", "done": 0, "total": r["size"]})
             self.steps += [{"id": m["id"], "label": m["about"], "state": "waiting", "done": 0, "total": m.get("size") or 0}
                            for m in models.status() if m["id"] in want]
             self.log.clear()
@@ -245,7 +267,7 @@ class Setup:
         self._say("$ " + " ".join(Path(cmd[0]).name if i == 0 else c for i, c in enumerate(cmd)))
         p = subprocess.Popen(cmd, env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **env},
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                             errors="replace", bufsize=1)
+                             errors="replace", bufsize=1, creationflags=NO_WINDOW)
         for line in p.stdout:
             if line.startswith("@progress "):
                 try:
@@ -287,7 +309,12 @@ class Setup:
             self._say("checking the engine (the first start prepares its packages: about a minute)")
             check()
             self._step("engine", state="done")
-            for s in self.steps[1:]:
+            if WINDOWS:                                     # whisper.cpp and llama.cpp for this GPU
+                r = runtimes.status()
+                self._step("runtime", state="running")
+                self._exec([python(), str(RUNTIMES_PY), "ensure"], pipeline_env(), "runtime")
+                self._step("runtime", state="done", done=r["size"])
+            for s in [x for x in self.steps if x["id"] not in ("engine", "runtime")]:
                 self._step(s["id"], state="running")
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])

@@ -16,3 +16,14 @@ jobs:
         with:
           node-version: 22
       - run: python3 dev.py check
+
+  check-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --group runtime --group dev
+      - run: python dev.py check

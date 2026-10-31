@@ -1,43 +1,54 @@
 # How Pianpian fits together
 
 ```
-Pianpian.app (launcher.py, pywebview window)
+macOS: Pianpian.app (launcher.py, pywebview/WebKit) · Windows: launcher.py (pywebview/WebView2)
   └── server.py   127.0.0.1 only, Python standard library
         ├── serves   app.html · assets/ · the library folder (with byte ranges, so video can seek)
         └── runs     pipeline/study.py with the engine's Python   (one job at a time, live log)
                        └── yt-dlp · ffmpeg · srt_tool.py · the platform's backend (backend.py: Whisper, OCR, Hy-MT2)
 ```
 
-`python3 server.py` runs the same server in a browser tab, without the window. `app.html` opened
-straight from disk still plays video files dropped on it; it only needs the server to make subtitles.
+`python3 server.py` (or `python server.py` on Windows) runs the same server in a browser tab, without
+the window. `app.html` opened straight from disk still plays video files dropped on it; it only needs
+the server to make subtitles.
 
 ## Two Python environments
 
 - **The app** (`launcher.py`, `server.py`) needs only the standard library plus pywebview for the window.
 - **The engine** runs the pipeline. It is the `runtime` dependency group in `pyproject.toml`: pypinyin,
-  jieba, zhconv, yt-dlp, imageio-ffmpeg (a static ffmpeg, so Homebrew is not needed), mlx-whisper and
-  mlx-lm. torch is left out on purpose (mlx-whisper lists it for a conversion tool the app never uses),
-  which keeps the engine at about 700 MB.
+  jieba, zhconv, yt-dlp, imageio-ffmpeg (a static ffmpeg, so no system ffmpeg is needed), and on
+  Windows RapidOCR. On macOS it adds mlx-whisper and mlx-lm; torch is left out on purpose (mlx-whisper
+  lists it for a conversion tool the app never uses), which keeps that engine at about 700 MB. The
+  Windows engine is about 460 MB (measured 24 Oct 2026) and installs neither MLX nor llama-cpp-python.
+- **The Windows GPU runtime** is not a Python package: `pipeline/runtimes.py` downloads pinned
+  whisper.cpp and llama.cpp Windows builds (CUDA for NVIDIA — the CUDA 12.4 builds, tested with driver
+  591.74 — Vulkan for llama.cpp on other GPUs, CPU fallback) into `<data>/runtime` (`$PIANPIAN_RUNTIME`)
+  and checks every archive against its SHA-256. whisper.cpp has no Vulkan asset in its official release
+  yet, so Vulkan-only machines run speech on the CPU. A GPU build that won't start is retried once with
+  the CPU build (`backend_win.py`). Downloads come from GitHub; `PIANPIAN_GITHUB_MIRROR` is an opt-in
+  prefix for networks where GitHub is slow — there is no default proxy, because one would see the
+  download whenever GitHub fails, and the SHA-256 pins are what keep the bytes safe.
 
 `engine.python()` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
-`~/Library/Application Support/Pianpian/engine`, the repository's `.venv` (`uv sync --group runtime`),
-then the Python running the server.
+`<data>/engine` (`Scripts/python.exe` on Windows, `bin/python` on macOS), the repository's `.venv`
+(`uv sync --group runtime`), then the Python running the server.
 
 ## First run, updates and problems
 
-- `engine.py` holds the paths and settings (`~/Library/Application Support/Pianpian/config.json`) and runs
-  the setup that `setup.html` shows: Python 3.12 and the packages pinned with hashes in
-  `pipeline/requirements.txt`, the dictionary, then the models you pick. Each source is timed against its
-  mirror in mainland China and the faster one is used. The engine remembers which requirements it was
-  installed from, so a release that changes them sends you back to the setup page, which then says
-  "An update for Pianpian" and only fetches what changed (`uv pip sync`).
+- `engine.py` holds the paths and settings (`~/Library/Application Support/Pianpian/config.json` on
+  macOS, `%LOCALAPPDATA%\Pianpian\config.json` on Windows) and runs the setup that `setup.html` shows:
+  Python 3.12 and the packages pinned with hashes in `pipeline/requirements.txt` (or
+  `pipeline/requirements-windows.txt`), the GPU runtime on Windows, the dictionary, then the models you
+  pick. Each source is timed against its mirror in mainland China and the faster one is used. The engine
+  remembers which requirements it was installed from, so a release that changes them sends you back to
+  the setup page, which then says "An update for Pianpian" and only fetches what changed (`uv pip sync`).
 - `updates.py` asks GitHub for the latest release at most once a day and shows a card in the library
   when there is a newer one. yt-dlp is updated on its own at most once a week, and from the job card
   when a download fails because the site changed.
 - `report.py` turns a failed job's log into a short code and a hint, and builds the Report link: GitHub's
   bug form filled in with redacted details (no home folder, file names, link paths, cookies or
   transcript). Nothing is sent until the person presses Submit on GitHub. Logs live in
-  `~/Library/Logs/Pianpian`.
+  `~/Library/Logs/Pianpian` on macOS and `<data>\logs` on Windows.
 
 ## Packaging and releases
 
@@ -60,13 +71,24 @@ Releases: merging release-please's pull request tags a version and creates the G
 
 ## Models
 
-`pipeline/models.py` downloads the two models once into `<data>/models` (`$PIANPIAN_MODELS`;
-`~/.cache/pianpian/models` from the command line): Whisper large-v3-turbo (1.6 GB) and Hy-MT2 1.8B 4-bit (1.0 GB), pinned file by file
-in `pipeline/models.lock.json` (`dev.py lock`). Catalog rows and lock sections are per platform
-(`backend.NAME`), and `models.default(task)` picks this platform's model. Each file comes
-from ModelScope first, which is fast from mainland China, then Hugging Face, and is checked against the
-size and SHA-256 Hugging Face publishes. Stopped downloads resume. A model already in the Hugging Face
-cache is used where it is. Progress goes to stdout as `@progress {json}` lines.
+`pipeline/models.py` downloads the models once into `<data>/models` (`$PIANPIAN_MODELS`;
+`~/.cache/pianpian/models` from the command line), pinned file by file in
+`pipeline/models.lock.json` (`dev.py lock`, which locks both platforms from any machine). The lock has
+a `darwin` and a `win32` section, and so do the catalog rows (`backend.NAME`); `models.default(task)`
+picks this platform's model:
+
+| | macOS | Windows |
+|---|---|---|
+| Speech | Whisper large-v3-turbo, MLX (1.6 GB) | `ggml-large-v3-turbo.bin` for whisper.cpp (1.6 GB) |
+| Translation | Hy-MT2 1.8B 4-bit, MLX (1.0 GB) | `Hy-MT2-1.8B-Q4_K_M.gguf` for llama.cpp (1.1 GB) |
+
+Each file comes from ModelScope first, which is fast from mainland China — the Windows models are
+mirrored there under other ids (`OllmOne/whisper.cpp`, `Tencent-Hunyuan/Hy-MT2-1.8B-GGUF`; the pinned
+files are byte-identical to Hugging Face's, checked 31 Oct 2026) — then Hugging Face, then
+hf-mirror.com. Every file is checked against the size and SHA-256 in the lock. Stopped downloads
+resume. A model already in the Hugging Face cache is used where it is. Progress goes to stdout as
+`@progress {json}` lines. The Windows binaries are pinned separately in `pipeline/runtimes.py`
+(release tag, size, SHA-256).
 
 ## The pipeline
 
@@ -75,18 +97,20 @@ output is newer than its inputs, so it can run again after `zh.srt` is fixed by 
 
 1. **Video**: yt-dlp, H.264 first (AV1 does not play everywhere), plus the platform's Chinese
    subtitles if any. A browser name borrows that browser's Bilibili login for the AI subtitles.
-2. **Chinese**: the platform's subtitles, else macOS OCR when the Chinese is burned into the picture,
-   else Whisper with word timestamps. `srt_tool.py split` cuts long lines at word boundaries.
+2. **Chinese**: the platform's subtitles, else OCR when the Chinese is burned into the picture
+   (macOS Vision; RapidOCR on Windows — not run there yet), else Whisper with word timestamps (MLX on
+   macOS, whisper.cpp on Windows). `srt_tool.py split` cuts long lines at word boundaries.
 3. **Pinyin and words**: pypinyin and jieba, with `pinyin_fixes.txt` on top. `zh.words.json` holds
    each word's pinyin, CC-CEDICT gloss, HSK level and measure words, the tense tags from `grammar.py`
    and Whisper's word times (for the spoken-word highlight).
-4. **English**: `translate_srt.py` runs Hy-MT2 line by line, with the title and the previous lines as
-   context, so every English line keeps its Chinese line's timing. `align_srt.py` then links English
-   words to Chinese words where the dictionary can't.
+4. **English**: `translate_srt.py` runs Hy-MT2 line by line (MLX on macOS, `llama-server` on Windows),
+   with the title and the previous lines as context, so every English line keeps its Chinese line's
+   timing. `align_srt.py` then links English words to Chinese words where the dictionary can't.
 5. **study.mkv**: every track in one file, for IINA, mpv or VLC.
 
 The model engines sit behind `pipeline/backend.py`, the only platform check in `pipeline/`:
-`backend.impl()` is `backend_mac.py` (mlx-whisper, mlx-lm, macOS OCR) and gives three functions,
+`backend.impl()` is `backend_mac.py` (mlx-whisper, mlx-lm, macOS OCR) or `backend_win.py` (whisper.cpp,
+llama.cpp's `llama-server`, RapidOCR) and gives three functions,
 `transcribe()`, `translator()` (a context manager yielding `generate(prompt, temperature, max_tokens)`)
 and `ocr()`. The steps above call those, so the prompt, the per-line loop and the line cutting are the
 same for every engine. `tests/test_backend.py` has the checks a new backend reuses (the signature
@@ -104,7 +128,7 @@ Everything lives in the video's folder, so the app and the command line always a
 
 | Method | Path | Does |
 |---|---|---|
-| GET | `/api/status` | Version, library folder, engine ready or not, installed browsers, busy |
+| GET | `/api/status` | Version, library folder, engine ready or not, platform (`win32`/`darwin`), subtitle accelerator (CUDA/Vulkan/CPU or MLX), installed browsers, busy |
 | GET | `/api/videos` | Library folders with title, link, HSK level and the tracks they have |
 | GET | `/api/videos/<id>` | One video, plus its `zh.lines.txt` for translating by hand |
 | GET | `/api/jobs` | Recent jobs with their state and the end of their log |
@@ -114,7 +138,7 @@ Everything lives in the video's folder, so the app and the command line always a
 | POST | `/api/videos/<id>/english` | `{text}`: save a hand-made `en.lines.txt`, then rebuild |
 | POST | `/api/videos/<id>/split` | `{max}`: cut the lines again (0 = as transcribed) |
 | POST | `/api/videos/<id>/rebuild` | Run the pipeline again |
-| POST | `/api/videos/<id>/open` | Show the folder in Finder |
+| POST | `/api/videos/<id>/open` | Show the folder in Finder (macOS) or Explorer (Windows) |
 
 Safety: the server listens on 127.0.0.1 only. Requests that change anything need an `X-Kit: 1`
 header, so other websites can't start jobs. Video ids and paths are checked, and commands run

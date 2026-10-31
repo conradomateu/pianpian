@@ -39,11 +39,15 @@ KNOWN = [
             r"Connection (reset|refused)|URLError|SSL: ",
      "A network problem. Check the connection and try again: downloads carry on where they stopped."),
     ("DISK-FULL", r"No space left on device", "The disk is full. Free some space and try again."),
+    # before MODEL-DOWNLOAD: its "checksum does not match" would otherwise claim a failed runtime .zip
+    ("RUNTIME-DOWNLOAD", r"could not download the GPU runtime|no source served \S*\.zip|\S*\.zip: .*checksum does not match",
+     "The GPU runtime (whisper.cpp / llama.cpp) didn't download completely. Try again: it carries on where it stopped."),
     ("MODEL-DOWNLOAD", r"could not download .*it resumes|checksum does not match",
      "A model didn't download completely. Try again: it carries on where it stopped."),
     ("MEMORY", r"Killed: 9|MemoryError|\[METAL\].*(failed|out of memory)|Insufficient Memory|out of memory",
      "The computer ran out of memory. Close other apps and try again."),
-    ("TOOL-MISSING", r"No such file or directory: '(ffmpeg|ffprobe|swift|uv)'",
+    ("TOOL-MISSING", r"No such file or directory: '(ffmpeg|ffprobe|swift|uv)'|could not find (ffmpeg|ffprobe)|"
+                     r"FileNotFoundError:.*(ffmpeg|ffprobe|uv|whisper-cli|llama-server)",
      "A tool the pipeline needs is missing. Run the setup again; if it keeps happening, please report it."),
     ("ENGINE", r"ModuleNotFoundError|No module named|engine (is )?not installed",
      "The engine is missing a part. Run the setup again from the status menu."),

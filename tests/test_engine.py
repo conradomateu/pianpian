@@ -30,6 +30,8 @@ def install_fake_python(monkeypatch, e, root):
 def test_skipped_model_is_not_asked_for_again(monkeypatch, tmp_path):
     e = fresh(monkeypatch, tmp_path)
     monkeypatch.setattr(e.models, "status", lambda: catalog(False, True))
+    if e.WINDOWS:
+        monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "", "tools": {}})
     e.STATE.update(engine=True, current=True)
     assert e.SETUP.plan()["needed"]                           # first run: everything missing is offered
     e.save_config(models=["m1"])                              # m0 was left out

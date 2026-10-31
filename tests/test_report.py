@@ -18,6 +18,14 @@ def test_hints_for_known_failures():
     assert report.explain(["all good"]) is None
 
 
+def test_a_failed_runtime_download_is_not_called_a_model_download():
+    # the message a failed .zip download prints; MODEL-DOWNLOAD's "checksum does not match" would claim it otherwise
+    log = ["  whisper-bin-x64.zip: checksum does not match the lock; deleted, trying the next source",
+           "could not download the GPU runtime (whisper-bin-x64.zip): no source served whisper-bin-x64.zip; it resumes, try again"]
+    assert report.explain(log)["code"] == "RUNTIME-DOWNLOAD"
+    assert report.explain(["could not download model.safetensors (check the connection and try again: it resumes)"])["code"] == "MODEL-DOWNLOAD"
+
+
 def test_the_last_failure_wins():
     log = ["urlopen error timed out", "retrying", "ERROR: Unsupported URL: x"]
     assert report.explain(log)["code"] == "DL-UNSUPPORTED"

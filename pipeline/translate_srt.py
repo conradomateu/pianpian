@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["mlx-lm>=0.28; sys_platform == 'darwin'"]
 # ///
-"""Translate zh.srt into English line by line with a small local translation model (on a Mac: MLX).
+"""Translate zh.srt into English line by line with a small local translation model.
 
     uv run translate_srt.py zh.srt                  # -> en.lines.txt next to it
     uv run translate_srt.py zh.srt -o out.txt
@@ -10,14 +10,15 @@
 Writes the same "id<TAB>English" file as the manual ChatGPT/Claude step, so
 `srt_tool.py import` checks it and the English keeps the Chinese timings.
 
-Model: Tencent Hy-MT2-1.8B, 4-bit MLX build (1.02 GB, downloaded once by models.py: ModelScope's
-copy first, which is fast from mainland China, checked against Hugging Face's SHA-256). A translation-only model: on FLORES-200 Chinese↔X its
-1.8B version scores XCOMET 84.3, above Microsoft Translator (83.0) and Doubao
+Model: Tencent Hy-MT2-1.8B — the 4-bit MLX build on macOS (1.02 GB, ModelScope's copy first, which is
+fast from mainland China), the Q4_K_M GGUF on Windows (1.1 GB, from Hugging Face or hf-mirror.com);
+models.py downloads it once and checks every file against the lock. A translation-only model: on
+FLORES-200 Chinese↔X its 1.8B version scores XCOMET 84.3, above Microsoft Translator (83.0) and Doubao
 (80.9), and 4-bit costs it about 1.3 points (Hy-MT2 report, arXiv 2605.22064).
 Each line is translated with the video title and the previous lines as background,
 using the model card's prompt and sampling settings. Set MT_MODEL to try another.
 The model itself runs in the platform's backend (backend.py); this file keeps the prompt and the loop.
-Nothing leaves the Mac.
+Nothing leaves the machine.
 """
 import argparse
 import os

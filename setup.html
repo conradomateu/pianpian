@@ -92,6 +92,9 @@ function renderPlan() {
   $('items').innerHTML = `
     <label class="item"><input type="checkbox" checked disabled><span><b>Engine</b><small>Python and the tools that download videos and make pinyin${ok ? '' : e.engine ? ' (an update)' : ''}</small></span>
       <span class="sz ${ok ? 'ready' : ''}">${ok ? 'ready' : '≈ ' + gb(plan.engineMB * 1e6)}</span></label>` +
+    (plan.runtime ? `
+    <label class="item"><input type="checkbox" checked disabled><span><b>GPU runtime</b><small>${esc(plan.runtime.label)}${plan.runtime.backend === 'cpu' ? ' (no GPU detected; the CPU works too)' : ''}</small></span>
+      <span class="sz ${plan.runtime.ready ? 'ready' : ''}">${plan.runtime.ready ? 'ready' : gb(plan.runtime.size)}</span></label>` : '') +
     plan.models.map(m => `
     <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${m.ready || !chosen || chosen.includes(m.id) ? 'checked' : ''} ${m.ready ? 'disabled' : ''}>
       <span><b>${m.task === 'transcribe' ? 'Speech recognition' : 'English translation'}</b><small>${esc(m.about)}${m.task === 'transcribe' ? '. Needed when a video has no Chinese subtitles' : '. You can also translate by hand'}</small></span>
@@ -103,7 +106,8 @@ function renderPlan() {
 }
 function sum() {
   const e = plan.engine, picked = [...$('plan').querySelectorAll('input[name=m]:checked:not(:disabled)')].map(i => i.value);
-  const bytes = (e.engine && e.current ? 0 : plan.engineMB * 1e6) + plan.models.filter(m => picked.includes(m.id)).reduce((t, m) => t + (m.size || 0), 0);
+  const bytes = (e.engine && e.current ? 0 : plan.engineMB * 1e6) + (plan.runtime && !plan.runtime.ready ? plan.runtime.size : 0) +
+                plan.models.filter(m => picked.includes(m.id)).reduce((t, m) => t + (m.size || 0), 0);
   const upd = e.engine && !e.current;                 // an update fetches only the packages that changed
   $('sum').textContent = `${upd ? 'up to ' : ''}${gb(bytes)} to download · ${gb(plan.free)} free`;
   $('go').textContent = !bytes ? 'Continue' : upd ? 'Update' : `Install (${gb(bytes)})`;

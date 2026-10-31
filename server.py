@@ -160,7 +160,7 @@ def worker():
         job.add("$ " + " ".join(str(c) for c in job.cmd))
         try:
             p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env},
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=engine.NO_WINDOW)
             while chunk := p.stdout.read1(4096):
                 job.add(chunk.decode("utf-8", "replace"))
             job.code = p.wait()
@@ -263,8 +263,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
+                accel = "mlx"
+                if engine.WINDOWS:                    # the backend names only; the GPU probes are cached
+                    bw, bl = (engine.runtimes.backend_for(t) for t in ("whisper", "llama"))
+                    accel = bw if bw == bl else f"whisper.cpp {bw} · llama.cpp {bl}"
                 return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": engine.STATE["engine"], "current": engine.STATE["current"],
-                                       "platform": "win32" if engine.WINDOWS else "darwin", "browsers": engine.installed_browsers(),
+                                       "platform": "win32" if engine.WINDOWS else "darwin", "accel": accel, "browsers": engine.installed_browsers(),
                                        "busy": busy, "update": UPDATE.get("app")}, cors=True)
             if path == "/api/videos":
                 return self.send_json(library())
@@ -307,7 +311,7 @@ class Handler(BaseHTTPRequestHandler):
         out = p / "thumb.jpg"
         if not out.exists() and (src := video_in(p)):
             subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
-                            "-vf", "scale=480:-2", str(out)], timeout=30)
+                            "-vf", "scale=480:-2", str(out)], timeout=30, creationflags=engine.NO_WINDOW)
         return self.send_file(out) if out.exists() else self.fail(404, "no thumbnail")
 
     def do_OPTIONS(self):                                     # preflight for /api/status only
@@ -428,8 +432,11 @@ def problem_report(q: dict) -> dict:
     problem = report.explain(log) or {"code": "SETUP-FAILED" if setup else "JOB-FAILED" if job else "", "hint": ""}
     st = engine.STATE
     models = ", ".join(f"{m['id'].split('/')[-1]} {'ready' if m['ready'] else 'missing'}" for m in engine.models.status())
+    runtime = engine.runtimes.status() if engine.WINDOWS else None
     summary = [f"Pianpian {VERSION}", f"engine: {'ok' if st['engine'] else 'not working' if st['engine'] is False else 'not checked'}"
                f"{'' if st['current'] in (None, True) else ', out of date'}", f"models: {models}",
+               *([f"runtime: {runtime['label']} ({', '.join(k + ' ' + ('ready' if v['ready'] else 'missing') for k, v in runtime['tools'].items())})"]
+                 if runtime else []),
                f"what failed: {'the setup' if setup else job.kind if job else 'nothing recorded'}"
                + (f" ({problem['code']})" if problem["code"] else ""), ""]
     details = report.redact("\n".join(summary + log[-80:]), CFG["library"])

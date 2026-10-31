@@ -6,8 +6,11 @@
 
 models.lock.json pins every file of every model (name, size, SHA-256) and the exact revision on both
 sites, so everyone gets the same files and a release can change a model on purpose. It has one section
-per platform (backend.NAME), and so do the catalog rows. Files come from ModelScope first (fast from
-mainland China), then Hugging Face, and each is checked against the lock.
+per platform (backend.NAME), and so do the catalog rows; `lock` pins every platform from any machine.
+Files come from ModelScope first (the row's own id, or its mirrored repo on Windows; fast from mainland
+China), then Hugging Face, then hf-mirror.com, and each is checked against the lock. The Windows models
+are mirrored on ModelScope under different ids (OllmOne/whisper.cpp and
+Tencent-Hunyuan/Hy-MT2-1.8B-GGUF), with the same files as Hugging Face (checked 31 Oct 2026).
 A stopped download resumes. A model already in the Hugging Face cache ($HF_HUB_CACHE, $HF_HOME/hub or
 ~/.cache/huggingface/hub) or in ~/.cache/mandarin-kit/models (older versions) is used where it is when its files match.
 Folder: $PIANPIAN_MODELS (the app sets it to <data>/models), else ~/.cache/pianpian/models.
@@ -21,6 +24,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import backend  # backend.NAME: which rows and lock section are this platform's
@@ -29,12 +33,19 @@ HERE = Path(__file__).resolve().parent
 
 LOCKFILE = HERE / "models.lock.json"
 LEGACY = Path.home() / ".cache" / "mandarin-kit" / "models"           # older versions: read, never written
-NEEDED = re.compile(r"\.(json|safetensors|jinja|model|tiktoken|npz)$")       # weights, config, tokenizer; no images
-CATALOG = [m for m in [
-    # size: what the download weighs, for the setup page before anything is fetched
+# weights, config, tokenizer; no images. .bin and .gguf are the whisper.cpp / llama.cpp builds.
+NEEDED = re.compile(r"\.(json|safetensors|jinja|model|tiktoken|npz|bin|gguf)$")
+ROWS = [
+    # size: what the download weighs, for the setup page before anything is fetched;
+    # include: the one file the app uses, when the repo holds more
     {"id": "mlx-community/whisper-large-v3-turbo", "platform": "darwin", "task": "transcribe", "about": "Whisper large-v3-turbo: Chinese speech to text", "size": 1_614_000_000},
     {"id": "mlx-community/Hy-MT2-1.8B-4bit", "platform": "darwin", "task": "translate", "about": "Hy-MT2 1.8B (4-bit): Chinese to English, and the word links", "size": 1_017_000_000},
-] if m["platform"] == backend.NAME]
+    {"id": "ggerganov/whisper.cpp", "platform": "win32", "task": "transcribe", "about": "Whisper large-v3-turbo (whisper.cpp): Chinese speech to text",
+     "size": 1_624_555_275, "include": r"^ggml-large-v3-turbo\.bin$", "modelscope_repo": "OllmOne/whisper.cpp"},
+    {"id": "tencent/Hy-MT2-1.8B-GGUF", "platform": "win32", "task": "translate", "about": "Hy-MT2 1.8B (Q4_K_M, llama.cpp): Chinese to English",
+     "size": 1_133_080_448, "include": r"^Hy-MT2-1\.8B-Q4_K_M\.gguf$", "modelscope_repo": "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF"},
+]
+CATALOG = [m for m in ROWS if m["platform"] == backend.NAME]
 
 
 def default(task: str) -> str:
@@ -59,7 +70,8 @@ def progress(**kw) -> None:
 
 # ---------------------------------------------------------------- the lock
 def lock() -> dict:
-    """This platform's section of models.lock.json: {repo: {"huggingface": revision, "files": [...]}}."""
+    """This platform's section of models.lock.json: {repo: {"huggingface": revision, "modelscope_repo": id if
+    it differs, "files": [...]}}."""
     try:
         return json.loads(LOCKFILE.read_text(encoding="utf-8"))["platforms"].get(backend.NAME, {})
     except (OSError, ValueError, KeyError):
@@ -71,37 +83,73 @@ def lock_id(entry: dict) -> str:
     return hashlib.sha256(json.dumps(sorted((f["name"], f["sha256"]) for f in entry["files"])).encode()).hexdigest()[:16]
 
 
+def modelscope_repo(repo: str, entry: dict | None = None) -> str:
+    """The ModelScope repository for a model: its own id, or the row's mirror (the Windows models
+    live on ModelScope under other owners)."""
+    if entry and entry.get("modelscope_repo"):
+        return entry["modelscope_repo"]
+    return next((m["modelscope_repo"] for m in ROWS if m["id"] == repo and m.get("modelscope_repo")), repo)
+
+
 def sources(repo: str, entry: dict | None, f: dict) -> list[str]:
     """Where one file comes from: ModelScope at the revision that file was pinned at (each file has its own:
-    the commit that last changed it), ModelScope's current copy, then Hugging Face's pinned revision.
-    The SHA-256 check makes sure that whichever answers, it is the pinned file."""
-    ms, hf = f.get("modelscope", "master"), (entry or {}).get("huggingface", "main")
-    urls = [f"https://www.modelscope.cn/models/{repo}/resolve/{ms}/", f"https://huggingface.co/{repo}/resolve/{hf}/"]
-    if ms != "master":
-        urls.insert(1, f"https://www.modelscope.cn/models/{repo}/resolve/master/")
+    the commit that last changed it), ModelScope's current copy, then Hugging Face's pinned revision, then
+    hf-mirror.com (the usual route to Hugging Face from mainland China). The SHA-256 check makes sure that
+    whichever answers, it is the pinned file."""
+    hf = (entry or {}).get("huggingface", "main")
+    ms = f.get("modelscope") or (None if entry else "master")
+    urls = [f"https://www.modelscope.cn/models/{modelscope_repo(repo, entry)}/resolve/{ms or 'master'}/"]
+    if ms and ms != "master":
+        urls.append(f"https://www.modelscope.cn/models/{modelscope_repo(repo, entry)}/resolve/master/")
+    urls += [f"https://huggingface.co/{repo}/resolve/{hf}/", f"https://hf-mirror.com/{repo}/resolve/{hf}/"]
     return [u + f["name"] for u in urls]
 
 
+def _keep(m: dict, name: str) -> bool:
+    return bool(NEEDED.search(name) and "/" not in name and name != "configuration.json"
+                and (not m.get("include") or re.search(m["include"], name)))
+
+
+def hf_files(m: dict) -> tuple[str, list[dict]]:
+    """(revision, files) a Hugging Face repo serves for a catalog row."""
+    info = json.load(urlopen(f"https://huggingface.co/api/models/{m['id']}?blobs=true", timeout=60))
+    files = [{"name": f["rfilename"], "size": f.get("size"), "sha256": (f.get("lfs") or {}).get("sha256")}
+             for f in info["siblings"] if _keep(m, f["rfilename"])]
+    return info["sha"], files
+
+
+def ms_files(m: dict) -> list[dict]:
+    """The files a catalog row's ModelScope repo serves, each with the revision that last changed it."""
+    repo = m.get("modelscope_repo") or m["id"]
+    info = json.load(urlopen(f"https://www.modelscope.cn/api/v1/models/{repo}/repo/files?Recursive=true", timeout=30))["Data"]["Files"]
+    return [{"name": f["Path"], "size": f["Size"], "sha256": f["Sha256"], "modelscope": f.get("Revision") or "master"}
+            for f in info if f["Type"] == "blob" and _keep(m, f["Path"])]
+
+
 def make_lock() -> dict:
-    """Ask both sites for every catalog model, check they serve the same files, and pin them in this
-    platform's section (the other sections stay as they are)."""
-    out = {}
-    for m in CATALOG:
+    """Ask the sites for every catalog row on every platform and pin them, so `dev.py lock` works the
+    same from any machine. ModelScope and Hugging Face must serve the same files; a Windows mirror that
+    cannot be reached falls back to Hugging Face's files with ModelScope's current revision unpinned."""
+    sections: dict = {}
+    for m in ROWS:
         repo = m["id"]
-        ms = json.load(urlopen(f"https://www.modelscope.cn/api/v1/models/{repo}/repo/files?Recursive=true", timeout=30))["Data"]["Files"]
-        files = [{"name": f["Path"], "size": f["Size"], "sha256": f["Sha256"], "modelscope": f.get("Revision") or "master"} for f in ms
-                 if f["Type"] == "blob" and NEEDED.search(f["Path"]) and "/" not in f["Path"] and f["Path"] != "configuration.json"]
-        hf = json.load(urlopen(f"https://huggingface.co/api/models/{repo}?blobs=true", timeout=60))
-        hf_sha = {s["rfilename"]: (s.get("lfs") or {}).get("sha256") for s in hf["siblings"]}
+        rev, hf = hf_files(m)
+        try:
+            files = ms_files(m)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            if m["platform"] != "win32":
+                raise
+            print(f"  {repo}: ModelScope mirror unavailable ({e}); pinning Hugging Face only", flush=True)
+            files = [{**f, "modelscope": "master"} for f in hf]
+        hf_sha = {f["name"]: f["sha256"] for f in hf}
         for f in files:                                       # small files have no LFS hash on Hugging Face: sizes only
             if hf_sha.get(f["name"]) and hf_sha[f["name"]] != f["sha256"]:
                 sys.exit(f"{repo}/{f['name']}: ModelScope and Hugging Face serve different files; not locking")
-        out[repo] = {"huggingface": hf["sha"], "files": files}
-    try:
-        sections = json.loads(LOCKFILE.read_text(encoding="utf-8"))["platforms"]
-    except (OSError, ValueError, KeyError):
-        sections = {}
-    return {"platforms": {**sections, backend.NAME: out}}
+        entry = {"huggingface": rev, "files": files}
+        if m.get("modelscope_repo"):
+            entry["modelscope_repo"] = m["modelscope_repo"]
+        sections.setdefault(m["platform"], {})[repo] = entry
+    return {"platforms": sections}
 
 
 # ---------------------------------------------------------------- ready or not
@@ -117,7 +165,8 @@ def hf_cached(repo: str, entry: dict | None) -> Path | None:
     for snap in sorted(snaps.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True) if snaps.exists() else []:
         if entry and matches(snap, entry):
             return snap
-        if not entry and (snap / "config.json").exists() and (any(snap.glob("*.safetensors")) or any(snap.glob("*.npz"))):
+        if not entry and (snap / "config.json").exists() and (any(snap.glob("*.safetensors")) or any(snap.glob("*.npz"))
+                                                              or any(snap.glob("*.gguf")) or any(snap.glob("*.bin"))):
             return snap
     return None
 
@@ -166,8 +215,22 @@ def fetch(url: str, target: Path, size: int | None, repo: str) -> None:
     """Download url into target, resuming a .part file; raises OSError on failure."""
     part = target.with_name(target.name + ".part")
     have = part.stat().st_size if part.exists() else 0
+    if size and have > size:                         # corrupt (two writers appended at once): start over
+        part.unlink()
+        have = 0
+    if size and have == size:                        # a past run fetched it all, then stopped
+        part.replace(target)
+        return
     req = Request(url, headers={"Range": f"bytes={have}-"} if have else {})
-    with urlopen(req, timeout=60) as r:
+    try:
+        r = urlopen(req, timeout=60)
+    except HTTPError as e:
+        if e.code != 416 or not have:                # 416: the server can't continue from `have`
+            raise
+        part.unlink(missing_ok=True)                 # don't trust the bytes: download() hashes target
+        have = 0
+        r = urlopen(Request(url), timeout=60)
+    with r:
         if have and r.status != 206:                         # the server ignored the range: start over
             have = 0
         with part.open("ab" if have else "wb") as f:
@@ -184,14 +247,14 @@ def fetch(url: str, target: Path, size: int | None, repo: str) -> None:
 
 
 def files_of(repo: str) -> list[dict]:
-    """Without a lock entry: ModelScope's list of the files the app needs, else Hugging Face's."""
+    """Without a lock entry: ModelScope's list of the files the app needs (the row's mirror on Windows),
+    else Hugging Face's."""
+    m = next((x for x in ROWS if x["id"] == repo), {"id": repo})
     try:
-        info = json.load(urlopen(f"https://www.modelscope.cn/api/v1/models/{repo}/repo/files?Recursive=true", timeout=20))
-        files = [{"name": f["Path"], "size": f["Size"], "sha256": f.get("Sha256")} for f in info["Data"]["Files"] if f["Type"] == "blob"]
+        files = ms_files(m)
     except (OSError, ValueError, KeyError, TypeError):
-        info = json.load(urlopen(f"https://huggingface.co/api/models/{repo}?blobs=true", timeout=60))
-        files = [{"name": f["rfilename"], "size": f.get("size"), "sha256": (f.get("lfs") or {}).get("sha256")} for f in info["siblings"]]
-    return [f for f in files if NEEDED.search(f["name"]) and "/" not in f["name"] and f["name"] != "configuration.json"]
+        files = hf_files(m)[1]
+    return [f for f in files if _keep(m, f["name"])]
 
 
 def file_sha256(path: Path) -> str:

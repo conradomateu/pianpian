@@ -236,6 +236,7 @@ async function status() {
     const broken = s.engine === false;
     $('status').className = 'dot ' + (broken ? 'off' : s.busy ? 'busy' : 'ok');
     $('status').textContent = broken ? 'engine not installed' : s.busy ? 'working' : 'ready';
+    $('status').title = s.accel ? `subtitles: ${s.accel}` : '';
     const sel = $('add').browser;                     // the browsers here, the last choice remembered
     if (sel.options.length === 1 && s.browsers) {
       const NAMES = { safari: 'Safari', chrome: 'Chrome', brave: 'Brave', firefox: 'Firefox', edge: 'Edge', chromium: 'Chromium', opera: 'Opera', vivaldi: 'Vivaldi' };
