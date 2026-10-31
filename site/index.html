@@ -107,6 +107,7 @@ footer.site .grow { flex:1; }
 @media (max-width:700px) { .demo iframe { height:86vh; } .demo .bar span { margin-right:0; } header.top a.link.hide-s { display:none; } }
 @media (prefers-reduced-motion:reduce) { .dl, .faq summary::after { transition:none; } }
 </style>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
 </head>
 <body>
 <header class="top"><div class="wrap in">
@@ -117,7 +118,7 @@ footer.site .grow { flex:1; }
   <a class="link hide-s" href="#features">Features</a>
   <a class="link hide-s" href="#faq">FAQ</a>
   <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
-  <a class="dl small" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
+  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download</a>
 </div></header>
 
@@ -126,7 +127,7 @@ footer.site .grow { flex:1; }
     <h1>Learn Mandarin from the videos you <em>actually</em> watch</h1>
     <p class="lede">Paste a Bilibili or YouTube link. Pianpian makes Chinese, pinyin and English subtitles on your Mac, then lets you hover any word and practise line by line.</p>
     <div class="cta">
-      <a class="dl" id="download" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
+      <a class="dl" id="download" data-umami-event="download" data-umami-event-where="hero" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
         Download for Mac
       </a>
@@ -189,7 +190,7 @@ footer.site .grow { flex:1; }
     <h2>Your next video, in 中文, pinyin and English</h2>
     <p>Free for Mac. One piece at a time: 一天一片.</p>
     <div class="cta">
-      <a class="dl" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
+      <a class="dl" data-umami-event="download" data-umami-event-where="bottom" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
         Download for Mac
       </a>

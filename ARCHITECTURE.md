@@ -58,6 +58,10 @@ Releases: merging release-please's pull request tags a version and creates the G
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
 `Pianpian-macOS.zip`, which the website's Download button and the in-app update card point at.
 
+Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,
+never in `app.html`, so the app itself sends nothing to it. Real download totals come from the release files' own counters
+(`gh api repos/conradomateu/pianpian/releases`). Not tested: how many mainland China visitors the script reaches.
+
 ## Models
 
 `pipeline/models.py` downloads the two models once into `<data>/models` (`$PIANPIAN_MODELS`;
