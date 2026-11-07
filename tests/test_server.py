@@ -9,6 +9,7 @@ import tempfile
 import threading
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PureWindowsPath
 
 import pytest
@@ -315,3 +316,169 @@ def test_setup_and_jobs_never_overlap(tmp_path, monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+@pytest.fixture
+def anki_setup_requests(tmp_path, monkeypatch):
+    """Real handlers and relocation; no sockets, package installation or Anki collection."""
+    e = server.engine
+    old, library = tmp_path / "old", tmp_path / "library"
+    clip = library / "clip"
+    clip.mkdir(parents=True)
+    (clip / "source.mp4").write_bytes(b"source")
+    (clip / "zh.srt").write_text("1\n00:00:00,000 --> 00:00:02,000\n你好\n", encoding="utf-8")
+    (clip / "zh.words.json").write_text('{"cues": []}')
+    monkeypatch.setattr(e, "SUPPORT", old)
+    monkeypatch.setattr(e, "CONFIG", old / "config.json")
+    monkeypatch.setattr(e, "SETUP", e.Setup())
+    monkeypatch.setattr(e, "STATE", {"engine": True, "current": True})
+    monkeypatch.setattr(e, "PATH_OVERRIDES", dict.fromkeys(e.PATH_OVERRIDES))
+    for key in e.PATH_OVERRIDES:
+        monkeypatch.setenv(key, "")                            # restore setup's process-environment writes afterwards
+    monkeypatch.setattr(e, "python", lambda: sys.executable)
+    monkeypatch.setattr(e, "mirror_env", lambda: {})
+    monkeypatch.setattr(e, "check", lambda: {"engine": True, "current": True})
+    monkeypatch.setattr(e.models, "status", lambda: [])
+    monkeypatch.setattr(e.runtimes, "status", lambda: {"label": "runtime", "size": 0})
+    monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: "cpu")
+    monkeypatch.setattr(e.Setup, "_exec", lambda *a: None)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "ANKI_ACTIVE", 0)
+    monkeypatch.setitem(server.CFG, "library", library)
+    e.save_config(library=str(library))
+
+    def call(path, data=None):
+        handler = server.Handler.__new__(server.Handler)
+        handler.path, handler.headers = path, {"X-Kit": "1"}
+        if path == "/api/setup" and data is None:
+            data = {"library": str(library), "data": str(tmp_path / "new"), "models": []}
+        handler.body = lambda: data
+        handler.send_json = lambda body, status=200: setattr(handler, "response", (status, body))
+        handler.send_file = lambda path: setattr(handler, "response", (200, path.read_bytes()))
+        if path.startswith(("/library/", "/api/anki/audio/")):
+            handler.do_GET()
+        else:
+            handler.do_POST()
+        return handler.response
+
+    yield call
+    if e.SETUP.thread:
+        e.SETUP.thread.join(5)
+        assert not e.SETUP.thread.is_alive()
+
+
+def test_setup_cannot_move_an_active_preview(anki_setup_requests, tmp_path, monkeypatch):
+    call, anki = anki_setup_requests, server.anki_export
+    started, finish = threading.Event(), threading.Event()
+
+    def render(cmd, **kwargs):
+        Path(cmd[-1]).write_bytes(b"mp3")
+        started.set()
+        assert finish.wait(5)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(anki, "duration", lambda path: 2)
+    monkeypatch.setattr(anki, "_ffmpeg", lambda: "stub-ffmpeg")
+    monkeypatch.setattr(anki.subprocess, "run", render)
+    with ThreadPoolExecutor(2) as pool:
+        preview = pool.submit(call, "/api/anki/preview", {
+            "id": "clip", "start": 0, "end": 1, "selection": {"cueStart": 0, "cueEnd": 0},
+        })
+        try:
+            assert started.wait(5)
+            code, body = pool.submit(call, "/api/setup").result(timeout=2)
+            assert code == 409 and "Anki" in body["error"]
+            assert server.engine.data_dir() == tmp_path / "old"
+        finally:
+            finish.set()
+        code, body = preview.result(timeout=5)
+    assert code == 200 and server.ANKI_ACTIVE == 0
+    name = body["url"].rsplit("/", 1)[1]
+    assert (tmp_path / "old/cache/anki" / name).read_bytes() == b"mp3"
+    assert call("/api/setup")[0] == 200
+    server.engine.SETUP.thread.join(5)
+    assert server.engine.SETUP.state == "done"
+    assert (tmp_path / "new/cache/anki" / name).read_bytes() == b"mp3"
+
+
+@pytest.mark.parametrize("action,path", [
+    ("preview", "/api/anki/preview"), ("export", "/api/anki/export"),
+    ("study_words", "/library/clip/zh.words.json"),
+    ("audio_path", "/api/anki/audio/pianpian-" + "0" * 64 + ".mp3"),
+])
+def test_setup_and_anki_exclude_each_other(anki_setup_requests, tmp_path, monkeypatch, action, path):
+    call = anki_setup_requests
+    started, finish = threading.Event(), threading.Event()
+    calls = []
+
+    def work(*args):
+        calls.append(args)
+        started.set()
+        assert finish.wait(5)
+        return tmp_path / "library/clip/source.mp4" if action == "audio_path" else {}
+
+    monkeypatch.setattr(server.anki_export, action, work)
+    # Setup first: no operation reaches its engine/cache code.
+    server.engine.SETUP.state = "running"
+    assert call(path, {"id": "clip"}) == (409, {"error": server.SETUP_RUNS})
+    assert not calls and server.ANKI_ACTIVE == 0
+    server.engine.SETUP.state = "idle"
+    # Anki first: setup returns promptly, without waiting for the operation.
+    with ThreadPoolExecutor(2) as pool:
+        operation = pool.submit(call, path, {"id": "clip"})
+        try:
+            assert started.wait(5)
+            assert pool.submit(call, "/api/setup").result(timeout=2)[0] == 409
+        finally:
+            finish.set()
+        assert operation.result(timeout=5)[0] == 200
+    assert server.ANKI_ACTIVE == 0 and call("/api/setup")[0] == 200
+
+
+@pytest.mark.parametrize("action,path,error,status", [
+    ("preview", "/api/anki/preview", ValueError("extraction failed"), 400),
+    ("preview", "/api/anki/preview", subprocess.TimeoutExpired("ffmpeg", 60), 503),
+    ("export", "/api/anki/export", OSError("media unavailable"), 500),
+    ("study_words", "/library/clip/zh.words.json", ValueError("bad words"), 404),
+    ("audio_path", "/api/anki/audio/pianpian-" + "0" * 64 + ".mp3", FileNotFoundError("expired"), 404),
+])
+def test_anki_errors_release_setup_exclusion(anki_setup_requests, monkeypatch, action, path, error, status):
+    def fail(*args):
+        raise error
+    monkeypatch.setattr(server.anki_export, action, fail)
+    assert anki_setup_requests(path, {"id": "clip"})[0] == status
+    assert server.ANKI_ACTIVE == 0
+    assert anki_setup_requests("/api/setup")[0] == 200
+
+
+@pytest.mark.parametrize("path", ["/api/anki/preview", "/api/anki/export"])
+def test_anki_validation_releases_setup_exclusion(anki_setup_requests, path):
+    assert anki_setup_requests(path, {})[0] == 400
+    assert server.ANKI_ACTIVE == 0
+    assert anki_setup_requests("/api/setup")[0] == 200
+
+
+def test_setup_waits_for_every_admitted_anki_request(anki_setup_requests, monkeypatch):
+    started = [threading.Event(), threading.Event()]
+    finish = [threading.Event(), threading.Event()]
+
+    def work(entry, library, data):
+        index = data["index"]
+        started[index].set()
+        assert finish[index].wait(5)
+        return {}
+
+    monkeypatch.setattr(server.anki_export, "export", work)
+    with ThreadPoolExecutor(3) as pool:
+        operations = [pool.submit(anki_setup_requests, "/api/anki/export", {"id": "clip", "index": i}) for i in range(2)]
+        try:
+            assert all(event.wait(5) for event in started)
+            finish[0].set()
+            assert operations[0].result(timeout=5)[0] == 200
+            assert pool.submit(anki_setup_requests, "/api/setup").result(timeout=2)[0] == 409
+        finally:
+            for event in finish:
+                event.set()
+        assert operations[1].result(timeout=5)[0] == 200
+    assert server.ANKI_ACTIVE == 0
+    assert anki_setup_requests("/api/setup")[0] == 200

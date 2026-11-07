@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 import webbrowser
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -176,8 +177,23 @@ class Job:
 
 JOBS: list = []
 QUEUE: "queue.Queue[Job]" = queue.Queue()
-STARTING = threading.Lock()                                  # a job and the setup (it may move the library) never overlap
+STARTING = threading.Lock()                                  # setup cannot replace paths used by jobs or Anki media
+ANKI_ACTIVE = 0
 SETUP_RUNS = "The setup is running. Try again when it has finished."
+
+
+@contextmanager
+def anki_media():
+    global ANKI_ACTIVE
+    with STARTING:
+        if engine.SETUP.state == "running":
+            raise RuntimeError(SETUP_RUNS)
+        ANKI_ACTIVE += 1
+    try:
+        yield
+    finally:
+        with STARTING:
+            ANKI_ACTIVE -= 1
 
 
 def worker():
@@ -326,7 +342,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/anki/status":
                 return self.send_json(anki_export.status())
             if m := re.fullmatch(r"/api/anki/audio/(pianpian-[0-9a-f]{64}\.mp3)", path):
-                return self.send_file(anki_export.audio_path(m[1]))
+                with anki_media():
+                    return self.send_file(anki_export.audio_path(m[1]))
             if m := re.fullmatch(r"/api/videos/([^/]+)", path):
                 p = entry_path(m[1])
                 info = describe(p)
@@ -349,7 +366,8 @@ class Handler(BaseHTTPRequestHandler):
                 f = p / m[2] if m[2] else p
                 if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]) and inside_library(f):
                     if p.is_dir() and f.name == "zh.words.json":
-                        return self.send_json(anki_export.study_words(p))
+                        with anki_media():
+                            return self.send_json(anki_export.study_words(p))
                     return self.send_file(f)
                 return self.fail(404, "not found")
             # the app's own page and assets
@@ -361,6 +379,8 @@ class Handler(BaseHTTPRequestHandler):
                     and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md"):
                 return self.send_file(f)
             self.fail(404, "not found")
+        except RuntimeError as e:
+            self.fail(409, str(e))
         except (ValueError, OSError) as e:                    # OSError: a name the system refuses, a file it can't read
             self.fail(404, str(e))
 
@@ -455,6 +475,8 @@ class Handler(BaseHTTPRequestHandler):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
                 with STARTING:
+                    if ANKI_ACTIVE:
+                        return self.fail(409, "Wait for Anki audio and word processing to finish, then run the setup.")
                     if busy := next((j for j in JOBS if j.state in ("queued", "running")), None):
                         return self.fail(409, f"Wait for “{busy.label}” to finish, then run the setup.")
                     try:
@@ -507,11 +529,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/anki/open":
                 return self.send_json(anki_export.open_note(data))
             if path in ("/api/anki/preview", "/api/anki/export"):
-                if not isinstance(data.get("id"), str):
-                    raise ValueError("Select a library item first.")
-                entry = entry_path(data["id"])
-                action = anki_export.preview if path.endswith("/preview") else anki_export.export
-                return self.send_json(action(entry, CFG["library"], data))
+                with anki_media():
+                    if not isinstance(data.get("id"), str):
+                        raise ValueError("Select a library item first.")
+                    entry = entry_path(data["id"])
+                    action = anki_export.preview if path.endswith("/preview") else anki_export.export
+                    return self.send_json(action(entry, CFG["library"], data))
             self.fail(404, "not found")
         except anki_export.AnkiError as e:
             self.send_json({"error": str(e), "code": e.code}, 503)
