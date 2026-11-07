@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.3...pianpian-v0.1.4) (2026-11-07)
+
+
+### Bug Fixes
+
+* keep the demo thumbnail in its final player layout ([#24](https://github.com/conradomateu/pianpian/issues/24)) ([8c66d62](https://github.com/conradomateu/pianpian/commit/8c66d62b47903765532aff5938546962a5bee714))
+* use a higher-resolution poster in the video player ([#26](https://github.com/conradomateu/pianpian/issues/26)) ([9ddcf54](https://github.com/conradomateu/pianpian/commit/9ddcf54092a08e5b6839878959049a202a1aa67d))
+
 ## [0.1.3](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.2...pianpian-v0.1.3) (2026-11-07)
 
 
