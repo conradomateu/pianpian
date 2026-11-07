@@ -252,6 +252,7 @@
       retryLoad = retry;
       poster.hidden = !image;
       if (image) poster.src = image; else poster.removeAttribute('src');
+      v.poster = image;                           // keep the thumbnail until the browser paints the video
       stage.classList.remove('loaded');
       tracks = []; words = null; align = null; pin = null;
       renderTracks(); renderList(); ov.innerHTML = ''; shownKey = '';

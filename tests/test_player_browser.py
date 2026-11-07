@@ -49,10 +49,20 @@ def browser(monkeypatch):
             track_gate.set()
             fail_tracks = False
             video_ranges = []
+            video_gate = threading.Event()
+            video_gate.set()
+            frame_gate = threading.Event()
+            frame_gate.set()
 
             def do_GET(self):
+                if self.path == '/frame-gate.gif':
+                    self.frame_gate.wait(15)
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 if self.path.endswith('.mp4'):
                     self.video_ranges.append(self.headers.get('Range'))
+                    self.video_gate.wait(15)
                 if '/pianpian-day/' in self.path and self.path.endswith('.srt'):
                     self.track_gate.wait(10)
                     if self.fail_tracks:
@@ -88,6 +98,8 @@ def browser(monkeypatch):
             yield c, f"http://127.0.0.1:{srv.server_port}", Handler
         finally:
             Handler.track_gate.set()
+            Handler.video_gate.set()
+            Handler.frame_gate.set()
             c.close()
             srv.shutdown()
             srv.server_close()
@@ -208,7 +220,7 @@ def test_video_loads_before_subtitles(browser, demo):
         return
     handler.track_gate.clear()
     click(c, '.item[data-id="pianpian-day"]')
-    wait(c, 'player.video.readyState >= 3 && player.tracks.length === 0')
+    wait(c, 'player.video.currentSrc && player.tracks.length === 0')
     click(c, '.item[data-id="second"]')
     wait(c, "current.id === 'second' && player.tracks.length > 0")
     count = c.js('player.tracks.length')
@@ -244,6 +256,43 @@ def test_progressive_playback(browser):
     wait(c, 'player.video.currentTime > .3')
     assert c.js('player.video.buffered.end(player.video.buffered.length - 1) < player.video.duration')
     assert any(r and r.startswith('bytes=') for r in handler.video_ranges)
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_demo_loading_keeps_video_size(browser, width):
+    c, url, handler = browser
+    c.call('Emulation.setDeviceMetricsOverride', width=width, height=844, deviceScaleFactor=1, mobile=False)
+    c.call('Page.addScriptToEvaluateOnNewDocument', source="""
+      if (location.pathname === '/app.html') addEventListener('DOMContentLoaded', () => {
+        const img = new Image(); img.hidden = true; img.src = '/frame-gate.gif'; document.body.append(img);
+      });
+    """)
+    handler.video_gate.clear()
+    handler.frame_gate.clear()                 # keep iframe.load pending after the player has rendered
+    c.call('Page.navigate', url=url + '/index.html')
+    wait(c, "document.querySelector('.ghost[href=\"#demo\"]')")
+    click(c, '.ghost[href="#demo"]')
+    wait(c, "document.querySelector('iframe').contentDocument?.querySelector('[data-poster]')?.naturalWidth > 0")
+    wait(c, "!document.querySelector('iframe').contentDocument.querySelector('.load-state').hidden")
+    assert c.js("getComputedStyle(document.querySelector('iframe')).opacity") == '1'
+    c.js("scrollTo({top:document.querySelector('#demo').offsetTop - 70, behavior:'instant'})")
+    bounds = """(() => { const r = document.querySelector('iframe').contentDocument.querySelector('.stage').getBoundingClientRect();
+      return [r.x, r.y, r.width, r.height]; })()"""
+    loading = c.js(bounds)
+    (ROOT / 'scratch' / f'demo-loading-{width}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    handler.frame_gate.set()
+    handler.video_gate.set()
+    wait(c, "document.querySelector('iframe').contentDocument.querySelector('.load-state').hidden")
+    assert c.js(bounds) == pytest.approx(loading, abs=1)
+    c.js('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
+    (ROOT / 'scratch' / f'demo-ready-{width}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    c.js("document.querySelector('iframe').scrollIntoView({block:'center', behavior:'instant'})")
+    point = c.js("""(() => { const f = document.querySelector('iframe'), r = f.getBoundingClientRect();
+      const b = f.contentDocument.querySelector('[data-play]').getBoundingClientRect(); return [r.x+b.x+b.width/2, r.y+b.y+b.height/2]; })()""")
+    c.call('Input.dispatchMouseEvent', type='mouseMoved', x=point[0], y=point[1])
+    for event in ('mousePressed', 'mouseReleased'):
+        c.call('Input.dispatchMouseEvent', type=event, x=point[0], y=point[1], button='left', clickCount=1)
+    wait(c, "document.querySelector('iframe').contentDocument.querySelector('video').currentTime > .3")
 
 
 def test_mobile_demo_layout(browser):
