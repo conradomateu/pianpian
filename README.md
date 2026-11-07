@@ -9,6 +9,7 @@ Chinese, pinyin and English subtitles for Bilibili, YouTube and your own videos,
 
 [![CI](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml/badge.svg)](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/conradomateu/pianpian?sort=semver&color=DE3B26)](https://github.com/conradomateu/pianpian/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/conradomateu/pianpian/total?color=0E8A63)](https://github.com/conradomateu/pianpian/releases)
 [![macOS 14+ · Apple Silicon](https://img.shields.io/badge/macOS_14+-Apple_Silicon-17130F?logo=apple)](#install)
 [![Windows 11 · x64](https://img.shields.io/badge/Windows_11-x64-17130F)](#install)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-8A7F74)](LICENSE)
