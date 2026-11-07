@@ -426,6 +426,16 @@ demoFrame.addEventListener('load', () => {
   if (!shell) return;
   new ResizeObserver(fitDemo).observe(shell);
   doc.addEventListener('toggle', () => requestAnimationFrame(fitDemo), true);
+  doc.addEventListener('player-reveal', e => requestAnimationFrame(() => {
+    if (e.target.hidden || !e.target.getClientRects().length) return;
+    // The iframe cannot see the phone viewport or the sticky header: reveal the card or its returning focus here.
+    const target = e.target.getBoundingClientRect(), frame = demoFrame.getBoundingClientRect();
+    const top = (visualViewport?.offsetTop || 0) + document.querySelector('header.top').getBoundingClientRect().height + 8;
+    const bottom = (visualViewport?.offsetTop || 0) + (visualViewport?.height || innerHeight) - 8;
+    const delta = frame.top + target.bottom > bottom ? frame.top + target.bottom - bottom
+      : frame.top + target.top < top ? frame.top + target.top - top : 0;
+    if (delta) scrollBy({ top: delta, behavior: 'instant' });
+  }));
   fitDemo();
 });
 addEventListener('resize', fitDemo);

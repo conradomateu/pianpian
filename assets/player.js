@@ -246,6 +246,7 @@
     const q = s => root.querySelector(s);
     const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = opts.list || q('[data-list]');
     const sheet = q('.wsheet'), sheetBody = q('[data-sheet-body]');
+    let sheetBack = null;
     let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 7;
     let words = null, align = null, ruby = false, pin = null, pinCue = -1, videoKey = '';
     let anki = null, ankiAnchor = null, ankiVisible = false;
@@ -638,6 +639,15 @@
       ov.querySelectorAll('.w.hl').forEach(x => x.classList.remove('hl'));
       setGloss(ov, `<span class="rule ${el.dataset.g.split(':')[0]}">${ruleFor(el)}</span>`);
     }
+    function focusSheet(el, box) {
+      if (!sheetShown()) return;
+      // Subtitle redraws replace the word nodes; keep its address, not the detached node.
+      sheetBack = { box, selector: el.matches('.w')
+        ? `.w[data-anki-cue="${el.dataset.ankiCue}"][data-w="${el.dataset.w}"]`
+        : `.g[data-g="${el.dataset.g}"]` };
+      q('[data-sheet-close]').focus({ preventScroll: true });
+      sheet.dispatchEvent(new CustomEvent('player-reveal', { bubbles: true }));
+    }
     ov.addEventListener('mouseover', e => {
       const m = e.target.closest('.g'); if (m && !pin) return showRule(m);
       const w = e.target.closest('.w'); if (w && !pin) highlight(ov, w.dataset.w);
@@ -649,7 +659,7 @@
       const w = e.target.closest('.w');
       selectAnkiWord(w, e.shiftKey);
       const m = e.target.closest('.g');
-      if (m) { e.stopPropagation(); pin = 'rule:' + m.dataset.g; pinCue = chinese() ? cueAt(chinese().cues, v.currentTime - delay) : -1; showRule(m); v.pause(); return; }
+      if (m) { e.stopPropagation(); pin = 'rule:' + m.dataset.g; pinCue = chinese() ? cueAt(chinese().cues, v.currentTime - delay) : -1; showRule(m); v.pause(); focusSheet(m, ov); return; }
       if (!w) return;
       e.stopPropagation();
       const C = chinese();
@@ -658,6 +668,7 @@
       if (C && pinCue >= 0) shownWords = cueWords(C.cues[pinCue]);
       highlight(ov, pin);
       v.pause();
+      focusSheet(w, ov);
     }
     ov.addEventListener('click', overlayClick);
     list.addEventListener('mouseover', e => { const w = e.target.closest('.w'), cue = e.target.closest('.cue'); if (cue) highlight(cue, w && w.dataset.w); });
@@ -670,6 +681,7 @@
         pin = w.dataset.w; pinCue = +w.dataset.ankiCue;
         v.currentTime = C.cues[pinCue].s + delay + 0.01;
         v.pause(); tick(true);
+        focusSheet(w, list);
         return;
       }
       const el = e.target.closest('.cue'), L = lead();
@@ -682,7 +694,7 @@
       e.preventDefault(); e.stopPropagation();
       const selector = `.w[data-anki-cue="${w.dataset.ankiCue}"][data-w="${w.dataset.w}"]`;
       activate(e);
-      box.querySelector(selector)?.focus({ preventScroll: true });
+      if (!sheetShown()) box.querySelector(selector)?.focus({ preventScroll: true });
     });
 
     /* ---- controls ---- */
@@ -761,15 +773,19 @@
       unpin();
     });
     const sheetShown = () => !sheet.hidden && sheet.getClientRects().length > 0;
-    q('[data-sheet-close]').addEventListener('click', () => {
-      const back = (pin && ov.querySelector(`.w[data-w="${pin}"][tabindex]`)) || null;
+    function closeSheet() {
+      let back = sheetBack && sheetBack.box.querySelector(sheetBack.selector);
       unpin();
-      back?.focus({ preventScroll: true });           // the keyboard goes back to the word it came from
-    });
+      if (!back?.matches('[tabindex]') || !back.getClientRects().length) back = q('[data-play]');
+      back.focus();
+      back.dispatchEvent(new CustomEvent('player-reveal', { bubbles: true }));
+      sheetBack = null;
+    }
+    q('[data-sheet-close]').addEventListener('click', closeSheet);
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       dds().forEach(d => d.open = false);
-      if (sheetShown()) unpin();                     // only the visible sheet: the card on the video keeps its pin
+      if (sheetShown()) closeSheet();                // only the visible sheet: the card on the video keeps its pin
     });
     q('[data-vfull]').onclick = fullscreen;
     const playPause = () => v.paused ? v.play() : v.pause();

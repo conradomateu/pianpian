@@ -56,7 +56,6 @@ body { overflow:hidden; }
   .panel.left .panelhead { padding-left:52px; }
   .panel.right { max-height:300px; }
   .panel.right .transcript { margin-inline:-12px; }
-  .sidefoot { flex-wrap:wrap; }
   .pbar { position:relative; }
   .pbar .dd { position:static; }
   .pbar .dd > summary, .pbar > .ib { min-height:44px; }
@@ -122,7 +121,8 @@ body { overflow:hidden; }
 .item .chips { display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; }
 .item .pill { font-size:8.5px; padding:0 5px; }
 .item .pill.lvl { background:var(--surface-2); color:var(--fg-2); border-color:var(--line-2); }
-.sidefoot { display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; }
+.sidefoot { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; }
+.sidefoot > * { flex-shrink:0; }
 .sidefoot .grow { flex:1; }
 .sidefoot .ib { padding:4px 9px; font-size:11px; }
 
