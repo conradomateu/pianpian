@@ -1,0 +1,6 @@
+/* Only sources with successful sample downloads; a short list needs no carousel. */
+.platforms { margin:30px auto 0; text-align:center; color:var(--fg-2); font-size:12px; }
+.platforms p { margin:10px 0 0; }
+.platforms-list { display:flex; align-items:center; justify-content:center; gap:28px; list-style:none; margin:0; padding:0; }
+.platforms-list li { display:flex; align-items:center; justify-content:center; }
+.platforms-list img { object-fit:contain; }

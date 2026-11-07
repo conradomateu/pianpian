@@ -102,7 +102,45 @@ links stay.
 
 Everything lives in the video's folder, so the app and the command line always agree: `source.*`,
 `title.txt`, `source.url`, `.hardsubs`, `.english-auto`, `.from-whisper`, `.split`, the `.srt` tracks,
-`zh.words.json`, `zh.align.json`, `en.lines.txt` and `study.mkv`. Jobs live in memory.
+`zh.words.json`, `zh.align.json`, `en.lines.txt` and `study.mkv`. The first Anki export adds
+`.pianpian-source-id`, a UUID that moves with the folder. Jobs live in memory.
+
+## Anki export
+
+`assets/player.js` owns Chinese cue/token selection; `assets/anki.js` owns the editable draft in the
+existing menu row. `anki_export.py` validates library paths, current transcript anchors and audio
+intervals, extracts MP3 with FFmpeg, and calls `anki_connect.py` (stdlib, AnkiConnect legacy v6 over
+127.0.0.1). Settings under `anki` in the app config hold the port, optional API key and last deck.
+The status endpoint reports whether an Anki collection is usable, rather than guessing from installed apps.
+
+The preview URL is required on export and must match the source path/size/mtime and exact interval.
+Preview MP3s live in `engine.cache_dir()/anki`, limited to 128 files; clips are limited to 120 seconds.
+The same bytes are uploaded to Anki. With raw Whisper data, old word timings are repaired in memory by
+`srt_tool.py retime`; failure removes word bounds so the player offers sentence audio. User files stay intact.
+
+`PianpianId` hashes the source UUID and normalized transcript character offsets/text. Editable meanings,
+audio margins and folder names do not change it. An existing occurrence requires an explicit update.
+Updates keep the note/card identities, scheduling, tags and deck; writes are serialized and never
+automatically retried. A lost response is resolved by looking up that occurrence on the next attempt.
+Anki's separate API calls are not transactional: profile checks run between calls, but a profile switch
+during one call cannot be made atomic; an interrupted export may leave unused media.
+
+The `Pianpian` note type has `PianpianId`, `Expression`, `Pinyin`, `Meaning`, `Sentence`, `Translation`,
+`Audio` and `Source`. Text is HTML-escaped; the server generates the audio reference and optional
+highlight spans from a fixed palette (`none`, `jade`, `coral`, `blue`, `gold`). Highlighting affects
+Expression and literal matches in Sentence, without changing the note schema. Matching happens
+before HTML escaping, so entities cannot be split by a selected word. Inline highlights inherit text color.
+The player supplies optional `tones` segments for `pinyin` and `expression`: `[text, tone]`, where 0 is
+plain and 1–5 use the same light/dark palette as `kit.css`. The server validates that segments reconstruct
+their plain field exactly, then escapes them and adds fixed namespaced styles. Styles travel with the
+fields, so existing note templates and user styling are not replaced. Pinyin colors default on; Chinese
+colors are optional and also follow literal Expression matches in Sentence. Unaligned text stays plain.
+Drafts survive API errors in the open page, not reloads or selection changes. Export is one-way.
+The icon-only Anki menu opens a compact popover with a persistent selection header and save footer.
+Its `open(anchor)` method is shared by the toolbar and pinned-word action (`onAnkiOpen`); dismissal
+keeps the draft and pauses preview audio. Audio limits, text/color and connection controls are folded.
+The extraction layer handles audio-only sources; the library UI still imports video. Windows executable
+layout is unit-tested on macOS; execution on Windows remains untested.
 
 ## Server API
 
@@ -119,6 +157,12 @@ Everything lives in the video's folder, so the app and the command line always a
 | POST | `/api/videos/<id>/split` | `{max}`: cut the lines again (0 = as transcribed) |
 | POST | `/api/videos/<id>/rebuild` | Run the pipeline again |
 | POST | `/api/videos/<id>/open` | Show the folder in Finder |
+| GET | `/api/anki/status` | Connection state, decks, profile and public connection settings |
+| GET | `/api/anki/audio/<name>.mp3` | Cached preview with byte-range support |
+| POST | `/api/anki/settings` | Save local port and optional API key; check connection |
+| POST | `/api/anki/preview` | Validate selection and interval, extract original audio |
+| POST | `/api/anki/export` | Add, detect an existing occurrence, or explicitly update it |
+| POST | `/api/anki/open` | Open the exported note in Anki's browser |
 
 Safety: the server listens on 127.0.0.1 only. Requests that change anything need an `X-Kit: 1`
 header, so other websites can't start jobs. Video ids and paths are checked, and commands run

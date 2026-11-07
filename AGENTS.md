@@ -12,7 +12,7 @@ A Mandarin study app: a video becomes Chinese + pinyin + English subtitles you c
 | | |
 |---|---|
 | Check | `python3 dev.py check` (ruff + node --check + pytest), the same as CI (`.github/workflows/ci.yml`) |
-| Run | `python3 server.py` → http://127.0.0.1:8770/app.html (`--no-browser` for agents). Dev app: `python3 dev.py app` → `~/Applications/Pianpian.app` (runs this checkout, port 8771). Release build: `python3 dev.py build` → `dist/Pianpian.app` + zip. Website: `python3 dev.py preview` → http://127.0.0.1:8765 |
+| Run | `python3 server.py` → http://127.0.0.1:8770/app.html (`--no-browser` for agents). Dev app: `python3 dev.py app` → `~/Applications/Pianpian.app` (runs this checkout, port 8771). Release build: `python3 dev.py build` → `dist/Pianpian.app` + zip. Website: `python3 dev.py preview` → http://127.0.0.1:8766 (8765 is AnkiConnect) |
 | Library | One folder per video (default `~/Movies/Pianpian/<video>/`, set in the first-run setup): `source.mp4`, `zh.srt`, `zh.pinyin.srt`, `zh.en.srt`, `zh.words.json`, `zh.align.json`, `study.mkv`. Demo: `demo/library/` (`tools/demo/make_demo.py`) |
 | Models | Whisper `mlx-community/whisper-large-v3-turbo` · Hy-MT2 `mlx-community/Hy-MT2-1.8B-4bit`, pinned in `pipeline/models.lock.json`; the app keeps them in `<data>/models`, and also uses `~/.cache/mandarin-kit/models/` and the Hugging Face cache · CC-CEDICT in `~/.cache/mandarin-kit/` |
 | Platform | macOS Apple Silicon only today (MLX, Vision OCR). Windows is planned: keep new code platform-neutral (see Rules) |

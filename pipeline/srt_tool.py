@@ -319,13 +319,19 @@ def spoken_times(cues: list[dict], whisper: Path) -> None:
         for line in cue["w"]:
             row = []
             for w in line:
-                got = []
-                for ch in (c for c in w[0] if HAN.match(c)):
+                got, chars = [], HAN.findall(w[0])
+                for ch in chars:
                     k = next((k for k in range(j, min(j + 12, len(times))) if times[k][0] == ch), None)
                     if k is not None:
                         got.append(times[k]); j = k + 1
-                row.append([round(got[0][1], 2), round(got[-1][2], 2)] if got else 0)
+                row.append([round(got[0][1], 2), round(got[-1][2], 2)] if got and len(got) == len(chars) else 0)
             cue["k"].append(row)
+
+
+def cmd_retime(a):
+    data = json.loads(Path(a.words).read_text(encoding="utf-8"))
+    spoken_times(data["cues"], Path(a.whisper))
+    print(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
 
 def cmd_words(a):
@@ -407,14 +413,18 @@ def split_text(text: str, limit: int) -> list[tuple[int, int]]:
 
 
 def char_times(words_json: Path) -> list[tuple[str, float, float]]:
-    """Whisper's word timestamps spread over each word's characters."""
+    """Spread Whisper's word times over spoken characters; punctuation sits at the boundary."""
     data = json.loads(words_json.read_text(encoding="utf-8"))
     out = []
     for seg in data.get("segments", []):
         for w in seg.get("words", []):
             chars = [c for c in w["word"] if not c.isspace()]
-            step = (w["end"] - w["start"]) / max(len(chars), 1)
-            out += [(c, w["start"] + k * step, w["start"] + (k + 1) * step) for k, c in enumerate(chars)]
+            step = (w["end"] - w["start"]) / max(sum(c.isalnum() for c in chars), 1)
+            k = 0
+            for c in chars:
+                start = w["start"] + k * step
+                k += c.isalnum()
+                out.append((c, start, w["start"] + k * step))
     return out
 
 
@@ -498,6 +508,7 @@ def main():
     p = sub.add_parser("split"); p.add_argument("srt"); p.add_argument("-o", dest="out", required=True)
     p.add_argument("--max", type=int, default=18, help="Chinese characters per line (0 = keep as is)"); p.add_argument("--words"); p.set_defaults(f=cmd_split)
     p = sub.add_parser("words"); p.add_argument("srt"); p.add_argument("-o", dest="out"); p.set_defaults(f=cmd_words)
+    p = sub.add_parser("retime"); p.add_argument("words"); p.add_argument("--whisper", required=True); p.set_defaults(f=cmd_retime)
     p = sub.add_parser("ass"); p.add_argument("srts", nargs="+"); p.add_argument("-o", required=True); p.add_argument("--margin-v", type=int, default=40); p.set_defaults(f=cmd_ass)
     a = ap.parse_args()
     a.f(a)

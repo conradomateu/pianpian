@@ -58,11 +58,26 @@ Updates: the app tells you when a new version is out, and keeps its video downlo
 
 1. Paste a Bilibili or YouTube link (or the text a *Share* button copies: the link inside is found, and tracking is removed) and press **Add** (or drop a video file on the window). For Bilibili's own AI subtitles, pick the browser you're logged in with under *options*.
 2. A ten-minute video is ready in about a minute. It opens by itself.
-3. Hover, click, loop. Menus under the video: **Subtitles**, **Playback**, **Grammar**, **Video**, **Resources**. Keys: <kbd>B</kbd> library, <kbd>T</kbd> transcript, <kbd>?</kbd> all shortcuts.
+3. Hover, click, loop. Menus under the video: **Subtitles**, **Playback**, **Grammar**, **Video**, **Resources**, **Anki**. Keys: <kbd>B</kbd> library, <kbd>T</kbd> transcript, <kbd>?</kbd> all shortcuts.
 
 Lines too long? **Video ▾ → Lines** cuts them again from Whisper's word timings. A wrong pinyin? Add the word to [`pipeline/pinyin_fixes.txt`](pipeline/pinyin_fixes.txt) and press **Video ▾ → Rebuild**.
 
 Something went wrong? The app says what in plain words; **Report** opens a GitHub issue already filled in with details that leave out your files and links. Nothing is sent until you press Submit.
+
+### Send a selection to Anki (development checkout)
+
+1. Open Anki Desktop, install [AnkiConnect](https://ankiweb.net/shared/info/2055492159) with add-on code **2055492159**, then restart Anki and open your profile.
+2. In a processed library video, click a Chinese word. **Shift+click** another word to select a range. Open the editor with the **Anki icon** in the word's pinned dictionary card or the toolbar; **Use full sentence** selects the current sentence.
+3. Press **Listen** to prepare and play the original audio. **Adjust audio** reveals the start/end, ±100 ms buttons and **Use sentence audio**. Listen again after changing the interval. Additional options hold the margins (initially 150 ms before and 200 ms after) and connection settings.
+4. Choose a deck, or **New deck…**, then **Add to Anki**. The note includes Chinese, pinyin, meaning, sentence, translation, original audio and source title.
+
+Exporting the same occurrence again offers **Update existing note**. Confirming updates its content while keeping the existing cards, review history, tags and deck. Another occurrence makes a separate note. Keep `.pianpian-source-id` with the video's folder when moving it: that file identifies previous exports.
+
+Expand the text/color controls to edit the fields or choose a highlight. Pinyin tone colors are enabled by default, using Pianpian's light/dark palette; Chinese tone colors are optional. Text that cannot be aligned to the edited pinyin stays uncolored. The independent highlight follows the expression into Anki and marks literal matches in the sentence. **None** removes the highlight on an explicit update; turning off tone colors removes those too. Closing the popover with Escape, its close button or a click outside keeps the current draft.
+
+If Anki is unavailable, the open draft stays in place for **Retry connection**. Reloading Pianpian or selecting another item clears the draft. **Connection settings** accepts a local port and optional AnkiConnect API key; the default port is 8765. A different service on that port must use another port, or AnkiConnect and Pianpian must be configured to agree on a free one.
+
+Word times are estimates: preview and listen before saving. Missing or invalid word times use sentence bounds. Export requires the local app/server; the website demo and files opened directly from disk cannot send notes. This feature is implemented in this checkout and has not been released yet. Audio-only extraction is covered by backend tests; audio-only library import and a Windows app are still planned.
 
 ## How it works
 
@@ -89,7 +104,7 @@ python3 dev.py check      # lint and tests, the same as CI
 |---|---|
 | `python3 dev.py app` | A dev `Pianpian.app` in `~/Applications` that runs this checkout |
 | `python3 dev.py build` | The real `dist/Pianpian.app` and its zip, as releases ship it |
-| `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8765 |
+| `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8766 (AnkiConnect uses 8765) |
 | `python3 dev.py shots` | The screenshots above, taken from the demo |
 | `python3 dev.py lock` | Pin the engine's packages and the models again |
 | `python3 dev.py version` | Preview the next release: its version, and which commits decide it |
@@ -118,6 +133,7 @@ It stands on other people's work, used under their terms:
 - **CC-CEDICT** meanings (CC BY-SA 4.0), downloaded on first run, not shipped.
 - **HSK 3.0 word levels** from [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) (MIT, [`hsk3.LICENSE`](pipeline/data/hsk3.LICENSE)).
 - **The demo** is made from scratch: the script, the drawings and the music are in [`tools/demo/`](tools/demo), and the voice is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0).
+- **Anki logo** © Alex Fraser, used unmodified under its [limited alternative licence](assets/anki-logo-license.txt).
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp), [jieba](https://github.com/fxsjy/jieba), [pypinyin](https://github.com/mozillazg/python-pinyin), [MLX](https://github.com/ml-explore/mlx), [pywebview](https://github.com/r0x0r/pywebview) and [uv](https://github.com/astral-sh/uv).
 
 Only download videos you are allowed to watch, and don't re-upload them.

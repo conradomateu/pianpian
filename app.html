@@ -9,6 +9,7 @@
 <script>(function(){try{var d=document.documentElement,t=localStorage.getItem("zh-kit-theme");if(t&&t!=="system")d.setAttribute("data-theme",t);
 if((localStorage.getItem("pp-left")||localStorage.getItem("pp-side"))==="closed")d.classList.add("left-closed");if(localStorage.getItem("pp-right")==="closed")d.classList.add("right-closed");}catch(e){}})();</script>
 <link rel="stylesheet" href="assets/kit.css">
+<link rel="stylesheet" href="assets/anki.css">
 <style>
 /* one screen, like a desktop app: library panel on the left, the video in the middle, transcript panel on
    the right. Both panels are the same component (.panel + a fixed .ptoggle in its top corner).
@@ -59,7 +60,7 @@ body { overflow:hidden; }
   .pbar { position:relative; }
   .pbar .dd { position:static; }
   .pbar .dd > summary, .pbar > .ib { min-height:44px; }
-  .pbar .dd .ddp, .pbar .dd.right .ddp { left:0; right:0; top:calc(100% + 6px); bottom:auto;
+  .pbar .dd .ddp:not(.grammar):not(.anki-panel) { left:0; right:0; top:calc(100% + 6px); bottom:auto;
     width:100%; min-width:0; max-width:100%; max-height:300px !important; }
   .pbar .ddp .btn, .pbar .ddp .mini, .pbar .ddp select { min-height:44px; }
   #vpanel { width:100%; }
@@ -186,6 +187,7 @@ body { overflow:hidden; }
 
 <script src="assets/kit.js"></script>
 <script src="assets/player.js"></script>
+<script src="assets/anki.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -216,12 +218,15 @@ const api = async (path, body, signal) => {
   return j;
 };
 
+let ankiUI;
 const player = SubPlayer.mount($('player'), {
   hint: OFFLINE
     ? '<div><b>Drop a video and its subtitle files here</b>The server is off, so there is no library. Open the Pianpian app, or run <code>python3 server.py</code> in its folder.</div>'
     : '<div><b>Pick a video on the left, paste a link, or drop files here</b>A video plus its <code>.srt</code> files (and <code>zh.words.json</code>) play straight from disk.</div>',
   keys: ' · <b>B</b> library · <b>T</b> transcript',
   list: $('transcript'),
+  onAnkiSelection(value) { ankiUI?.selectionChanged(value); },
+  onAnkiOpen(anchor) { ankiUI?.open(anchor); },
   onProgress(id, time) {
     if (DEMO || !current || current.id !== id || !Number.isFinite(time)) return;
     try {
@@ -261,6 +266,7 @@ setTimeout(() => document.documentElement.classList.add('ready'), 80);   // moti
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */
 player.extra.innerHTML = '<details class="dd" data-dd id="vmenu" hidden><summary>Video</summary><div class="ddp" id="vpanel"></div></details>';
+ankiUI = AnkiExport.mount(player, { api, source: () => current, enabled: !DEMO && !OFFLINE });
 
 /* ---------- status ---------- */
 async function status() {

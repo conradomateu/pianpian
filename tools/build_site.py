@@ -1,7 +1,7 @@
 """Build the website into _site/: the landing page, and the app itself as a live demo.
 
     python3 tools/build_site.py            # _site/
-    python3 tools/build_site.py --serve    # and serve it at http://127.0.0.1:8765 (with byte ranges, so video seeks)
+    python3 tools/build_site.py --serve    # and serve it at http://127.0.0.1:8766 (8765 belongs to AnkiConnect)
 
 The demo is app.html?demo running on demo/library/ (made by tools/demo/make_demo.py). Its API
 answers are written here by server.py's own functions, so the demo shows what the app shows.
@@ -156,8 +156,8 @@ def server(port: int) -> http.server.ThreadingHTTPServer:
 if __name__ == "__main__":
     main()
     if "--serve" in sys.argv:
-        srv = server(8765)
-        print("http://127.0.0.1:8765/  (Ctrl+C to stop)")
+        srv = server(8766)
+        print("http://127.0.0.1:8766/  (Ctrl+C to stop)")
         try:
             threading.Event().wait()
         except KeyboardInterrupt:

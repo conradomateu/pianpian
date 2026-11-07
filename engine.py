@@ -29,7 +29,9 @@ if FROZEN:
     sys.dont_write_bytecode = True
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
-SUPPORT = Path(os.environ.get("PIANPIAN_HOME") or Path.home() / "Library" / "Application Support" / "Pianpian")
+SUPPORT = Path(os.environ.get("PIANPIAN_HOME") or (
+    Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Pianpian" if sys.platform == "win32"
+    else Path.home() / "Library" / "Application Support" / "Pianpian"))
 CONFIG = SUPPORT / "config.json"
 REQS = HERE / "pipeline" / "requirements.txt"
 MODELS_PY = HERE / "pipeline" / "models.py"
@@ -69,7 +71,7 @@ def save_config(**changes) -> dict:
 
 def logs_dir() -> Path:
     """macOS keeps app logs in ~/Library/Logs; with $PIANPIAN_HOME they stay next to everything else."""
-    d = SUPPORT / "logs" if os.environ.get("PIANPIAN_HOME") else Path.home() / "Library" / "Logs" / "Pianpian"
+    d = SUPPORT / "logs" if os.environ.get("PIANPIAN_HOME") or sys.platform != "darwin" else Path.home() / "Library" / "Logs" / "Pianpian"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -101,11 +103,12 @@ def python() -> str:
     .venv (`python3 dev.py engine`), else the one running this."""
     if os.environ.get("PIANPIAN_PYTHON"):
         return os.environ["PIANPIAN_PYTHON"]
-    for p in (engine_dir() / "bin" / "python", HERE / ".venv" / "bin" / "python"):
+    relative = Path("Scripts/python.exe") if sys.platform == "win32" else Path("bin/python")
+    for p in (engine_dir() / relative, HERE / ".venv" / relative):
         if p.exists():
             return str(p)
     # inside the packaged app, sys.executable is the app itself: running it would open a second window
-    return str(engine_dir() / "bin" / "python") if FROZEN else sys.executable
+    return str(engine_dir() / relative) if FROZEN else sys.executable
 
 
 def uv() -> str | None:
@@ -120,8 +123,10 @@ def ffmpeg() -> str | None:
     """Homebrew's ffmpeg, else the one in the engine (imageio-ffmpeg)."""
     if exe := shutil.which("ffmpeg"):
         return exe
-    lib = Path(python()).parent.parent / "lib"
-    return next((str(f) for f in sorted(lib.glob("python3*/site-packages/imageio_ffmpeg/binaries/ffmpeg-*")) if os.access(f, os.X_OK)), None)
+    root = Path(python()).parent.parent
+    candidates = list((root / "lib").glob("python3*/site-packages/imageio_ffmpeg/binaries/ffmpeg-*"))
+    candidates += list((root / "Lib" / "site-packages" / "imageio_ffmpeg" / "binaries").glob("ffmpeg-*.exe"))
+    return next((str(f) for f in sorted(candidates) if os.access(f, os.X_OK)), None)
 
 
 def requirements_id() -> str:

@@ -11,7 +11,7 @@
     python3 dev.py app        # a dev Pianpian.app in ~/Applications that runs this checkout (macOS)
     python3 dev.py build      # the real Pianpian.app and Pianpian-macOS.zip in dist/ (what releases ship)
     python3 dev.py site       # the website into _site/ (landing page + live demo)
-    python3 dev.py preview    # build it and serve it at http://127.0.0.1:8765
+    python3 dev.py preview    # build it and serve it at http://127.0.0.1:8766
     python3 dev.py shots      # README and website screenshots from the demo (needs Chrome or Brave)
 
 Standard library only. Tools run through `uv run --group dev` (pyproject.toml). From China, set

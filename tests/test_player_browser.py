@@ -95,6 +95,8 @@ def browser(monkeypatch):
             target = next(t for t in c.call("Target.getTargets")["targetInfos"] if t["type"] == "page")
             c.session = c.call("Target.attachToTarget", targetId=target["targetId"], flatten=True)["sessionId"]
             c.call("Page.enable")
+            c.call("Network.enable")
+            c.call("Network.setBlockedURLs", urls=["https://*"])  # Fonts/analytics must not gate local regression checks.
             yield c, f"http://127.0.0.1:{srv.server_port}", Handler
         finally:
             Handler.track_gate.set()
@@ -127,6 +129,34 @@ def navigate(c, url):
     c.js("window.__leaving = true")
     c.call("Page.navigate", url=url)
     wait(c, "!window.__leaving && document.readyState === 'complete'")
+
+
+@pytest.mark.parametrize('width', [900, 390])
+def test_grammar_close_stays_fixed_while_examples_scroll(browser, width):
+    c, url, _ = browser
+    c.call('Emulation.setDeviceMetricsOverride', width=width, height=600, deviceScaleFactor=1, mobile=False)
+    navigate(c, url + '/app.html')
+    wait(c, "document.querySelector('.item') && document.querySelector('.load-state').hidden")
+    click(c, '.item')
+    wait(c, "document.querySelector('video').readyState >= 3 && document.querySelector('.load-state').hidden")
+    c.js("document.querySelector('details:has(.grammar) > summary').scrollIntoView({block:'center', behavior:'instant'})")
+    click(c, 'details:has(.grammar) > summary')
+    wait(c, "document.querySelector('details:has(.grammar)').open")
+    before = c.js("document.querySelector('[data-grammar-close]').getBoundingClientRect().toJSON()")
+    assert c.js("""(() => {
+      const button = document.querySelector('[data-grammar-close]'), b = button.getBoundingClientRect();
+      const icon = button.querySelector('svg').getBoundingClientRect();
+      return Math.abs(b.x + b.width/2 - icon.x - icon.width/2) < 1 &&
+        Math.abs(b.y + b.height/2 - icon.y - icon.height/2) < 1;
+    })()""")
+    x, y = c.js("(() => { const r=document.querySelector('.grammar-body').getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2]; })()")
+    c.call('Input.dispatchMouseEvent', type='mouseMoved', x=x, y=y)
+    c.call('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=1500)
+    wait(c, "document.querySelector('.grammar-body').scrollTop > 100")
+    assert c.js("document.querySelector('[data-grammar-close]').getBoundingClientRect().toJSON()") == before
+    assert c.js("document.querySelector('.grammar').scrollTop") == 0
+    click(c, '[data-grammar-close]')
+    assert c.js("!document.querySelector('details:has(.grammar)').open && document.activeElement.matches('details:has(.grammar) > summary')")
 
 
 def test_resume_retry_and_player_feedback(browser):

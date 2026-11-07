@@ -35,7 +35,8 @@ def test_the_app_tells_the_pipeline_where_its_data_is(monkeypatch, tmp_path):
 
 
 def test_no_personal_paths_in_what_ships():
-    shipped = [*ROOT.glob("*.py"), *ROOT.glob("*.html"), *(ROOT / "pipeline").glob("*.py"), *(ROOT / "assets").glob("*")]
+    shipped = [*ROOT.glob("*.py"), *ROOT.glob("*.html"), *(ROOT / "pipeline").glob("*.py"),
+               *(f for f in (ROOT / "assets").rglob("*") if f.is_file())]
     for f in shipped:
         text = f.read_text(encoding="utf-8", errors="ignore")
         assert "/Users/" not in text and "~/code/" not in text, f
