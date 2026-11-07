@@ -54,7 +54,7 @@ def study_words(folder):
         if cached and cached[0] == stamp:
             return cached[1]
         data = json.loads(words.read_text(encoding="utf-8"))
-        if raw.exists():
+        if raw.exists() and raw.resolve().is_relative_to(folder.resolve()):   # a link out of the folder is ignored
             try:
                 result = subprocess.run([engine.python(), str(engine.HERE / "pipeline" / "srt_tool.py"), "retime", str(words),
                                          "--whisper", str(raw)], capture_output=True, text=True, encoding="utf-8", timeout=30, check=True,

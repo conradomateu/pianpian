@@ -100,15 +100,23 @@ def describe(entry: Path) -> dict:
             "split": int(read(entry / ".split")) if read(entry / ".split").isdigit() else None,
             "needsEnglish": (entry / "zh.lines.txt").exists() and not has["en"],
             "hsk": video_hsk(entry),
-            "mtime": max((p.stat().st_mtime for p in entry.iterdir()), default=entry.stat().st_mtime)}
+            "mtime": max((p.lstat().st_mtime for p in entry.iterdir()), default=entry.stat().st_mtime)}
+
+
+def inside_library(f: Path) -> bool:
+    """By the real path: a link in the library must not lead out of it. (The app's own files are checked by name.)"""
+    try:
+        return f.resolve().is_relative_to(CFG["library"].resolve())
+    except (OSError, RuntimeError):                          # a link loop, a name the system refuses
+        return False
 
 
 def library() -> list:
     lib = CFG["library"]
     lib.mkdir(parents=True, exist_ok=True)
-    folders = [p for p in lib.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    folders = [p for p in lib.iterdir() if p.is_dir() and not p.name.startswith(".") and inside_library(p)]
     done = {p.name[:-len("_study")] for p in folders if p.name.endswith("_study")}
-    files = [p for p in lib.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT and p.stem not in done]
+    files = [p for p in lib.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT and p.stem not in done and inside_library(p)]
     return sorted((describe(p) for p in folders + files), key=lambda v: -v["mtime"])
 
 
@@ -120,7 +128,7 @@ def entry_path(vid_id: str) -> Path:
     if not safe_name(vid_id):
         raise ValueError("bad id")
     p = CFG["library"] / vid_id
-    if not p.exists():
+    if not p.exists() or not inside_library(p):
         raise FileNotFoundError(vid_id)
     return p
 
@@ -331,7 +339,7 @@ class Handler(BaseHTTPRequestHandler):
                 if m[2] and not safe_name(m[2]):
                     return self.fail(404, "bad filename")
                 f = p / m[2] if m[2] else p
-                if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]):
+                if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]) and inside_library(f):
                     if p.is_dir() and f.name == "zh.words.json":
                         return self.send_json(anki_export.study_words(p))
                     return self.send_file(f)
@@ -352,6 +360,8 @@ class Handler(BaseHTTPRequestHandler):
         if p.is_file():
             return self.fail(404, "no thumbnail for a loose file")
         out = p / f"{name}.jpg"
+        if not inside_library(out):                           # a link: never write through it or serve it
+            return self.fail(404, "no thumbnail")
         width = 1280 if name == "poster" else 480
         if not out.exists() and (src := video_in(p)):
             subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",

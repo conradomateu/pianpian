@@ -213,3 +213,32 @@ def test_host_header_and_cross_origin_status(tmp_path, monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_links_in_the_library_do_not_lead_out_of_it(tmp_path, monkeypatch):
+    lib, outside = tmp_path / "lib", tmp_path / "outside"
+    (lib / "vid").mkdir(parents=True)
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+    (lib / "vid" / "zh.srt").write_text("1\n")
+    (lib / "vid" / "link.srt").symlink_to(outside / "secret.txt")
+    (lib / "vid" / "thumb.jpg").symlink_to(outside / "secret.txt")
+    (lib / "vid" / "poster.jpg").symlink_to(outside / "new.jpg")       # dangling: ffmpeg must not write through it
+    (lib / "linkdir").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setitem(server.CFG, "library", lib)
+    monkeypatch.setattr(server.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("ffmpeg ran")))
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        assert urllib.request.urlopen(base + "/library/vid/zh.srt").read() == b"1\n"
+        for path in ("/library/vid/link.srt", "/library/vid/thumb.jpg", "/library/vid/poster.jpg",
+                     "/library/linkdir/secret.txt", "/api/videos/linkdir"):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(base + path)
+            assert error.value.code == 404, path
+        assert [v["id"] for v in json.load(urllib.request.urlopen(base + "/api/videos"))] == ["vid"]
+        assert not (outside / "new.jpg").exists()
+    finally:
+        srv.shutdown()
+        srv.server_close()
