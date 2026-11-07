@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.1...pianpian-v0.1.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* show video loaders and start progressive playback sooner ([#20](https://github.com/conradomateu/pianpian/issues/20)) ([6f76586](https://github.com/conradomateu/pianpian/commit/6f76586a470c9ac06756caac588c0c094c968f2b))
+
 ## [0.1.1](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.0...pianpian-v0.1.1) (2026-10-23)
 
 
