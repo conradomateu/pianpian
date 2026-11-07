@@ -40,5 +40,14 @@ def test_server(tmp_path):
                 raise AssertionError(f"{bad} was served")
             except urllib.error.HTTPError as e:
                 assert e.code == 404, bad
+        # a video folder with a Chinese name: the page sends encodeURIComponent(id), so POST must unquote it
+        (tmp_path / "视频_study").mkdir()
+        vid = "%E8%A7%86%E9%A2%91_study"
+        req = urllib.request.Request(base + f"/api/videos/{vid}/rebuild", data=b"{}", method="POST", headers={"X-Kit": "1"})
+        try:
+            urllib.request.urlopen(req)
+            raise AssertionError("rebuild of a folder with no source video was accepted")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404 and "no source video in 视频_study" in e.read().decode(), "POST did not unquote the video id"
     finally:
         srv.shutdown()

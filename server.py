@@ -362,7 +362,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.headers.get("X-Kit") != "1":
             return self.fail(403, "missing X-Kit header")
-        path = urlparse(self.path).path
+        path = unquote(urlparse(self.path).path)               # the page sends encodeURIComponent(id): Chinese names arrive %-encoded
         try:
             data = self.body()
             if path == "/api/add":
