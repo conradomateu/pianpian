@@ -11,7 +11,7 @@
     python dev.py app         # a dev app that runs this checkout (macOS: ~/Applications; Windows: launcher.py)
     python dev.py build       # the release build in dist/: Pianpian.app + zip on macOS, installer + zip on Windows
     python dev.py site        # the website into _site/ (landing page + live demo)
-    python dev.py preview     # build it and serve it at http://127.0.0.1:8765
+    python dev.py preview     # build it and serve it at http://127.0.0.1:8766
     python dev.py shots       # README and website screenshots from the demo (needs Chrome or Brave)
 
 Standard library only. Tools run through uv (pyproject.toml); uv is found on PATH or in .venv. From

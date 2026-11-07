@@ -30,12 +30,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 import engine  # noqa: E402  (next to this file: the engine's Python, the settings, the first-run setup)
 import report  # noqa: E402  (problem hints and reports)
 import updates  # noqa: E402  (a new app version, a fresh downloader)
+import anki_export  # noqa: E402  (local audio clips and AnkiConnect; standard library only)
 import links  # noqa: E402  (pipeline/links.py: pasted text to a link; engine.py put pipeline/ on the path)
 
 HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("pianpian")
 SCRIPT = HERE / "pipeline" / "study.py"
-VIDEO_EXT = (".mp4", ".m4v", ".mkv", ".webm", ".mov")
+VIDEO_EXT = anki_export.VIDEO_EXT
 SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name: no separators or NUL
 TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
 mimetypes.add_type("text/plain; charset=utf-8", ".srt")
@@ -277,6 +278,10 @@ class Handler(BaseHTTPRequestHandler):
                                        "busy": busy, "update": UPDATE.get("app")}, cors=True)
             if path == "/api/videos":
                 return self.send_json(library())
+            if path == "/api/anki/status":
+                return self.send_json(anki_export.status())
+            if m := re.fullmatch(r"/api/anki/audio/(pianpian-[0-9a-f]{64}\.mp3)", path):
+                return self.send_file(anki_export.audio_path(m[1]))
             if m := re.fullmatch(r"/api/videos/([^/]+)", path):
                 p = entry_path(m[1])
                 info = describe(p)
@@ -298,6 +303,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.fail(404, "bad filename")
                 f = p / m[2] if m[2] else p
                 if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]):
+                    if p.is_dir() and f.name == "zh.words.json":
+                        return self.send_json(anki_export.study_words(p))
                     return self.send_file(f)
                 return self.fail(404, "not found")
             # the app's own page and assets
@@ -371,7 +378,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(403, "missing X-Kit header")
         path = unquote(urlparse(self.path).path)               # the page sends encodeURIComponent(id): Chinese names arrive %-encoded
         try:
+            if path.startswith("/api/anki/") and int(self.headers.get("Content-Length") or 0) > 256 * 1024:
+                return self.fail(413, "Anki request is too large.")
             data = self.body()
+            if path.startswith("/api/anki/"):
+                return self.anki_request(path, data)
             if path == "/api/add":
                 try:                                       # a bare link, or the text a Share button copies; tracking removed
                     url = links.normalize(str(data.get("url", "")))
@@ -427,6 +438,30 @@ class Handler(BaseHTTPRequestHandler):
             self.fail(404, str(e))
         except json.JSONDecodeError:
             self.fail(400, "bad JSON")
+
+    def anki_request(self, path, data):
+        try:
+            if not isinstance(data, dict):
+                raise ValueError("Expected an Anki request object.")
+            if path == "/api/anki/settings":
+                return self.send_json(anki_export.settings(data))
+            if path == "/api/anki/open":
+                return self.send_json(anki_export.open_note(data))
+            if path in ("/api/anki/preview", "/api/anki/export"):
+                if not isinstance(data.get("id"), str):
+                    raise ValueError("Select a library item first.")
+                entry = entry_path(data["id"])
+                action = anki_export.preview if path.endswith("/preview") else anki_export.export
+                return self.send_json(action(entry, CFG["library"], data))
+            self.fail(404, "not found")
+        except anki_export.AnkiError as e:
+            self.send_json({"error": str(e), "code": e.code}, 503)
+        except (ValueError, FileNotFoundError, KeyError, TypeError) as e:
+            self.fail(400, str(e))
+        except subprocess.TimeoutExpired:
+            self.fail(503, "Audio processing timed out. Select a shorter clip and retry.")
+        except OSError:
+            self.fail(500, "Could not read or save the audio. Check the library and data-folder permissions.")
 
 
 def problem_report(q: dict) -> dict:

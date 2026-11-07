@@ -171,7 +171,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ov .w.hl { background:var(--red); color:#fff; }
 .ov ruby.w rt { font-size:.48em; font-weight:500; padding-bottom:.08em; }
 .ov .gl { display:block; min-height:0; }
-.ov .gl span { font-size:calc(var(--size) * .55 * 1cqh); font-weight:500; background:rgba(222,59,38,.92) !important; color:#fff !important; }
+.ov .gl span { font-size:calc(var(--size) * .55 * 1cqh); font-weight:500; background:rgba(222,59,38,.92) !important; color:#fff !important; pointer-events:auto; }
 .ov .gl b { font-weight:700; }
 .cue .w { font-style:normal; border-radius:3px; }
 .cue .w.hl { background:var(--red-tint); color:var(--red-fg); }
@@ -194,6 +194,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .ib.on { background:var(--jade-tint); color:var(--jade-fg); border-color:var(--jade); }
 .dd[open] > summary::after { color:inherit; }
 .ib { padding:6px 10px; }
+.dd.icon > summary, .ib[data-full] { display:flex; width:32px; height:32px; padding:0; justify-content:center; }
 .ddp { position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:max-content; min-width:240px; max-width:min(540px, 92vw); max-height:min(64vh, 560px); overflow:auto;
   display:grid; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); box-shadow:0 14px 36px rgba(0,0,0,.18); }
 .ddp.wide { width:min(540px, 92vw); }
@@ -256,39 +257,54 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .cue .g.future, .cue .g.maybe, .cue .g.time-future { text-decoration-color:var(--wm-pink); }
 .cue .g.maybe, .cue .g.change { text-decoration-style:dashed; }
 .cue .g.time-past, .cue .g.time-present, .cue .g.time-future { text-decoration-style:dotted; }
-.ddp.grammar { width:min(520px, 92vw); gap:12px; }
+.ddp.grammar { position:fixed; top:24px; bottom:auto; left:50%; transform:translateX(-50%); width:min(960px, calc(100vw - 32px));
+  max-width:none; max-height:calc(100dvh - 48px); padding:0; gap:0; overflow:hidden; grid-template-rows:auto minmax(0,1fr); }
+.dd[open] > .ddp.grammar { animation:none; }
+.grammar-head { justify-content:space-between; font-size:20px; padding:24px; }
+.grammar-head .btn { width:36px; height:36px; flex-shrink:0; justify-content:center; padding:0; }
+.grammar-body { min-height:0; overflow:auto; overscroll-behavior:contain; display:grid; gap:22px; padding:0 24px 24px; }
 /* the cheat sheet, in watermelon colours and few of them: the verb in red (the heart of the sentence), time words
    in rind green, the verb's markers (了 过 没 要 会 在) as a soft pink tag; who / where / what stay neutral */
-.gr { display:grid; gap:6px; }
-.gr h5 { margin:0; display:flex; align-items:center; gap:6px; }
+.gr { display:grid; gap:10px; }
+.gr h5 { margin:0; display:flex; align-items:center; gap:8px; font-size:13px; }
 .gr.past h5::before, .gr.future h5::before, .gr.present h5::before { content:''; width:7px; height:7px; border-radius:50%; }
 .gr.past h5::before { background:var(--wm-green); } .gr.present h5::before { background:var(--wm-red); } .gr.future h5::before { background:var(--wm-pink); }
-.gr p { margin:2px 0 0; font-size:12.5px; color:var(--fg-2); }
-.gr .order { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; font:500 10.5px var(--mono); color:var(--muted); }
-.gr .order.zh { font:600 15px var(--body); color:var(--fg); }
-.gr .order span { padding:3px 4px; border-radius:6px; background:var(--surface-2); text-align:center; }
+.gr p { margin:2px 0 0; font-size:15px; color:var(--fg-2); }
+.gr .order { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:6px; font:500 12px var(--mono); color:var(--muted); }
+.gr .order.zh { font:600 22px var(--body); color:var(--fg); }
+.gr .order span { padding:6px; border-radius:6px; background:var(--surface-2); text-align:center; overflow-wrap:anywhere; }
 .gr .order span.r-who { color:var(--r-who); } .gr .order span.r-when { color:var(--wm-green); } .gr .order span.r-where { color:var(--r-where); }
 .gr .order span.r-how { color:var(--r-how); } .gr .order span.r-what { color:var(--r-what); }
 .gr .order span[class^="r-"]:not(.r-verb) { box-shadow:inset 0 -2px currentColor; }
 .gr .order span.r-verb { background:var(--wm-red); color:#fff; }
-.gr .order.zh small { display:block; font:400 9.5px var(--mono); color:inherit; opacity:.75; }
+.gr .order.zh small { display:block; font:400 12px var(--mono); color:inherit; opacity:.85; }
 .gr i[class^="r-"] { font-style:normal; }
 .r-who { color:var(--r-who); } .r-when { color:var(--wm-green); } .r-where { color:var(--r-where); } .r-how { color:var(--r-how); } .r-what { color:var(--r-what); }
 .r-verb { color:var(--wm-red); font-weight:800; }
-.gr .ex { display:grid; grid-template-columns:112px auto minmax(0,1fr); gap:8px; align-items:baseline; font-size:12.5px; }
-.gr .ex code { font-size:11px; background:none; border:0; padding:0; color:var(--muted); }
+.gr .ex { display:grid; grid-template-columns:160px minmax(0,1fr) minmax(0,1fr); gap:16px; align-items:baseline; font-size:15px; }
+.gr .ex code { font-size:13px; background:none; border:0; padding:0; color:var(--muted); }
 .gr .ex em { font-style:normal; color:var(--fg-2); }
 .gr .ex.more { opacity:.8; }
-.gr .zh { font-size:16px; line-height:2.1; color:var(--fg); }
+.gr .zh { font-size:22px; line-height:2.1; color:var(--fg); }
 .gr .zh ruby { ruby-align:center; margin:0 .06em; }
-.gr .zh rt { font:500 10px var(--mono); letter-spacing:0; color:var(--muted); }
+.gr .zh rt { font:500 12px var(--mono); letter-spacing:0; color:var(--muted); }
 .gr .zh ruby[class^="r-"] rt { color:inherit; opacity:.85; }   /* each word's pinyin in its word's colour */
 /* a tense marker: plain text in a small box whose border is its tense's colour (so it never looks like the red verb) */
 .gr .g { background:none; color:var(--fg); font-weight:600; text-decoration:none; border:1.5px solid var(--line-2); border-radius:5px; padding:0 .12em; margin:0 .1em; }
 .gr .g.past { border-color:var(--wm-green); } .gr .g.future { border-color:var(--wm-pink); } .gr .g.present { border-color:var(--wm-red); }
 .gr .zh ruby.g rt { color:var(--muted); }
-.gr .key { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; font-size:12px; color:var(--muted); margin:0; }
+.gr .key { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; font-size:13px; color:var(--muted); margin:0; }
 .gr .key .g { font-size:13px; }
+@media (max-width:640px) {
+  .ddp.grammar { top:12px; max-height:calc(100dvh - 24px); }
+  .grammar-head { padding:16px; }
+  .grammar-body { padding:0 16px 16px; }
+  .gr .ex { grid-template-columns:1fr; gap:4px; }
+  .gr .order { font-size:10px; gap:3px; }
+  .gr .order.zh { font-size:17px; }
+  .gr .order.zh small { font-size:10px; }
+  .gr .order span { padding:4px 2px; }
+}
 /* the card above the lines: the word's HSK level and measure word, or a tense rule in its colour */
 .ov .gl em { font-style:normal; font-size:.85em; margin-left:.45em; padding:0 .35em; border:1px solid rgba(255,255,255,.55); border-radius:.3em; white-space:nowrap; }
 .ov .gl span.rule { background:rgba(20,18,15,.92) !important; }

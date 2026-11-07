@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pianpian 片片 · Learn Mandarin from real videos</title>
-<meta name="description" content="Paste a Bilibili or YouTube link. Pianpian makes Chinese, pinyin and English subtitles on your Mac with local models, and lets you hover any word and practise line by line. Free and open source.">
+<meta name="description" content="Learn Mandarin with Chinese, pinyin and English subtitles. AI transcription and translation run locally on your Mac. Pianpian is free and open source.">
 <meta property="og:title" content="Pianpian 片片 · Learn Mandarin from real videos">
-<meta property="og:description" content="Chinese, pinyin and English subtitles for any video, made on your Mac. Hover any word, practise line by line.">
+<meta property="og:description" content="Chinese, pinyin and English subtitles. Local AI transcription and translation on your Mac. Free and open source.">
 <meta property="og:image" content="{{SITE}}shots/app-dark.png">
 <meta property="og:url" content="{{SITE}}">
 <link rel="canonical" href="{{SITE}}">
@@ -15,10 +15,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="assets/kit.css">
+<link rel="stylesheet" href="assets/platforms.css">
 <style>
-/* The order follows the Mac app sites people know (Obsidian, IINA, Raycast, OpenClaw): a short promise and the
-   download, the product itself, three big features with pictures, the rest in a grid, how it works, what people
-   say, questions, and one last download. Same tokens as the app. */
+/* Landing page uses the app's type and colour tokens. */
 .wrap { max-width:1180px; margin:0 auto; padding:0 16px; }
 header.top { position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px);
   -webkit-backdrop-filter:blur(10px); border-bottom:1px solid transparent; }
@@ -32,10 +31,9 @@ section { scroll-margin-top:70px; }
 
 .hero { text-align:center; padding:58px 0 34px; }
 .hero h1 { font-size:clamp(34px,6vw,64px); line-height:1.02; margin:0 auto 18px; max-width:15ch; }
-.hero h1 em { font-style:normal; color:var(--red); }
 .hero p.lede { font-size:clamp(16px,2vw,19px); color:var(--fg-2); max-width:56ch; margin:0 auto 28px; }
 .cta { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; }
-.dl { display:inline-flex; align-items:center; gap:10px; padding:13px 22px; border-radius:12px; background:var(--red); color:#fff;
+.dl { display:inline-flex; align-items:center; gap:10px; padding:13px 22px; border-radius:12px; background:#D93825; color:#fff;
   font:650 16px var(--body); text-decoration:none; box-shadow:0 6px 20px -8px var(--red); transition:transform .16s var(--ease), box-shadow .16s ease; }
 .dl:hover { transform:translateY(-1px); box-shadow:0 10px 26px -10px var(--red); }
 .dl svg { width:19px; height:19px; margin-top:-3px; }      /* the apple sits low in its box: lifted to line up with the text */
@@ -45,40 +43,132 @@ section { scroll-margin-top:70px; }
   text-decoration:none; font:650 16px var(--body); transition:border-color .16s ease, color .16s ease; }
 .ghost:hover { border-color:var(--red); color:var(--red-fg); }
 .ghost svg { width:19px; height:19px; margin-top:-2px; transition:color .16s ease; }
-.ghost.star:hover svg { color:#E9A23B; }   /* GitHub's star turns gold on hover */
-.meta { margin-top:14px; font:12.5px var(--mono); color:var(--muted); }
+.meta { margin-top:14px; font:12.5px var(--mono); color:var(--fg-2); }
+a:focus-visible, summary:focus-visible, button:focus-visible { outline:2px solid var(--red-fg); outline-offset:4px; }
 
 
 .frame { border-radius:16px; overflow:hidden; border:1px solid var(--line-2); box-shadow:0 30px 80px -40px rgba(23,19,15,.45); background:var(--surface); }
 .demo { position:relative; isolation:isolate; z-index:0; margin:18px auto 0; }
 .demo .window-bar { display:flex; align-items:center; gap:7px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-2); }
 .demo .window-bar i { width:11px; height:11px; border-radius:50%; background:var(--line-2); }
-.demo .window-bar span { flex:1; text-align:center; font:12px var(--mono); color:var(--muted); margin-right:40px; }
+.demo .window-bar span { flex:1; text-align:center; font:12px var(--mono); color:var(--fg-2); margin-right:40px; }
 .demo iframe { position:relative; display:block; width:100%; height:min(780px, 82vh); border:0; background:var(--bg); }
 
 
-.features { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:26px; }
-@media (max-width:900px) { .features { grid-template-columns:repeat(2, 1fr); } }
-@media (max-width:600px) { .features { grid-template-columns:1fr; } }
-.f { padding:22px; border-radius:14px; background:var(--surface); border:1px solid var(--line); }
-.f .ic { display:grid; place-items:center; width:40px; height:40px; border-radius:11px; margin-bottom:14px; background:var(--red-tint); color:var(--red-fg); }
-.f .ic svg { width:22px; height:22px; }
-.f b { display:block; font:700 17px var(--display); margin-bottom:6px; }
-.f p { margin:0; color:var(--fg-2); font-size:14.5px; }
+.features { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:24px; margin-top:26px; }
+.feature { margin:0; min-width:0; display:flex; flex-direction:column; }
+.pp-example { flex:1; padding:16px; border-radius:14px; background:var(--surface); border:1px solid var(--line); min-height:300px; }
+.feature svg { display:block; width:100%; height:auto; }
+.feature text { fill:currentColor; font:16px var(--body); }
+.feature .guide { fill:none; stroke:var(--fg-2); stroke-width:1.5; }
+.feature h3 { margin:18px 0 6px; font:700 19px var(--display); color:var(--fg); letter-spacing:normal; text-transform:none; }
+.feature p, .section-note { margin:0; color:var(--fg-2); font-size:14.5px; }
+.section-note { max-width:70ch; }
+.pp-words { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0; margin-top:8px; }
+.pp-words button { padding:8px 0; border:0; border-radius:6px; background:transparent; font-size:25px; cursor:pointer; }
+.pp-words button[aria-pressed="true"] { background:var(--red-tint); box-shadow:inset 0 -2px var(--red-fg); }
+.pp-words small { display:block; font:12px var(--body); color:var(--fg-2); margin-top:5px; }
+.pp-definition { min-height:126px; margin-top:18px; }
+#pp-role-detail { margin-top:18px; }
+.pp-definition strong { display:block; font-size:22px; font-weight:500; margin-bottom:6px; }
+.pp-definition .pp-pinyin { display:block; margin-bottom:6px; font-size:16px; }
+.pp-example .pp-label, .pp-example .pp-status { font-size:12px; color:var(--fg-2); }
+.pp-definition [data-pp-meaning] { color:var(--tr-en); }
+.pp-preview { padding:20px; border:1px solid var(--line); border-radius:var(--r); cursor:default; }
+.pp-preview .t { margin-bottom:12px; color:var(--fg-2); font-size:12px; }
+.pp-preview .l { line-height:1.8; overflow-wrap:anywhere; }
+.pp-preview .l.zh { font-size:28px; }
+.pp-preview .l.pinyin, .pp-preview .l.en { font-size:18px; }
+.pp-preview button.w { padding:0 .08em; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.pp-preview .w:hover { background:var(--red-tint); }
+.pp-preview .w.hl.say { background:var(--red-tint); box-shadow:none; }
+.pp-preview .pp-selection { margin:14px 0 0; border-top:1px solid var(--line); padding-top:12px; color:var(--fg-2); font-size:14px; }
+.pp-preview-compact.cue { padding:0; margin-top:12px; border:0; border-radius:0; background:transparent; }
+.pp-preview-compact .l.zh { font-size:23px; }
+.pp-preview-compact .l.pinyin { font-size:16px; }
+.pp-preview-compact .l.en { font-size:14.5px; }
+.pp-words .pp-role-pinyin { min-height:22px; margin:0 0 5px; font-size:12px; }
+.pp-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; }
+.pp-audio-controls .pp-control { display:flex; align-items:center; justify-content:center; gap:8px; min-width:40px; height:40px; padding:8px 10px; border-radius:20px; }
+.pp-audio-controls svg { width:20px; height:20px; flex:none; }
+.pp-audio-controls [data-pp-play] { background:var(--red-tint); border-color:var(--red-fg); color:var(--red-fg); }
+.pp-control { border:1px solid var(--line-2); border-radius:8px; padding:8px 12px; background:var(--surface); cursor:pointer; font-size:14px; }
+.pp-control:hover { border-color:var(--red-fg); }
+.pp-control[aria-pressed="true"] { color:var(--red-fg); border-color:var(--red-fg); background:var(--red-tint); }
+.pp-control:disabled { opacity:.55; cursor:default; }
+.pp-example .pp-status { margin-top:10px; min-height:2.8em; }
+.pp-timeline { margin-top:14px; }
+.pp-role-title { font-size:19px; font-weight:600; }
+@media (prefers-reduced-motion:no-preference) {
+  .pp-words button, .pp-preview .w { transition:background-color .16s ease; }
+}
+@media (max-width:1000px) {
+  .features { grid-template-columns:1fr; gap:32px; }
+  .feature { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px; align-items:center; }
+  .feature h3 { margin-top:0; }
+}
+@media (max-width:640px) {
+  .feature { display:block; }
+  .pp-example { max-width:440px; }
+  .feature h3 { margin-top:16px; }
+}
 
 h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
-.steps { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:26px; counter-reset:s; }
-.steps div { counter-increment:s; padding:22px; border-radius:14px; border:1px solid var(--line); }
-.steps div::before { content:counter(s); display:grid; place-items:center; width:30px; height:30px; border-radius:9px; margin-bottom:12px;
-  background:var(--red-tint); color:var(--red-fg); font:700 14px var(--mono); }
-.steps b { font:700 17px var(--display); } .steps p { margin:6px 0 0; color:var(--fg-2); font-size:14.5px; }
-@media (max-width:760px) { .steps { grid-template-columns:1fr; } }
+@media (max-width:640px) {
+  .pp-preview { padding:14px; } .pp-preview .l.zh { font-size:24px; } .pp-preview .l.pinyin, .pp-preview .l.en { font-size:16px; }
+}
+
+/* The selection stays the same through all three steps. */
+#anki > p { max-width:75ch; color:var(--fg-2); }
+.anki-brand { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; vertical-align:bottom; }
+.anki-brand img { width:1em; height:auto; }
+.anki-figure { margin:26px 0 0; padding:24px; border:1px dashed var(--line-2); border-radius:16px; }
+.anki-flow { display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:32px; list-style:none; padding:0; margin:24px 0; }
+.anki-flow > li { min-width:0; }
+.anki-flow h3 { display:flex; align-items:center; gap:8px; margin:0 0 10px; color:var(--fg); font:700 17px var(--display); letter-spacing:normal; text-transform:none; }
+.anki-flow h3 span { font:600 13px var(--mono); color:var(--red-fg); }
+.anki-flow p { font-size:14px; color:var(--fg-2); margin:8px 0 16px; }
+.anki-flow mark { background:var(--red-tint); color:var(--fg); border-bottom:2px solid var(--red-fg); padding:2px 3px; }
+.anki-source { font-size:25px; line-height:2.3; margin:20px 0 12px; }
+.anki-source rt { font:12px var(--body); color:var(--fg-2); }
+.anki-choices { margin:0; font-size:14px; }
+.anki-choices > div { display:grid; grid-template-columns:68px 1fr; align-items:baseline; gap:8px; margin:8px 0; }
+.anki-choices dt { color:var(--fg-2); font-size:12px; }
+.anki-choices dd { margin:0; }
+.anki-choices small { display:block; font-size:12px; color:var(--fg-2); }
+.anki-audio { width:100%; height:auto; display:block; margin:24px 0 8px; overflow:visible; }
+.anki-audio text { fill:var(--fg); font:16px var(--body); }
+.anki-audio .boundary { stroke:var(--red-fg); stroke-width:2; }
+.anki-flow .anki-schematic { font-size:12px; }
+.anki-transfer { display:flex; align-items:center; gap:8px; margin-top:20px; font-size:12px; color:var(--fg-2); }
+.anki-transfer svg { width:24px; height:16px; flex:none; }
+.anki-note { margin-top:18px; padding:18px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); }
+.anki-note-head { display:flex; align-items:center; gap:10px; font:700 17px var(--display); }
+.anki-note-head img { width:40px; height:auto; flex:none; }
+.anki-note-head small { display:block; font:12px var(--body); color:var(--fg-2); }
+.anki-note-word { display:block; margin:20px 0 4px; font-size:30px; font-weight:500; line-height:1.4; }
+.anki-note .anki-note-pinyin { margin:0; font-size:15px; color:var(--fg); }
+.anki-context { border-top:1px solid var(--line); padding-top:12px; }
+.anki-context span { display:block; margin-top:4px; font-size:17px; color:var(--fg); }
+.anki-note .anki-attachment { margin-bottom:0; font-size:12px; }
+.anki-destination { margin-top:16px; font-size:13px; color:var(--fg-2); }
+.anki-destination strong { color:var(--fg); }
+.anki-figure figcaption { padding-top:16px; border-top:1px solid var(--line); font-size:13px; color:var(--fg-2); }
+@media (max-width:900px) {
+  .anki-figure { padding:20px; }
+  .anki-flow { grid-template-columns:1fr; gap:24px; }
+  .anki-flow > li + li { border-top:1px solid var(--line); padding-top:24px; }
+  .anki-source { font-size:28px; }
+  .anki-audio { max-width:360px; }
+  .anki-note { max-width:420px; }
+  .anki-transfer svg { transform:rotate(90deg); }
+}
 
 /* what people say: filled from site/testimonials.json by tools/build_site.py; no quotes, no section */
 .quotes { columns:3 300px; column-gap:14px; margin-top:26px; }
 .quote { break-inside:avoid; margin:0 0 14px; padding:20px 22px; border-radius:14px; background:var(--surface); border:1px solid var(--line); }
 .quote p { margin:0 0 14px; font-size:15.5px; }
-.quote footer { display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--muted); }
+.quote footer { display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--fg-2); }
 .quote footer b { color:var(--fg); font-weight:600; }
 .quote .av { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; background:var(--red-tint); color:var(--red-fg); font:700 13px var(--mono); }
 
@@ -86,7 +176,7 @@ h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
 .faq details { border-bottom:1px solid var(--line); }
 .faq summary { cursor:pointer; list-style:none; display:flex; justify-content:space-between; gap:16px; padding:18px 2px; font:650 16.5px var(--body); }
 .faq summary::-webkit-details-marker { display:none; }
-.faq summary::after { content:'+'; font:400 22px var(--mono); color:var(--muted); line-height:1; transition:transform .2s var(--ease); }
+.faq summary::after { content:'+'; font:400 22px var(--mono); color:var(--fg-2); line-height:1; transition:transform .2s var(--ease); }
 .faq details[open] summary::after { transform:rotate(45deg); color:var(--red-fg); }
 .faq details p { margin:-4px 2px 18px; color:var(--fg-2); max-width:75ch; }
 
@@ -94,7 +184,7 @@ h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
 .final img { margin-bottom:14px; }
 .final h2 { font-size:clamp(28px,4vw,44px); margin:0 0 10px; }
 .final p { color:var(--fg-2); margin:0 0 26px; }
-footer.site { margin:60px 0 0; padding:26px 0 40px; border-top:1px solid var(--line); display:flex; flex-wrap:wrap; gap:16px; font-size:13.5px; color:var(--muted); }
+footer.site { margin:60px 0 0; padding:26px 0 40px; border-top:1px solid var(--line); display:flex; flex-wrap:wrap; gap:16px; font-size:13.5px; color:var(--fg-2); }
 footer.site a { color:var(--fg-2); }
 footer.site .grow { flex:1; }
 @media (max-width:700px) {
@@ -108,9 +198,11 @@ footer.site .grow { flex:1; }
   .final { margin-top:64px; padding:36px 16px; }
 }
 @media (max-width:900px) { .demo iframe { height:640px; } }
-@media (prefers-reduced-motion:reduce) { .dl, .faq summary::after { transition:none; } }
+@media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .dl, .faq summary::after { transition:none; } .dl:hover { transform:none; } }
 </style>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
+<script defer src="assets/player.js"></script>
+<script defer src="assets/site-interactions.js"></script>
 </head>
 <body>
 <header class="top"><div class="wrap in">
@@ -119,24 +211,33 @@ footer.site .grow { flex:1; }
   <span class="grow"></span>
   <a class="link hide-s" href="#demo">Demo</a>
   <a class="link hide-s" href="#features">Features</a>
+  <a class="link hide-s" href="#anki">Anki</a>
   <a class="link hide-s" href="#faq">FAQ</a>
   <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
   <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download</a>
 </div></header>
 
-<div class="wrap">
+<main class="wrap">
   <div class="hero">
-    <h1>Learn Mandarin from the videos you <em>actually</em> watch</h1>
-    <p class="lede">Turn videos into Chinese, pinyin and English subtitles. Look up words and practise line by line, on your Mac.</p>
+    <h1>Learn Mandarin, one video at a time.</h1>
+    <p class="lede">Chinese, pinyin and English subtitles.<br>AI transcription and translation, entirely on your Mac.</p>
     <div class="cta">
       <a class="dl" id="download" data-umami-event="download" data-umami-event-where="hero" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
         Download for Mac
       </a>
-      <a class="ghost" href="#demo">Try it here</a>
+      <a class="ghost" href="#demo">Try the demo</a>
     </div>
-    <div class="meta">v{{VERSION}} · free and open source · no account</div>
+    <div class="meta">Free and <a href="https://github.com/{{REPO}}">open source</a> · Apple Silicon · macOS 14+</div>
+    <section class="platforms" aria-label="Video sources">
+      <ul class="platforms-list">
+        <li><img src="assets/platforms/bilibili.svg" width="36" height="36" alt="Bilibili"></li>
+        <li><img src="assets/platforms/xiaohongshu.svg" width="64" height="36" alt="RedNote / 小红书"></li>
+        <li><img src="assets/platforms/weibo.svg" width="36" height="36" alt="Weibo / 微博"></li>
+      </ul>
+      <p>or local video</p>
+    </section>
   </div>
 
   <section id="demo">
@@ -147,47 +248,137 @@ footer.site .grow { flex:1; }
   </section>
 
   <section id="features">
-    <h2 class="sec">What it does</h2>
+    <h2 class="sec">Study one line at a time</h2>
     <div class="features">
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 10h6"/><path d="M12 12l7 3-3 1-1 3z" fill="currentColor"/></svg></span><b>Look up any word</b><p>Tap or hover for pinyin, meanings and HSK levels. Matching words light up across subtitles.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></span><b>Practise line by line</b><p>Replay, loop or slow down a line. Pause after each sentence to say it yourself.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="5" height="8" rx="1.5"/><rect x="10" y="8" width="5" height="8" rx="1.5" fill="currentColor"/><rect x="17" y="8" width="4" height="8" rx="1.5"/></svg></span><b>See how a sentence is built</b><p>A cheat sheet for word order, each part in its own colour, and optional marks under 了, 过, 在 and 要 that say past, now or later.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg></span><b>Bilibili, YouTube, or your own files</b><p>Use existing subtitles, transcribe the audio or read subtitles embedded in the picture.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h11M4 17h14"/></svg></span><b>中文, pinyin and English</b><p>Show any mix. Pinyin is coloured by tone, and it can sit right above each word instead of on its own line.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></span><b>Follow the voice</b><p>The word being said lights up as it is spoken, so your eyes and ears stay on the same word.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V14M10 20V9M16 20V4"/><path d="M3 20h18"/></svg></span><b>An HSK level for every video</b><p>Each video in your library shows the HSK level that covers 90% of its words, so you know what to watch next.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></svg></span><b>Runs on your Mac</b><p>Speech recognition and translation are local models. No account, no API key, no upload. Videos stay in a folder you choose.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg></span><b>A file for any player</b><p>Every video is also saved as one MKV with all the subtitle tracks, for IINA, VLC or mpv, on any device.</p></div>
+      <figure class="feature" id="pp-dictionary">
+        <div class="pp-example">
+          <p class="pp-label">Click a word</p>
+          <div class="pp-words" aria-label="Dictionary words">
+            <button type="button" data-pp-word="0" aria-pressed="false" aria-controls="pp-definition" lang="zh-Hans">我</button>
+            <button type="button" data-pp-word="1" aria-pressed="false" aria-controls="pp-definition" lang="zh-Hans">正在</button>
+            <button type="button" data-pp-word="2" aria-pressed="true" aria-controls="pp-definition" lang="zh-Hans">学</button>
+            <button type="button" data-pp-word="3" aria-pressed="false" aria-controls="pp-definition" lang="zh-Hans">中文</button>
+          </div>
+          <div class="pp-definition" id="pp-definition" aria-live="polite" aria-atomic="true">
+            <strong lang="zh-Hans" data-pp-gloss-word>学</strong>
+            <span class="pp-pinyin t2" data-pp-pinyin>xué</span>
+            <p data-pp-meaning>to learn; to study; to imitate</p>
+          </div>
+          <p class="pp-status" data-pp-dictionary-status>Dictionary entry from the demo’s word file.</p>
+        </div>
+        <figcaption><h3>Look up a word</h3><p>The selected word’s pinyin and meaning stay beside the sentence.</p></figcaption>
+      </figure>
+      <figure class="feature" id="pp-replay">
+        <div class="pp-example">
+          <p class="pp-label">Original demo audio · line 6</p>
+          <div class="pp-preview pp-preview-compact cue" data-pp-preview>
+            <div class="l zh" data-pp-zh lang="zh-Hans">我正在学<span class="w hl">中文</span>,每天看一个视频。</div>
+            <div class="l pinyin" data-pp-py><span class="t3">wǒ</span> <span class="t4">zhèngzài</span> <span class="t2">xué</span> <span class="w hl"><span class="t1">zhōng</span><span class="t2">wén</span></span>, <span class="t3">měi</span><span class="t1">tiān</span> <span class="t4">kàn</span> <span class="t2">yí</span><span class="t4">gè</span> <span class="t4">shì</span><span class="t2">pín</span>.</div>
+            <div class="l en" data-pp-en>I am learning <span class="w hl">Chinese</span>, watching one video every day.</div>
+            <p class="pp-selection" data-pp-selection role="status">中文 — Chinese language</p>
+          </div>
+          <svg class="pp-timeline" viewBox="0 0 320 56" role="img" aria-label="Audio excerpt from 22.48 to 25.64 seconds in the demo video.">
+            <path class="guide" d="M24 8v16m0-8h272m0-8v16"/>
+            <circle data-pp-playhead cx="24" cy="16" r="5" fill="var(--fg)"/>
+            <text x="24" y="48">22.48 s</text><text x="296" y="48" text-anchor="end">25.64 s</text>
+          </svg>
+          <div class="pp-controls pp-audio-controls" role="group" aria-label="Audio controls">
+            <button type="button" class="pp-control" data-pp-play aria-label="Play line" title="Play line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-pp-play-icon d="m8 5 11 7-11 7Z"/></svg></button>
+            <button type="button" class="pp-control" data-pp-loop aria-pressed="false" aria-label="Loop line" title="Loop line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 2 4 4-4 4M4 11V9a3 3 0 0 1 3-3h13M8 22l-4-4 4-4m12-1v2a3 3 0 0 1-3 3H4"/></svg></button>
+            <button type="button" class="pp-control" data-pp-slow aria-pressed="false" aria-label="0.75× speed" title="0.75× speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19a10 10 0 1 1 16 0M12 4v2M5 9l2 1m12-1-2 1m-5 6 3-5"/><circle cx="12" cy="16" r="1"/></svg><span data-pp-speed>1×</span></button>
+          </div>
+          <p class="pp-status" data-pp-audio-status role="status">Estimated word timings.</p>
+          <audio data-pp-audio preload="none" src="demo/library/pianpian-day/source.mp4"></audio>
+        </div>
+        <figcaption><h3>Hear it again</h3><p>Play, slow down or loop this line. Pause whenever you want to repeat it.</p></figcaption>
+      </figure>
+      <figure class="feature" id="pp-grammar">
+        <div class="pp-example">
+          <p class="pp-label">Click a part of the sentence</p>
+          <div class="pp-words gr" aria-label="Sentence roles">
+            <button type="button" data-pp-role="0" aria-pressed="false" aria-controls="pp-role-detail"><small class="pp-role-pinyin" data-pp-role-pinyin="0"><span class="t3">wǒ</span></small><span class="r-who" lang="zh-Hans">我</span><small><span class="r-who">Who</span></small></button>
+            <button type="button" data-pp-role="1" aria-pressed="false" aria-controls="pp-role-detail"><small class="pp-role-pinyin" data-pp-role-pinyin="1"><span class="t4">zhèngzài</span></small><span class="g present" lang="zh-Hans">正在</span><small>Ongoing</small></button>
+            <button type="button" data-pp-role="2" aria-pressed="true" aria-controls="pp-role-detail"><small class="pp-role-pinyin" data-pp-role-pinyin="2"><span class="t2">xué</span></small><span class="r-verb" lang="zh-Hans">学</span><small><span class="r-verb">Verb</span></small></button>
+            <button type="button" data-pp-role="3" aria-pressed="false" aria-controls="pp-role-detail"><small class="pp-role-pinyin" data-pp-role-pinyin="3"><span class="t1">zhōng</span><span class="t2">wén</span></small><span class="r-what" lang="zh-Hans">中文</span><small><span class="r-what">What</span></small></button>
+          </div>
+          <div id="pp-role-detail" aria-live="polite" aria-atomic="true">
+            <strong class="pp-role-title" data-pp-role-title>学 · the action</strong>
+            <p data-pp-role-text>学 means “learn” or “study”. 中文 tells you what is being learned.</p>
+          </div>
+          <p class="pp-status">Pinyin colours show tones; Chinese colours show sentence roles.</p>
+        </div>
+        <figcaption><h3>Read the sentence structure</h3><p>See who acts, what they do and how 正在 marks an action in progress.</p></figcaption>
+      </figure>
     </div>
+    <noscript><p>Interactive examples need JavaScript. Read the examples above or <a href="demo/library/pianpian-day/source.mp4">open the demo video</a>.</p></noscript>
   </section>
 
-  <section id="how">
-    <h2 class="sec">How it works</h2>
-    <div class="steps">
-      <div><b>Paste a link</b><p>From Bilibili or YouTube, or drop a video file on the window.</p></div>
-      <div><b>It makes the subtitles</b><p>Chinese, pinyin and English, generated locally on your Mac.</p></div>
-      <div><b>Watch and practise</b><p>Choose a line, look up a word and replay what you want to learn.</p></div>
-    </div>
+  <section id="anki" aria-labelledby="anki-title">
+    <h2 class="sec" id="anki-title">From a video to your <span class="anki-brand"><img src="assets/anki-logo.png" width="40" height="40" alt="">Anki</span> deck</h2>
+    <p>Keep a word or sentence with its original audio. Requires <a href="https://apps.ankiweb.net">Anki Desktop</a> with AnkiConnect installed.</p>
+    <figure class="anki-figure" aria-labelledby="anki-caption">
+      <ol class="anki-flow">
+        <li>
+          <h3><span aria-hidden="true">1</span> Select words</h3>
+          <div class="anki-source" lang="zh-Hans"><ruby>我<rt><span class="t3">wǒ</span></rt></ruby><ruby>每天<rt><span class="t3">měi</span><span class="t1">tiān</span></rt></ruby><mark><ruby>学习<rt><span class="t2">xué</span><span class="t2">xí</span></rt></ruby><ruby>中文<rt><span class="t1">Zhōng</span><span class="t2">wén</span></rt></ruby></mark>。</div>
+          <p>I study Chinese every day.</p>
+          <dl class="anki-choices">
+            <div><dt>Word</dt><dd lang="zh-Hans">学习</dd></div>
+            <div><dt>Group</dt><dd><mark lang="zh-Hans">学习中文</mark><small>Selected in this example</small></dd></div>
+            <div><dt>Sentence</dt><dd lang="zh-Hans">我每天学习中文。</dd></div>
+          </dl>
+          <div class="anki-transfer">Preview selection <svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h19m-6-5 6 5-6 5"/></svg></div>
+        </li>
+        <li>
+          <h3><span aria-hidden="true">2</span> Preview the audio</h3>
+          <p>Word timings are estimates. Listen and adjust the clip’s start and end.</p>
+          <svg class="anki-audio" viewBox="0 0 280 104" role="img" aria-label="Schematic audio bounds: the selected clip starts at 学习中文, after 我每天, and ends at the sentence end. No recorded timing is shown.">
+            <rect x="8" y="40" width="256" height="32" rx="4" fill="var(--surface-2)"/>
+            <rect x="104" y="40" width="160" height="32" fill="var(--red-tint)"/>
+            <path class="boundary" d="M104 28v56m-5-56h10m-10 56h10M264 28v56m-5-56h10m-10 56h10"/>
+            <text x="104" y="18" text-anchor="middle">Start</text><text x="264" y="18" text-anchor="end">End</text>
+            <text x="56" y="61" text-anchor="middle" lang="zh-Hans">我每天</text><text x="184" y="61" text-anchor="middle" lang="zh-Hans">学习中文</text>
+          </svg>
+          <p class="anki-schematic">Schematic; not to scale. You can include the full sentence.</p>
+          <div class="anki-transfer">Build the note <svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h19m-6-5 6 5-6 5"/></svg></div>
+        </li>
+        <li>
+          <h3><span aria-hidden="true">3</span> Add to Anki</h3>
+          <div class="anki-note">
+            <div class="anki-note-head"><img src="assets/anki-logo.png" width="40" height="40" alt=""><div>Anki<small>Your selected words</small></div></div>
+            <strong class="anki-note-word" lang="zh-Hans"><mark>学习中文</mark></strong>
+            <p class="anki-note-pinyin"><span class="t2">xué</span><span class="t2">xí</span> <span class="t1">Zhōng</span><span class="t2">wén</span></p>
+            <p>study Chinese</p>
+            <p class="anki-context">Sentence context<span lang="zh-Hans">我每天学习中文。</span>I study Chinese every day.</p>
+            <p class="anki-attachment">Audio: the selected clip</p>
+          </div>
+          <div class="anki-destination">Choose <strong>an existing or new deck</strong>.</div>
+        </li>
+      </ol>
+      <figcaption id="anki-caption">In this Pianpian example, the selected words, audio and sentence context stay together in one Anki note. Pinyin colours indicate tones; the underline marks your selection.</figcaption>
+    </figure>
   </section>
 
 {{TESTIMONIALS}}
   <section id="faq">
     <h2 class="sec">Questions</h2>
     <div class="faq">
-      <details><summary>Is it free?</summary><p>Yes. Pianpian is free and open source (MIT licence). There is no account and nothing to subscribe to.</p></details>
-      <details><summary>Which Macs can run it?</summary><p>Macs with Apple Silicon (M1 or newer) on macOS 14 Sonoma or newer. It needs about 4 GB of disk, mostly for the two models.</p></details>
-      <details><summary>What does the first start do?</summary><p>It asks where to keep your videos and its tools, shows what it will download (its engine, about 0.65 GB, and the speech and translation models, 1.6 GB and 1 GB), and installs them once, with progress. From mainland China it picks the faster mirrors by itself.</p></details>
-      <details><summary>Is anything uploaded?</summary><p>No. Videos are downloaded to your Mac and processed there. The app only goes online to download videos you ask for, its tools on the first start, and updates.</p></details>
-      <details><summary>Which videos can I use?</summary><p>Bilibili, YouTube and most video sites, plus any video file you already have. Use it for videos you are allowed to watch, and don't re-upload them.</p></details>
-      <details><summary>macOS says it can't check the app. Is it safe?</summary><p>Pianpian isn't signed with a paid Apple developer certificate yet, so the first time macOS asks. Open it once, then go to System Settings → Privacy &amp; Security and choose Open Anyway. The source code is public on GitHub.</p></details>
+      <details><summary>What do I need to install it?</summary><p>A Mac with Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, and about 4 GB of disk for the app, tools and models, plus space for your videos. Download the app and move it to Applications.</p></details>
+      <details><summary>What happens on first launch?</summary><p>Choose where to keep your videos and tools. Setup downloads the engine (about 0.65 GB), Whisper speech model (about 1.6 GB) and Hy-MT2 translation model (about 1 GB), with progress. It compares download sources and mirrors, including those reachable from mainland China.</p></details>
+      <details><summary>Which AI models does Pianpian use?</summary><p>Whisper transcribes the audio; Hy-MT2 translates the subtitles into English. Both run locally on your Mac. Your videos stay on your computer, and no account or API key is needed. The app connects to download videos, models, tools and updates.</p></details>
+      <details id="faq-files"><summary>Where are my videos and subtitles saved?</summary><p>In the library folder you choose during setup (default: <code>~/Movies/Pianpian</code>). Each video has its own folder with the video and its Chinese, pinyin and English subtitle files.</p><p>Demo files: <a href="demo/library/pianpian-day/source.mp4">Video</a> · <a href="demo/library/pianpian-day/zh.srt">Chinese</a> · <a href="demo/library/pianpian-day/zh.pinyin.srt">Pinyin</a> · <a href="demo/library/pianpian-day/zh.en.srt">English</a>.</p></details>
+      <details><summary>Are the subtitles always accurate?</summary><p>Transcription, translation and grammar hints can be wrong. Check them against the audio. The library’s HSK level estimates vocabulary difficulty, not listening difficulty.</p></details>
+      <details><summary>Can the website demo send notes to Anki?</summary><p>Export from the local Pianpian app, with Anki Desktop running and AnkiConnect installed. The website demo lets you try the player.</p></details>
+      <details><summary>How do I open the unsigned Mac app?</summary><p>Pianpian is not yet signed with an Apple developer certificate. After trying to open it, go to System Settings → Privacy &amp; Security and choose Open Anyway. You can inspect the <a href="https://github.com/{{REPO}}">source code</a> before installing.</p></details>
       <details><summary>Windows or iPhone?</summary><p>Windows 11 x64 has an <a href="https://github.com/{{REPO}}#windows">installer</a>. There is no iPhone app.</p></details>
+      <details><summary>What is planned?</summary><p>Audio-only import.</p></details>
     </div>
   </section>
 
   <div class="final">
     <img src="design/icons/20-pianpian-watermelon.svg" width="64" height="64" alt="">
-    <h2>Your next video, in 中文, pinyin and English</h2>
-    <p>Free for Mac. One piece at a time: 一天一片.</p>
+    <h2>One slice a day.</h2>
+    <p lang="zh-Hans">一天一片。</p>
     <div class="cta">
       <a class="dl" data-umami-event="download" data-umami-event-where="bottom" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
@@ -204,7 +395,7 @@ footer.site .grow { flex:1; }
     <a href="https://github.com/{{REPO}}/releases">Releases</a>
     <a href="https://github.com/{{REPO}}/issues/new/choose">Report a problem</a>
   </footer>
-</div>
+</main>
 <script>
 /* On small screens the demo participates in the page flow; only its transcript scrolls. */
 const demoFrame = document.querySelector('.demo iframe');

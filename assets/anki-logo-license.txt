@@ -1,0 +1,35 @@
+Anki logo copyright Alex Fraser.
+
+anki-logo.png is an unmodified copy of the official Anki project's logo:
+https://github.com/ankitects/anki/blob/63b419ef63c7910b8d8f5b6aad57ef26ae506771/docs-site/media/logo.png
+
+Licence source (retrieved 7 Nov 2026):
+https://github.com/ankitects/anki/blob/63b419ef63c7910b8d8f5b6aad57ef26ae506771/LICENSE
+
+Used under the limited alternative licence reproduced below. This permission
+applies to the logo, not to the rest of Pianpian. The website links to Anki,
+identifies the concept as Pianpian's own content and displays the logo with
+its original proportions and colours.
+
+--- Upstream logo licence excerpt ---
+
+Anki's logo is copyright Alex Fraser, and is licensed under the AGPL3 like the
+rest of Anki's code.
+
+The logo is also available under a limited alternative license for inclusion
+in books, blogs, videos and so on. If the following conditions are met, you
+may use the logo in your work without the need to license your work under an
+AGPL3-compatible license:
+
+ * The logo must be used to refer to Anki, AnkiWeb, AnkiMobile or AnkiDroid,
+   and a link to https://apps.ankiweb.net must be provided. When your
+   content is focused specifically on AnkiDroid, a link to
+   https://play.google.com/store/apps/details?id=com.ichi2.anki&hl=en
+   may be provided instead of the first link.
+ * The work must make it clear that the text/video/etc you
+   are publishing is your own content and not something originating
+   from the Anki project.
+ * The logo must be used unmodified - no cropping, changing of colours
+   or adding or deleting content is allowed. You may resize the image
+   provided the horizontal and vertical dimensions are resized
+   equally.

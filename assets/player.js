@@ -8,6 +8,7 @@
    With zh.words.json (made by srt_tool.py words) each Chinese word is linked to its pinyin and,
    through its dictionary meaning (CC-CEDICT), to the English words that translate it: hover any of
    them and all three light up with the meaning shown; click to pin; or show pinyin above words.
+   opts.onAnkiOpen(anchor) opens the current selection's editor from a pinned word card.
 
    Each track has its own on/off, size, colour and "blur while playing" (test yourself; it shows
    when you pause). Size, colour and blur are remembered per kind of line (中文 / pinyin / English);
@@ -33,34 +34,58 @@
      many syllables as the word has characters (erhua: 一点儿 yìdiǎnr ends in a bare r). */
   const SYL = new Set(('a ai an ang ao ba bai ban bang bao bei ben beng bi bian biang biao bie bin bing bo bong bu ca cai can cang cao ce cei cen ceng cha chai chan chang chao che chen cheng chi chong chou chu chua chuai chuan chuang chui chun chuo ci cong cou cu cuan cui cun cuo da dai dan dang dao de dei den deng di dia dian diao die din ding diu dong dou du duan dui dun duo e ei en eng er fa fan fang fei fen feng fiao fo fou fu ga gai gan gang gao ge gei gen geng gong gou gu gua guai guan guang gui gun guo ha hai han hang hao he hei hen heng hm hng hong hou hu hua huai huan huang hui hun huo ji jia jian jiang jiao jie jin jing jiong jiu ju juan jue jun ka kai kan kang kao ke kei ken keng kong kou ku kua kuai kuan kuang kui kun kuo la lai lan lang lao le lei len leng li lia lian liang liao lie lin ling liu lo long lou lu luan lue lun luo lv lve m ma mai man mang mao me mei men meng mi mian miao mie min ming miu mo mou mu n na nai nan nang nao ne nei nen neng ng ni nia nian niang niao nie nin ning niu nong nou nu nuan nue nun nuo nv nve o ou pa pai pan pang pao pei pen peng pi pian piao pie pin ping po pou pu qi qia qian qiang qiao qie qin qing qiong qiu qu quan que qun ran rang rao re ren reng ri rong rou ru rua ruan rui run ruo sa sai san sang sao se sen seng sha shai shan shang shao she shei shen sheng shi shou shu shua shuai shuan shuang shui shun shuo si song sou su suan sui sun suo ta tai tan tang tao te tei teng ti tian tiao tie ting tong tou tu tuan tui tun tuo wa wai wan wang wei wen weng wo wong wu xi xia xian xiang xiao xie xin xing xiong xiu xu xuan xue xun ya yan yang yao ye yi yin ying yo yong you yu yuan yue yun za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo').split(' '));
   const TONE_MARK = { '̄': 1, '́': 2, '̌': 3, '̀': 4 };
-  function syllables(py, n) {          // "xiānsheng", 2 -> [["xiān", 1], ["sheng", 5]]; null if it can't be split
-    const chars = [...py.normalize('NFC')].map(c => {
+  function syllables(py, n, unique = false) { // Keep original Unicode and separators; prefer the requested character count.
+    // shortcut: fields over 512 code units stay plain; use an iterative parser before raising this bound.
+    if (py.length > 512) return null;
+    const chars = (py.match(/\P{M}\p{M}*|\p{M}+/gu) || []).map(c => {
       const d = c.normalize('NFD');
-      return { c, base: d[0] === 'ü' || d[0] === 'Ü' || d.startsWith('ü') ? 'v' : d[0].toLowerCase(), tone: TONE_MARK[[...d].find(x => TONE_MARK[x])] || 0 };
+      return { c, base: d[0].toLowerCase() === 'u' && d.includes('̈') ? 'v' : d[0].toLowerCase(), tone: TONE_MARK[[...d].find(x => TONE_MARK[x])] || 0,
+        separator: /^[\s\p{P}\p{S}]+$/u.test(c) };
     });
     const best = new Map();
-    const go = i => {                    // fewest pieces that are all syllables (with an exact count preferred)
-      if (i === chars.length) return [];
-      if (best.has(i)) return best.get(i);
+    const go = (i, left) => {
+      if (i === chars.length) return left == null || left === 0 ? { parts: [], count: 0, ways: 1 } : null;
+      const key = `${i}:${left}`;
+      if (best.has(key)) return best.get(key);
       let out = null;
-      if (chars[i].c === "'" || chars[i].c === '-') { const r = go(i + 1); best.set(i, r); return r; }
-      for (let j = Math.min(chars.length, i + 6); j > i; j--) {
-        const s = chars.slice(i, j).map(x => x.base).join('');
-        const tail = j === chars.length && s === 'r' && i > 0;          // erhua
-        if (!SYL.has(s) && !tail) continue;
-        const rest = go(j);
-        if (rest && (!out || rest.length + 1 < out.length)) out = [[i, j], ...rest];
+      if (chars[i].separator) {
+        let j = i + 1;
+        while (j < chars.length && chars[j].separator) j++;
+        const rest = go(j, left);
+        if (rest) out = { ...rest, parts: [[chars.slice(i, j).map(x => x.c).join(''), 0], ...rest.parts] };
+        best.set(key, out); return out;
       }
-      best.set(i, out); return out;
+      if (left === 0) return null;
+      for (let j = Math.min(chars.length, i + 6); j > i; j--) {
+        const run = chars.slice(i, j), s = run.map(x => x.base).join('');
+        if (run.some(x => x.separator) || run.filter(x => x.tone).length > 1) continue;
+        const tail = s === 'r' && i > 0 && !chars[i - 1].separator && (j === chars.length || chars[j].separator); // erhua
+        if (!SYL.has(s) && !tail) continue;
+        const rest = go(j, left == null ? null : left - 1);
+        if (!rest) continue;
+        const count = rest.count + 1;
+        if (!out || count < out.count) out = { parts: [[run.map(x => x.c).join(''), run.find(x => x.tone)?.tone || 5], ...rest.parts], count, ways: rest.ways };
+        else if (count === out.count) out.ways += rest.ways;
+      }
+      best.set(key, out); return out;
     };
-    const parts = go(0);
-    if (!parts || (n && parts.length !== n && !(parts.length === n + 1 && py.endsWith('r')))) return null;
-    return parts.map(([i, j]) => [chars.slice(i, j).map(x => x.c).join(''), chars.slice(i, j).reduce((t, x) => x.tone || t, 0) || 5]);
+    const result = go(0, n || null);
+    return result && (!unique || result.ways === 1) ? result.parts : null;
+  }
+  function toneSegments(py, zh = '') { // Supply Chinese only for a known source pairing, never an edited association.
+    const plain = text => text ? [[text, 0]] : [];
+    const han = [...zh].filter(c => /\p{Script=Han}/u.test(c));
+    const aligned = han.length && /^[\p{Script=Han}\p{P}\p{S}\s]+$/u.test(zh) ? syllables(py, han.length, true) : null;
+    const marked = [...py.normalize('NFD')].some(c => TONE_MARK[c]);
+    const pinyin = aligned || (marked ? syllables(py, han.length) || syllables(py) : null);
+    const tones = aligned?.filter(([, tone]) => tone).map(([, tone]) => tone);
+    let i = 0;
+    return { pinyin: pinyin || plain(py), expression: tones ? [...zh].map(c => [c, /\p{Script=Han}/u.test(c) ? tones[i++] : 0]) : plain(zh) };
   }
   const toned = (py, zh) => {           // pinyin with each syllable in its tone's colour (falls back to plain text)
     const n = [...zh].filter(c => /[一-鿿]/.test(c)).length;
-    const parts = syllables(py, n - (/儿$/.test(zh) && /r$/.test(py) && n > 1 ? 1 : 0));
-    return parts ? parts.map(([s, t]) => `<s class="t${t}">${esc(s)}</s>`).join('') : esc(py);
+    const parts = syllables(py, n) || (/r$/.test(py) ? syllables(py, n + 1) : null);
+    return parts ? parts.map(([s, t]) => t ? `<s class="t${t}">${esc(s)}</s>` : esc(s)).join('') : esc(py);
   };
 
   /* ---- tense marks (zh.words.json "g", made by pipeline/grammar.py) ---- */
@@ -114,7 +139,7 @@
     root.innerHTML = `
       <div class="pl${opts.list ? ' nolist' : ''}">
         <div class="pmain">
-          <div class="stage" style="--size:5.2;--lift:6">
+          <div class="stage" style="--size:5.2;--lift:7">
             <video playsinline preload="metadata"></video><div class="cover" hidden></div><div class="ov bg"></div>
             <div class="vc">
               <button data-play title="play / pause (Space)">▶</button>
@@ -138,7 +163,7 @@
               <div data-tracks><span class="muted">No subtitles loaded.</span></div>
               <div class="row">
                 <label class="check">Size <input type="range" data-size min="2.5" max="9" step=".1" value="5.2"></label>
-                <label class="check">Lift <input type="range" data-lift min="0" max="40" step=".5" value="6"></label>
+                <label class="check">Lift <input type="range" data-lift min="0" max="40" step=".5" value="7"></label>
               </div>
               <div class="row">
                 <button class="btn" data-ruby title="pinyin above each Chinese word (needs zh.words.json)">Pinyin above words</button>
@@ -169,6 +194,8 @@
               </div>
             </div></details>
             <details class="dd" data-dd><summary>Grammar</summary><div class="ddp grammar">
+              <div class="row grammar-head"><strong>Grammar</strong><button class="btn" data-grammar-close aria-label="Close grammar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+              <div class="grammar-body" tabindex="0" role="region" aria-label="Grammar examples">
               <section class="gr">
                 <h5>Word order: always the same</h5>
                 <div class="order"><span class="r-who">Who</span><span class="r-when">When</span><span class="r-where">Where</span><span class="r-how">With / how</span><span class="r-verb">Verb</span><span class="r-what">What</span></div>
@@ -195,6 +222,7 @@
                 <div class="ex"><code>在 + <i class="r-verb">verb</i></code><span class="zh"><ruby class="r-who">我<rt>wǒ</rt></ruby><ruby class="g present">在<rt>zài</rt></ruby><ruby class="r-verb">吃<rt>chī</rt></ruby><ruby class="r-what">饭<rt>fàn</rt></ruby></span><em>I'm eating</em></div>
               </section>
               <div class="row"><button class="btn" data-grammar title="underline these words in the subtitles (G)">Underline them in the subtitles</button></div>
+              </div>
             </div></details>
             <span data-extra></span>
             <details class="dd" data-dd><summary>Resources</summary><div class="ddp">
@@ -214,8 +242,9 @@
       </div>`;
     const q = s => root.querySelector(s);
     const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = opts.list || q('[data-list]');
-    let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 6;
+    let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 7;
     let words = null, align = null, ruby = false, pin = null, pinCue = -1, videoKey = '';
+    let anki = null, ankiAnchor = null, ankiVisible = false;
     let tones = true, grammar = false;             // tone colours in pinyin (on), tense colours in Chinese (optional, off)
     let karaoke = true, sayKey = null;             // light up each word as it is spoken (on)
     const COVERS = 'zh-player-cover-v1';             // { videoKey: { on, b, h } }: the band differs per video
@@ -244,6 +273,8 @@
     poster.onerror = () => { poster.hidden = true; };
     function begin({ poster: image = '', message = 'Loading video…', retry } = {}) {
       progress();
+      clearAnkiSelection();
+      videoKey = '';
       opening = true;
       v.pause();
       v.removeAttribute('src'); v.load();
@@ -291,6 +322,102 @@
       return r >= 0 && words[r].e > mid ? words[r] : null;
     }
     const flat = x => x.replace(/\s/g, '');
+    const chinese = () => tracks.find(t => t.role === 'zh');
+    function cueWords(c) {
+      const w = wordsAt(c);
+      return w && flat(c.text) === flat(w.w.flat().map(p => p[0]).join('')) ? w : null;
+    }
+    function linkedWords(html, w) {
+      const C = chinese(), ci = C ? cueAt(C.cues, (w.s + w.e) / 2) : -1;
+      if (ci < 0 || cueWords(C.cues[ci]) !== w) return html;
+      return html.replace(/data-w="(\d+)-(\d+)"/g, (attr, line, word) => {
+        const index = w.w.slice(0, +line).reduce((n, row) => n + row.length, 0) + +word;
+        return `${attr} data-anki-cue="${ci}" data-anki-word="${index}" tabindex="0" role="button" aria-pressed="false"`;
+      });
+    }
+    function paintAnkiSelection() {
+      for (const box of [ov, list]) box.querySelectorAll('.w[data-anki-cue]').forEach(el => {
+        const ci = +el.dataset.ankiCue, wi = +el.dataset.ankiWord;
+        const selected = ankiVisible && !!anki && ci >= anki.cueStart && ci <= anki.cueEnd &&
+          (anki.first === null || ((ci > anki.cueStart || wi >= anki.first) && (ci < anki.cueEnd || wi <= anki.last)));
+        el.classList.toggle('anki-selected', selected);
+        el.setAttribute('aria-pressed', String(selected));
+      });
+    }
+    function timedWords(c, w) {
+      if (!w || !Array.isArray(w.k) || w.k.length !== w.w.length) return null;
+      let previous = c.s - 0.15;
+      const times = [];
+      for (let l = 0; l < w.w.length; l++) {
+        if (!Array.isArray(w.k[l]) || w.k[l].length !== w.w[l].length) return null;
+        for (let k = 0; k < w.w[l].length; k++) {
+          const tm = w.k[l][k], spoken = /[\p{L}\p{N}]/u.test(w.w[l][k][0]);
+          if (!spoken && tm === 0) { times.push(null); continue; }
+          if (!Array.isArray(tm) || tm.length !== 2 || !tm.every(Number.isFinite) ||
+              tm[0] < c.s - 0.15 || tm[1] > c.e + 0.15 || tm[1] <= tm[0] || tm[0] < previous) return null;
+          previous = tm[1];
+          times.push(spoken ? [Math.max(c.s, tm[0]), Math.min(c.e, tm[1])] : null);
+        }
+      }
+      return times;
+    }
+    function ankiSelection() {
+      const C = chinese();
+      if (!anki || !C) return null;
+      const cues = C.cues.slice(anki.cueStart, anki.cueEnd + 1);
+      if (!cues.length || cues.length !== anki.cueEnd - anki.cueStart + 1) return null;
+      const selected = [], expressions = [], intervals = [];
+      let precise = anki.first !== null;
+      cues.forEach((c, i) => {
+        const w = cueWords(c), tokens = w ? w.w.flat() : [];
+        const first = i === 0 && anki.first !== null ? anki.first : 0;
+        const last = i === cues.length - 1 && anki.last !== null ? anki.last : tokens.length - 1;
+        const part = tokens.slice(first, last + 1);
+        selected.push(...part);
+        expressions.push(anki.first === null || !w ? c.text : part.map(p => p[0]).join(''));
+        const times = timedWords(c, w);
+        if (!times) precise = false;
+        else intervals.push(...times.slice(first, last + 1).filter(Boolean));
+      });
+      const start = cues[0].s, end = cues[cues.length - 1].e;
+      const textFor = role => (tracks.find(t => t.role === role)?.cues || [])
+        .filter(c => c.e > start && c.s < end).map(c => c.text).join('\n');
+      precise = precise && intervals.length > 0 && intervals.every((tm, i) => tm[1] > tm[0] && (!i || tm[0] >= intervals[i - 1][1]));
+      return { sourceId: videoKey, ...anki, expression: expressions.join('\n'),
+        pinyin: selected.length ? selected.map(p => p[1]).filter(Boolean).join(' ').replace(/ ([,.!?:;，。！？；：])/g, '$1') : textFor('pinyin'),
+        meaning: selected.map(p => p[2]).filter(Boolean).join('; '),
+        sentence: cues.map(c => c.text).join('\n'), translation: textFor('en'),
+        start: Math.max(0, (precise ? intervals[0][0] : start) + delay),
+        end: Math.max(0, (precise ? intervals[intervals.length - 1][1] : end) + delay),
+        sentenceStart: Math.max(0, start + delay), sentenceEnd: Math.max(0, end + delay), timing: precise ? 'word' : 'sentence' };
+    }
+    function notifyAnkiSelection() {
+      paintAnkiSelection();
+      if (pin && !pin.startsWith('rule:')) highlight(ov, pin);
+      const selection = ankiSelection();
+      if (opts.onAnkiSelection) opts.onAnkiSelection(selection);
+      return selection;
+    }
+    function clearAnkiSelection() {
+      anki = null; ankiAnchor = null; ankiVisible = false;
+      return notifyAnkiSelection();
+    }
+    function selectAnkiSentence() {
+      const C = chinese(), ci = C ? cueAt(C.cues, v.currentTime - delay) : -1;
+      if (ci < 0) return clearAnkiSelection();
+      anki = { cueStart: ci, cueEnd: ci, first: null, last: null }; ankiAnchor = null;
+      ankiVisible = true;
+      return notifyAnkiSelection();
+    }
+    function selectAnkiWord(el, extend) {
+      if (!el || !('ankiCue' in el.dataset)) return;
+      const point = { cue: +el.dataset.ankiCue, word: +el.dataset.ankiWord };
+      if (!extend || !ankiAnchor) ankiAnchor = point;
+      const [a, b] = [ankiAnchor, point].sort((a, b) => a.cue - b.cue || a.word - b.word);
+      anki = { cueStart: a.cue, cueEnd: b.cue, first: a.word, last: b.word };
+      ankiVisible = true;
+      notifyAnkiSelection();
+    }
     // English ↔ Chinese: an English word links to the Chinese word whose dictionary meaning contains it
     const STOP = new Set('a an the to of be is are am was were been do does did have has had it its this that these those in on at for with by from as or and but not no so very sb sth one someone something oneself etc used up out get got make'.split(' '));
     const SHORT = new Set(['i', 'me', 'my', 'we', 'us', 'he', 'she', 'go', 'ok']);
@@ -332,13 +459,13 @@
       return `<b>${esc(same)}</b> ${r[0]} — ${esc(r[1])}`;
     }
     function lineHTML(tr, c, inList) {
-      if (tr.role === 'en') { const w = wordsAt(c); return w ? englishHTML(c.text, w, align && align[c.i]).replace(/<br>/g, inList ? ' ' : '<br>') : esc(c.text).replace(/\n/g, inList ? ' ' : '<br>'); }
+      if (tr.role === 'en') { const w = wordsAt(c); return w ? linkedWords(englishHTML(c.text, w, align && align[c.i]), w).replace(/<br>/g, inList ? ' ' : '<br>') : esc(c.text).replace(/\n/g, inList ? ' ' : '<br>'); }
       const w = tr.role === 'zh' || tr.role === 'pinyin' ? wordsAt(c) : null;
       const same = w && flat(c.text) === flat(w.w.map(l => l.map(p => tr.role === 'zh' ? p[0] : p[1]).join('')).join(''));
       if (!same) return esc(c.text).replace(/\n/g, inList ? ' ' : '<br>');   // edited by hand since: show it plain
       const pyColour = (tracks.find(t => t.role === 'pinyin') || {}).colour || COLOUR.pinyin;
       const py = (p, zh) => tones ? toned(p, zh) : esc(p);
-      return w.w.map((line, L) => {
+      return linkedWords(w.w.map((line, L) => {
         const marks = new Map(grammar && w.g ? (w.g[L] || []) : []);   // character index in the line -> tense tag
         let at = 0;
         return line.map(([zh, p, g], k) => {
@@ -352,20 +479,35 @@
           return ruby && !inList ? `<ruby class="w" data-w="${key}">${chars}<rt style="color:${pyColour}">${py(p, zh)}</rt></ruby>`
                                  : `<i class="w" data-w="${key}"${tip}>${chars}</i>`;
         }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1');
-      }).join(inList ? ' ' : '<br>');
+      }).join(inList ? ' ' : '<br>'), w);
+    }
+    function canOpenAnkiWord() {
+      if (!pin || pin.startsWith('rule:') || !anki || typeof opts.onAnkiOpen !== 'function') return false;
+      const C = chinese(), c = C && C.cues[pinCue], w = c && cueWords(c);
+      const [line, word] = pin.split('-').map(Number);
+      if (!w || !w.w[line]?.[word] || pinCue < anki.cueStart || pinCue > anki.cueEnd) return false;
+      const index = w.w.slice(0, line).reduce((n, row) => n + row.length, 0) + word;
+      return anki.first === null || ((pinCue > anki.cueStart || index >= anki.first) &&
+        (pinCue < anki.cueEnd || index <= anki.last));
+    }
+    function setGloss(box, html) {
+      const gl = box.querySelector(':scope > .gl');
+      if (gl && gl.glossHTML !== html) { gl.innerHTML = html; gl.glossHTML = html; }
     }
     function highlight(box, key) {
       box.querySelectorAll('.w.hl').forEach(e => e.classList.remove('hl'));
       if (key) box.querySelectorAll(`.w[data-w="${key}"]`).forEach(e => e.classList.add('hl'));
-      const gl = box.querySelector(':scope > .gl');
-      if (gl) { const html = glossFor(key); gl.innerHTML = html ? `<span>${html}</span>` : ''; }
+      const html = glossFor(key);
+      const action = box === ov && key === pin && canOpenAnkiWord()
+        ? '<button type="button" class="anki-word-action" data-anki-word-action aria-label="Prepare Anki card" title="Prepare Anki card"><img src="assets/anki-logo.png" alt=""></button>' : '';
+      setGloss(box, html ? `<span>${html}${action}</span>` : '');
     }
 
     /* ---- the word being spoken: Whisper's times (zh.words.json "k"), or the line's time spread evenly ---- */
     function spokenKey(w, t) {
       let best = null;
-      if (w.k) {                                   // the last word that has started (a word stays lit through short pauses)
-        w.k.forEach((row, L) => row.forEach((tm, k) => { if (tm && tm[0] <= t + 0.05) best = `${L}-${k}`; }));
+      if (Array.isArray(w.k) && w.k.every(Array.isArray)) { // the last word that has started (stays lit through short pauses)
+        w.k.forEach((row, L) => row.forEach((tm, k) => { if (Array.isArray(tm) && tm[0] <= t + 0.05) best = `${L}-${k}`; }));
         return best;
       }
       const han = w.w.flatMap((line, L) => line.map((p, k) => [`${L}-${k}`, [...p[0]].filter(c => /[\u4e00-\u9fff]/.test(c)).length])).filter(x => x[1]);
@@ -392,20 +534,25 @@
       let key = v.paused ? 'p' : 'r';
       tracks.forEach((tr, i) => { if (!tr.on) return; const k = cueAt(tr.cues, t); key += i + ':' + k + ';'; if (k >= 0) shown.push([tr, tr.cues[k]]); });
       const L = lead(), li = L ? cueAt(L.cues, t) : -1;
-      key += 'L' + li;
+      const C = chinese(), ci = C ? cueAt(C.cues, t) : -1;
+      key += 'L' + li + 'C' + ci;
       if (li >= 0 && !v.paused && t >= L.cues[li].e - 0.08) {
         if (loopLine) v.currentTime = L.cues[li].s + delay;
         else if (autoPause && pausedFor !== li) { pausedFor = li; v.pause(); }
       }
       if (!force && key === shownKey) { say(t); return; }
       shownKey = key; sayKey = undefined;              // the lines are drawn again: light the word up again
-      if (pin && li !== pinCue) pin = null;          // a pinned word lasts until its line ends
-      shownWords = L && li >= 0 ? wordsAt(L.cues[li]) : null;
-      ov.innerHTML = '<div class="gl"></div>' + shown.map(([tr, c]) =>
+      if (pin && ci !== pinCue) pin = null;          // a pinned word lasts until its Chinese line ends
+      shownWords = C ? (ci >= 0 ? cueWords(C.cues[ci]) : null) : (L && li >= 0 ? wordsAt(L.cues[li]) : null);
+      // Keep the pinned card mounted so subtitle redraws cannot steal its button's focus.
+      if (!ov.querySelector(':scope > .gl')) ov.innerHTML = '<div class="gl"></div>';
+      ov.querySelectorAll(':scope > .ln').forEach(el => el.remove());
+      ov.insertAdjacentHTML('beforeend', shown.map(([tr, c]) =>
         `<div class="ln"><span class="${tr.blur && !v.paused ? 'blur' : ''}" style="color:${tr.colour};font-size:calc(var(--size) * ${tr.scale} * 1cqh)">` +
-        `${lineHTML(tr, c)}</span></div>`).join('');
-      if (pin && pin.startsWith('rule:')) { const el = ov.querySelector(`.g[data-g="${pin.slice(5)}"]`); if (el) showRule(el); }
+        `${lineHTML(tr, c)}</span></div>`).join(''));
+      if (pin && pin.startsWith('rule:')) { const el = ov.querySelector(`.g[data-g="${pin.slice(5)}"]`); if (el) showRule(el); else setGloss(ov, ''); }
       else if (pin) highlight(ov, pin);
+      else setGloss(ov, '');
       list.querySelectorAll('.cue.now').forEach(e => e.classList.remove('now'));
       const el = li >= 0 && list.children[li];
       if (el && el.classList.contains('cue')) {
@@ -414,6 +561,7 @@
         if (r.top < b.top || r.bottom > b.bottom) list.scrollTop += r.top - b.top - b.height / 3;
       }
       say(t);
+      paintAnkiSelection();
     }
     (function frame() { if (root.isConnected) { tick(false); requestAnimationFrame(frame); } })();
     const timer = setInterval(() => root.isConnected ? tick(false) : clearInterval(timer), 120);   // rAF sleeps in background tabs
@@ -430,6 +578,7 @@
           return k >= 0 ? `<div class="l ${t.role}">${lineHTML(t, t.cues[k], true)}</div>` : ''; }).join('') +   // colours: kit.css, per theme
         '</div>').join('');
       shownKey = '';
+      paintAnkiSelection();
     }
     function renderTracks() {
       q('[data-tracks]').innerHTML = tracks.length ? tracks.map((t, i) => `<div class="trk">
@@ -467,28 +616,54 @@
     });
     function showRule(el) {                         // a tense mark explains itself in the card above the lines
       ov.querySelectorAll('.w.hl').forEach(x => x.classList.remove('hl'));
-      const gl = ov.querySelector(':scope > .gl'); if (gl) gl.innerHTML = `<span class="rule ${el.dataset.g.split(':')[0]}">${ruleFor(el)}</span>`;
+      setGloss(ov, `<span class="rule ${el.dataset.g.split(':')[0]}">${ruleFor(el)}</span>`);
     }
     ov.addEventListener('mouseover', e => {
       const m = e.target.closest('.g'); if (m && !pin) return showRule(m);
       const w = e.target.closest('.w'); if (w && !pin) highlight(ov, w.dataset.w);
     });
     ov.addEventListener('mouseout', e => { if (e.target.closest('.w, .g') && !pin) highlight(ov, null); });
-    ov.addEventListener('click', e => {             // click a word: pin it (and pause) so you can read it
+    function overlayClick(e) {                     // click a word: select, pin and pause so you can read it
+      const action = e.target.closest('[data-anki-word-action]');
+      if (action) { e.stopPropagation(); if (canOpenAnkiWord()) opts.onAnkiOpen(action); return; }
+      const w = e.target.closest('.w');
+      selectAnkiWord(w, e.shiftKey);
       const m = e.target.closest('.g');
-      if (m) { e.stopPropagation(); pin = 'rule:' + m.dataset.g; pinCue = lead() ? cueAt(lead().cues, v.currentTime - delay) : -1; showRule(m); v.pause(); return; }
-      const w = e.target.closest('.w'); if (!w) return;
+      if (m) { e.stopPropagation(); pin = 'rule:' + m.dataset.g; pinCue = chinese() ? cueAt(chinese().cues, v.currentTime - delay) : -1; showRule(m); v.pause(); return; }
+      if (!w) return;
       e.stopPropagation();
-      const L = lead();
+      const C = chinese();
       pin = pin === w.dataset.w ? null : w.dataset.w;
-      pinCue = L ? cueAt(L.cues, v.currentTime - delay) : -1;
+      pinCue = 'ankiCue' in w.dataset ? +w.dataset.ankiCue : (C ? cueAt(C.cues, v.currentTime - delay) : -1);
+      if (C && pinCue >= 0) shownWords = cueWords(C.cues[pinCue]);
       highlight(ov, pin);
-      if (pin) v.pause();
-    });
+      v.pause();
+    }
+    ov.addEventListener('click', overlayClick);
     list.addEventListener('mouseover', e => { const w = e.target.closest('.w'), cue = e.target.closest('.cue'); if (cue) highlight(cue, w && w.dataset.w); });
     list.addEventListener('mouseleave', () => list.querySelectorAll('.w.hl').forEach(e => e.classList.remove('hl')));
-    list.addEventListener('click', e => { const el = e.target.closest('.cue'), L = lead();
-      if (el && L) { v.currentTime = L.cues[+el.dataset.i].s + delay + 0.01; v.play(); } });
+    function listClick(e) {
+      const w = e.target.closest('.w[data-anki-cue]'), C = chinese();
+      if (w && C) {
+        e.stopPropagation();
+        selectAnkiWord(w, e.shiftKey);
+        pin = w.dataset.w; pinCue = +w.dataset.ankiCue;
+        v.currentTime = C.cues[pinCue].s + delay + 0.01;
+        v.pause(); tick(true);
+        return;
+      }
+      const el = e.target.closest('.cue'), L = lead();
+      if (el && L) { v.currentTime = L.cues[+el.dataset.i].s + delay + 0.01; v.play(); }
+    }
+    list.addEventListener('click', listClick);
+    for (const [box, activate] of [[ov, overlayClick], [list, listClick]]) box.addEventListener('keydown', e => {
+      const w = e.target.closest('.w[data-anki-cue]');
+      if (!w || !['Enter', ' '].includes(e.key)) return;
+      e.preventDefault(); e.stopPropagation();
+      const selector = `.w[data-anki-cue="${w.dataset.ankiCue}"][data-w="${w.dataset.w}"]`;
+      activate(e);
+      box.querySelector(selector)?.focus({ preventScroll: true });
+    });
 
     /* ---- controls ---- */
     const setVar = (n, val) => stage.style.setProperty('--' + n, val);
@@ -516,7 +691,7 @@
     }
     q('[data-cover]').onclick = () => { paintCover(cover.hidden); saveCover(); };
     cb.oninput = ch.oninput = () => { paintCover(true); saveCover(); };
-    q('[data-delay]').onchange = e => { delay = parseFloat(e.target.value) || 0; tick(true); };
+    q('[data-delay]').onchange = e => { const n = parseFloat(e.target.value); delay = Number.isFinite(n) ? n : 0; tick(true); if (anki) notifyAnkiSelection(); };
     q('[data-speed]').onchange = e => { v.playbackRate = +e.target.value; save(); };
     function jump(dir) {
       const L = lead(); if (!L) return;
@@ -541,16 +716,27 @@
     q('[data-full]').onclick = fullscreen;
     /* ---- the dropdowns: one open at a time; outside click or Esc closes ---- */
     const dds = () => root.querySelectorAll('details.dd[open]');
+    q('[data-grammar-close]').onclick = e => { const menu = e.currentTarget.closest('details'); menu.open = false; menu.querySelector('summary').focus(); };
     root.addEventListener('toggle', e => {
       if (!e.target.matches('details.dd') || !e.target.open) return;
       dds().forEach(d => { if (d !== e.target) d.open = false; });
       // open downwards so the video and its subtitles stay visible; upwards only when there is no room
       const panel = e.target.querySelector('.ddp'), r = e.target.getBoundingClientRect();
+      if (panel.classList.contains('grammar')) return;
       const below = innerHeight - r.bottom - 14, above = r.top - 14, up = below < 220 && above > below;
       panel.classList.toggle('up', up);
       panel.style.maxHeight = Math.max(160, up ? above : below) + 'px';
     }, true);
     document.addEventListener('click', e => { if (!e.target.closest('details.dd')) dds().forEach(d => d.open = false); });
+    document.addEventListener('click', e => {
+      if (!root.isConnected || (!pin && !ankiVisible) || e.target.closest('.anki')) return;
+      const word = e.target.closest('.w, .g, .gl');
+      if (word && (ov.contains(word) || list.contains(word))) return;
+      pin = null; pinCue = -1; ankiVisible = false; ankiAnchor = null;
+      highlight(ov, null);
+      list.querySelectorAll('.cue').forEach(cue => highlight(cue, null));
+      paintAnkiSelection(); // Keep draft timing metadata so subtitle-delay changes can still update it.
+    });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') dds().forEach(d => d.open = false); });
     q('[data-vfull]').onclick = fullscreen;
     const playPause = () => v.paused ? v.play() : v.pause();
@@ -578,7 +764,8 @@
     v.onclick = () => { clearTimeout(clickTimer); clickTimer = setTimeout(playPause, 220); };
     v.ondblclick = () => { clearTimeout(clickTimer); fullscreen(); };
     document.addEventListener('keydown', e => {
-      if (!root.isConnected || !stage.classList.contains('loaded') || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || e.metaKey || e.ctrlKey) return;
+      if (e.defaultPrevented || !root.isConnected || !stage.classList.contains('loaded') || e.metaKey || e.ctrlKey ||
+          e.target.closest('input, select, textarea, button, summary, a, audio, .grammar-body, [role="button"], [contenteditable]')) return;
       const k = e.key;
       if (k === ' ') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
       else if (k === 'ArrowLeft') { e.preventDefault(); jump(-1); }
@@ -624,6 +811,8 @@
 
     /* ---- public ---- */
     function load({ video, subs = [], words: w, align: al, append = false, id, cover: coverDefault = false, start = 0 }) {
+      if (append && id !== undefined && String(id) !== videoKey) return;
+      if (!append || video || (w !== undefined && words)) clearAnkiSelection();
       if (video && !opening) begin({ retry: () => { opening = false; load({ video, subs, words: w, align: al, id, start }); } });
       if (al !== undefined || !append) align = al && Array.isArray(al.cues) ? al.cues : null;
       if (id !== undefined) {
@@ -645,8 +834,9 @@
       tracks = (append ? tracks.concat(added) : added).sort((a, b) => ORDER[a.role] - ORDER[b.role]);
       restore(); renderTracks(); renderList(); tick(true);
     }
-    return { load, begin, feedback: feedbackState, stage, video: v, extra: q('[data-extra]'), get tracks() { return tracks; } };
+    return { load, begin, ankiSelection, selectAnkiSentence, clearAnkiSelection,
+      feedback: feedbackState, stage, video: v, extra: q('[data-extra]'), get tracks() { return tracks; } };
   }
 
-  window.SubPlayer = { mount, parse, roleOf };
+  window.SubPlayer = { mount, parse, roleOf, toneSegments };
 })();
