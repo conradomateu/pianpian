@@ -96,3 +96,27 @@ def test_issue_url_fills_the_bug_form_and_stays_short():
     q = parse_qs(urlparse(url).query)
     assert len(url) < 7500 and q["template"] == ["bug.yml"] and q["code"] == ["NET"]
     assert q["details"][0].startswith("summary") and "log line 399" in q["details"][0]   # the summary and the newest lines stay
+
+
+def test_redact_covers_other_ways_windows_writes_a_path(monkeypatch):
+    # forward slashes (as_posix, repr), another letter case, file:/// links, 8.3 short names, another drive
+    monkeypatch.setattr(report.engine, "WINDOWS", True)
+    monkeypatch.setattr(report.Path, "home", lambda: PureWindowsPath(r"C:\Users\Wang Wei"))
+    monkeypatch.setattr(report.getpass, "getuser", lambda: "Wang Wei")
+    for lib in (PureWindowsPath(r"C:\Users\Wang Wei\Videos\Pianpian"), PureWindowsPath(r"D:\My Videos\Pianpian 学习")):
+        video = lib / "王老师的私人课" / "source.mp4"
+        text = "\n".join([
+            repr(video), video.as_posix(), str(video).lower(), video.as_posix().upper(),
+            video.as_uri(), "file:///" + video.as_posix().replace(" ", "%20"), "Input #0, from 'file:" + video.as_posix() + "':",
+            r"C:\Users\WANGWE~1\AppData\Local\Pianpian\engine\python.exe", r"c:\users\wang wei\AppData\x.log",
+        ])
+        out = report.redact(text, lib)
+        for private in ("Wang", "wang", "WANG", "王老师", "私人", "Pianpian 学习", "My Videos", "%20Wei"):
+            assert private not in out, (lib, private, out)
+        assert out.count("<library>/<video>") == 7 and "AppData" in out
+
+
+def test_system_line_uses_the_engine_platform_check(monkeypatch):
+    monkeypatch.setattr(report.engine, "WINDOWS", True)
+    monkeypatch.setattr(report.platform, "platform", lambda: "Windows-11-10.0.26200-SP0")
+    assert report.system().startswith("Windows-11")

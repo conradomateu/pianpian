@@ -12,7 +12,9 @@ import platform
 import re
 import subprocess
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
+
+import engine  # standard library only too: WINDOWS, the one platform check on the app side
 
 REPO = "conradomateu/pianpian"                          # where reports go, and where releases come from
 # (code, pattern in the log, what to do): the first match from the end of the log wins
@@ -80,25 +82,46 @@ def explain(lines: list[str]) -> dict | None:
     return None
 
 
+def _forms(path) -> list[str]:
+    """The ways a log writes one folder: escaped backslashes (exceptions, command lists, JSON in them), as given, with forward
+    slashes (as_posix, repr of a WindowsPath, ffmpeg) and inside a file:/// link. Longest first."""
+    s = str(path)
+    posix = s.replace("\\", "/")
+    return list(dict.fromkeys([s.replace("\\", "\\" * 4), s.replace("\\", "\\\\"), s, posix, quote(posix, safe="/:"), posix.replace(" ", "%20")]))
+
+
+def _short(name: str) -> str | None:
+    """The 8.3 short form Windows may write for a long folder name (Wang Wei -> WANGWE~1), ASCII names only.
+    shortcut: the pattern is the usual one, not read from the disk (GetShortPathNameW); non-ASCII names get
+    hashed short names it misses. Not tested on Windows."""
+    base = re.sub(r"[ .]", "", name)
+    return base[:6] if base.isascii() and (len(name) > 8 or " " in name) else None
+
+
 def redact(text: str, library: Path | None = None) -> str:
     home, user = str(Path.home()), getpass.getuser()
+    flags = re.I if engine.WINDOWS else 0                     # Windows paths ignore case: C:\Users = c:\users
+    if engine.WINDOWS and len(user) > 2 and (short := _short(user)):
+        text = re.sub(rf"\b{re.escape(short)}~\d+", user.replace("\\", "\\\\"), text, flags=re.I)   # then the long forms below match
     lines = [ln for ln in text.splitlines() if not TRANSCRIPT.match(ln)]
     text = "\n".join(ln for ln in lines if not re.search(r"cookie|SESSDATA|Authorization", ln, re.I) or "cookies from browser" in ln)
     if library:
         # Spaces/quotes make the path's end ambiguous: hide the rest of its line, including later diagnostics.
-        # Exceptions and command lists escape Windows backslashes.
-        for prefix in (str(library).replace("\\", "\\\\"), str(library)):
-            text = re.sub(re.escape(prefix) + r"[\\/]+[^\r\n]*", "<library>/<video>", text)
-            text = text.replace(prefix, "<library>")
-    text = text.replace(home.replace("\\", "\\\\"), "~").replace(home, "~")
-    text = re.sub(rf"\b{re.escape(user)}\b", "<user>", text) if len(user) > 2 else text
+        for prefix in _forms(library):
+            text = re.sub(re.escape(prefix) + r"(?:[\\/]|%5C|%2F)+[^\r\n]*", "<library>/<video>", text, flags=flags)
+            text = re.sub(re.escape(prefix), "<library>", text, flags=flags)
+    for form in _forms(home):
+        text = re.sub(re.escape(form), "~", text, flags=flags)
+    if len(user) > 2:
+        for form in dict.fromkeys([user, quote(user)]):
+            text = re.sub(rf"\b{re.escape(form)}\b", "<user>", text, flags=flags)
     text = URL.sub(_shape, text)
     return EMAIL.sub("<email>", text)
 
 
 def system() -> str:
     """Machine, chip and OS version: enough to reproduce, nothing personal."""
-    if platform.system() == "Windows":
+    if engine.WINDOWS:
         return " · ".join(x for x in (platform.platform(), platform.machine(),
                                       platform.processor() or platform.uname().processor) if x)
     def sysctl(key):
