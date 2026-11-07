@@ -185,7 +185,7 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .stage.loaded .drop { display:none; }
 .stage.over { outline:3px dashed var(--red); outline-offset:-6px; }
 /* the row of dropdowns under the video */
-.pbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; }
+.pbar { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:10px; }
 .pbar .grow { flex:1; }
 .pbar .quick { display:none; }                     /* 中文 / Pinyin / English switches: app.html shows them in the phone demo */
 .pbar .quick .btn.on::before { content:'✓'; }       /* on is said by a tick too, not only by colour */

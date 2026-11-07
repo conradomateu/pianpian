@@ -116,13 +116,18 @@ def wait(c, condition):
         try { if (CONDITION) { resolve(true); return; } } catch {}
         if (Date.now() > end) resolve(false); else setTimeout(check, 30);
       }; check();
-    })""".replace("CONDITION", condition)), (condition, c.js("({url:location.href,time:document.querySelector('video')?.currentTime, state:document.querySelector('video')?.readyState, text:document.querySelector('[data-load-text]')?.textContent})"))
+    })""".replace("CONDITION", condition)), (condition, c.js("""(() => { const d = document.querySelector('iframe')?.contentDocument || document;
+      return {url:location.href,time:d.querySelector('video')?.currentTime, state:d.querySelector('video')?.readyState,
+        text:d.querySelector('[data-load-text]')?.textContent, focus:d.activeElement?.outerHTML.slice(0, 200), sheetHidden:d.querySelector('.wsheet')?.hidden}; })()"""))
 
 
 def tap_in_frame(c, expr):
     """A real touch tap on an element inside the demo iframe (expr runs in the iframe's document)."""
     point = c.js(f"""(() => {{ const f = document.querySelector('iframe'), d = f.contentDocument, r = f.getBoundingClientRect();
-      const b = ({expr}).getBoundingClientRect(); return [r.x+b.x+b.width/2, r.y+b.y+b.height/2]; }})()""")
+      const el = ({expr}), b = el.getBoundingClientRect(), x = b.x+b.width/2, y = b.y+b.height/2;
+      return [r.x+x, r.y+y, el.contains(d.elementFromPoint(x,y)) && document.elementFromPoint(r.x+x,r.y+y) === f]; }})()""")
+    assert c.js(f"{point[0]} >= 0 && {point[0]} < innerWidth && {point[1]} >= 0 && {point[1]} < innerHeight"), point
+    assert point[2], (expr, point)
     c.call("Input.dispatchTouchEvent", type="touchStart", touchPoints=[{"x": point[0], "y": point[1]}])
     c.call("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
 
@@ -390,6 +395,7 @@ def test_mobile_demo_layout(browser):
     word = c.js(f"{f}.querySelector('.ov .zh .w').textContent")
     tap_in_frame(c, "d.querySelector('.ov .zh .w')")
     wait(c, f"{f}.querySelector('video').paused && !{f}.querySelector('.wsheet').hidden")
+    assert c.js(f"{f}.activeElement.matches('[data-sheet-close]')")
     assert c.js(f"{f}.querySelector('[data-sheet-body]').textContent").startswith(word)
     assert c.js(f"""(() => {{ const fr = document.querySelector('iframe'), s = {f}.querySelector('.wsheet').getBoundingClientRect();
       return s.left >= 0 && s.right <= fr.clientWidth && s.bottom <= fr.clientHeight && !{f}.querySelector('.ov > .gl').getClientRects().length; }})()""")
@@ -403,10 +409,107 @@ def test_mobile_demo_layout(browser):
     wait(c, f"!{f}.querySelector('.wsheet').hidden")
     tap_in_frame(c, "d.querySelector('[data-sheet-close]')")
     wait(c, f"{f}.querySelector('.wsheet').hidden")
+    assert c.js(f"{f}.activeElement.matches('.cue .l.zh .w')")
     tap_in_frame(c, "d.querySelector('.cue .l.zh .w')")
     wait(c, f"!{f}.querySelector('.wsheet').hidden")
     click(c, 'h2')
     wait(c, f"{f}.querySelector('.wsheet').hidden")
+
+
+@pytest.mark.parametrize('scheme,height', [('light', 844), ('dark', 844), ('light', 480), ('dark', 480)])
+def test_mobile_sheet_focus_and_parent_viewport(browser, scheme, height):
+    c, url, _ = browser
+    c.call('Emulation.setDeviceMetricsOverride', width=390, height=height, deviceScaleFactor=1, mobile=True)
+    c.call('Emulation.setTouchEmulationEnabled', enabled=True, maxTouchPoints=1)
+    c.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': scheme},
+                                                {'name': 'prefers-reduced-motion', 'value': 'reduce' if scheme == 'dark' else 'no-preference'}])
+    navigate(c, url + '/index.html')
+    c.js("document.querySelector('#demo').scrollIntoView({behavior:'instant'})")
+    f = "document.querySelector('iframe').contentDocument"
+    wait(c, f"{f}?.querySelector('.ov .zh .w') && {f}.querySelector('.load-state').hidden")
+    wait(c, "Math.abs(parseFloat(document.querySelector('iframe').style.height) - document.querySelector('iframe').contentDocument.querySelector('.shell').getBoundingClientRect().height) < 2")
+    c.js("scrollBy({top:document.querySelector('iframe').getBoundingClientRect().top - 90,behavior:'instant'})")
+    wait(c, f"{f}.getAnimations().every(a => a.effect.getComputedTiming().iterations === Infinity || a.playState !== 'running')")
+    before = c.js('scrollY')
+    (ROOT / 'scratch' / f'demo-390-{height}-{scheme}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    origin = c.js(f"{f}.querySelector('.ov .zh .w').dataset.w")
+    tap_in_frame(c, "d.querySelector('.ov .zh .w')")
+    wait(c, f"!{f}.querySelector('.wsheet').hidden && {f}.activeElement.matches('[data-sheet-close]')")
+    visible = f"""(() => {{ const fr = document.querySelector('iframe').getBoundingClientRect(), s = {f}.querySelector('.wsheet').getBoundingClientRect();
+      return fr.top+s.top >= document.querySelector('header.top').getBoundingClientRect().bottom && fr.top+s.bottom <= innerHeight-7; }})()"""
+    wait(c, visible)
+    if height == 480:
+        assert c.js('scrollY') > before + 100  # the iframe fits its content, not the short outer viewport
+    else:
+        assert c.js('scrollY') == before    # no jump when the sheet is already visible
+    if scheme == 'dark':
+        assert c.js(f"parseFloat({f}.defaultView.getComputedStyle({f}.querySelector('.wsheet')).animationDuration)") < .01
+    c.js('new Promise(r => setTimeout(r, 250))')  # capture after the normal-motion sheet entrance
+    (ROOT / 'scratch' / f'demo-sheet-390-{height}-{scheme}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    tap_in_frame(c, "d.querySelector('[data-sheet-close]')")
+    wait(c, f"{f}.querySelector('.wsheet').hidden && {f}.activeElement.matches('.ov .zh .w')")
+    assert c.js(f"{f}.activeElement.dataset.w") == origin
+    wait(c, f"""(() => {{ const r = {f}.activeElement.getBoundingClientRect(), fr = document.querySelector('iframe').getBoundingClientRect();
+      return fr.top+r.top >= document.querySelector('header.top').getBoundingClientRect().bottom && fr.top+r.bottom <= innerHeight; }})()""")
+    # Keyboard activation survives subtitle redraws and moves to the close control too.
+    c.call('Input.dispatchKeyEvent', type='keyDown', key='Enter', code='Enter', windowsVirtualKeyCode=13)
+    c.call('Input.dispatchKeyEvent', type='keyUp', key='Enter', code='Enter', windowsVirtualKeyCode=13)
+    wait(c, f"!{f}.querySelector('.wsheet').hidden && {f}.activeElement.matches('[data-sheet-close]')")
+    wait(c, visible)
+    c.call('Input.dispatchKeyEvent', type='keyDown', key='Escape', code='Escape', windowsVirtualKeyCode=27)
+    c.call('Input.dispatchKeyEvent', type='keyUp', key='Escape', code='Escape', windowsVirtualKeyCode=27)
+    wait(c, f"{f}.querySelector('.wsheet').hidden && {f}.activeElement.matches('.ov .zh .w')")
+    assert c.js(f"{f}.activeElement.dataset.w") == origin
+
+
+@pytest.mark.parametrize('scheme', ['light', 'dark'])
+def test_desktop_toolbar_and_library_footer(browser, scheme):
+    c, url, _ = browser
+    c.call('Emulation.setDeviceMetricsOverride', width=1280, height=800, deviceScaleFactor=1, mobile=False)
+    c.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': scheme}])
+    navigate(c, url + '/app.html#v=pianpian-day&t=7.5')
+    wait(c, "document.querySelector('.ov .w') && document.querySelector('.load-state').hidden")
+    centers = c.js("""[...document.querySelectorAll('.pbar .dd > summary, .pbar > [data-full]')].map(e => {
+      const r = e.getBoundingClientRect(); return r.y+r.height/2;
+    })""")
+    assert len(centers) == 8 and max(centers) - min(centers) < 1, centers
+    # Long status/theme labels must wrap instead of squeezing the status dot or clipping controls.
+    for status, theme in [('ready', 'Auto'), ('checking…', 'Light')]:
+        c.js(f"document.querySelector('#status').textContent={json.dumps(status)}; document.querySelector('[data-theme-toggle]').textContent={json.dumps(theme)}")
+        assert c.js("""(() => {
+          const p = document.querySelector('.sidefoot').getBoundingClientRect();
+          return [...document.querySelectorAll('.sidefoot > :not([hidden]):not(.grow)')].every(e => {
+            const r = e.getBoundingClientRect(); return r.left >= p.left && r.right <= p.right && r.bottom <= p.bottom;
+          }) && getComputedStyle(document.querySelector('#status'), '::before').width === '8px';
+        })()""")
+    c.js("document.querySelector('#status').textContent='ready'; document.querySelector('[data-theme-toggle]').textContent='Auto'")
+    click(c, '[data-theme-toggle]')
+    assert c.js("document.querySelector('[data-theme-toggle]').textContent") != 'Auto'
+    click(c, '[data-theme-toggle]')
+    click(c, '[data-theme-toggle]')
+    # This headless Chrome denies native fullscreen; a real click must still reach the shared stage API.
+    c.js("document.querySelector('.stage').requestFullscreen = function() { window.fullscreenTarget = this; }")
+    click(c, '[data-full]')
+    assert c.js("window.fullscreenTarget === document.querySelector('.stage')")
+    click(c, '.ov .zh .w')
+    assert c.js("document.querySelector('.ov > .gl').textContent && !document.querySelector('.wsheet').getClientRects().length && !document.activeElement.matches('[data-sheet-close]')")
+    (ROOT / 'scratch' / f'app-1280-{scheme}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    c.call('Emulation.setDeviceMetricsOverride', width=900, height=800, deviceScaleFactor=1, mobile=False)
+    assert c.js("document.querySelector('.panel.left').scrollWidth === document.querySelector('.panel.left').clientWidth")
+    c.js("document.querySelector('.sidefoot').scrollIntoView({block:'center',behavior:'instant'})")
+    click(c, '[data-theme-toggle]')
+    click(c, '[data-theme-toggle]')
+    click(c, '[data-theme-toggle]')
+    (ROOT / 'scratch' / f'app-900-{scheme}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    c.call('Emulation.setDeviceMetricsOverride', width=1280, height=800, deviceScaleFactor=1, mobile=False)
+    c.js("localStorage.removeItem('pp-left')")  # the site's first visit, independent of the app session above
+    navigate(c, url + '/index.html')
+    c.js("document.querySelector('#demo').scrollIntoView({behavior:'instant'})")
+    f = "document.querySelector('iframe').contentDocument"
+    wait(c, f"{f}?.querySelector('.ov .zh .w') && {f}.querySelector('.load-state').hidden")
+    assert c.js(f"!{f}.querySelector('.quick').getClientRects().length && !{f}.querySelector('.wsheet').getClientRects().length")
+    c.js('new Promise(r => setTimeout(r, 400))')
+    (ROOT / 'scratch' / f'demo-1280-{scheme}.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
 
 
 def test_words_keep_a_gap(browser):
