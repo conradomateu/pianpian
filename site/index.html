@@ -85,6 +85,7 @@ a:focus-visible, summary:focus-visible, button:focus-visible { outline:2px solid
 .pp-preview .pp-selection { margin:14px 0 0; border-top:1px solid var(--line); padding-top:12px; color:var(--fg-2); font-size:14px; }
 .pp-preview-compact.cue { padding:0; margin-top:12px; border:0; border-radius:0; background:transparent; }
 .pp-preview-compact .l.zh { font-size:23px; }
+.pp-preview .l.zh .w + .w { margin-left:.14em; }   /* + .08em padding on each side = 0.3em between words, as in the app */
 .pp-preview-compact .l.pinyin { font-size:16px; }
 .pp-preview-compact .l.en { font-size:14.5px; }
 .pp-words .pp-role-pinyin { min-height:22px; margin:0 0 5px; font-size:12px; }
@@ -122,27 +123,31 @@ h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
 #anki > p { max-width:75ch; color:var(--fg-2); }
 .anki-brand { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; vertical-align:bottom; }
 .anki-brand img { width:1em; height:auto; }
-.anki-figure { margin:26px 0 0; padding:24px; border:1px dashed var(--line-2); border-radius:16px; }
-.anki-flow { display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:32px; list-style:none; padding:0; margin:24px 0; }
+.anki-figure { margin:26px 0 0; padding:20px 24px; border:1px solid var(--line); border-radius:16px; }
+.anki-flow { display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:32px; list-style:none; padding:0; margin:0 0 16px; }
 .anki-flow > li { min-width:0; }
 .anki-flow h3 { display:flex; align-items:center; gap:8px; margin:0 0 10px; color:var(--fg); font:700 17px var(--display); letter-spacing:normal; text-transform:none; }
 .anki-flow h3 span { font:600 13px var(--mono); color:var(--red-fg); }
 .anki-flow p { font-size:14px; color:var(--fg-2); margin:8px 0 16px; }
 .anki-flow mark { background:var(--red-tint); color:var(--fg); border-bottom:2px solid var(--red-fg); padding:2px 3px; }
-.anki-source { font-size:25px; line-height:2.3; margin:20px 0 12px; }
+.anki-source { font-size:25px; line-height:2.3; margin:0; }
+/* word boundaries: 0.3em between words (the app uses the same), each word's pinyin centred over it by <ruby> */
+.anki-source ruby:not(:first-child) { margin-left:.3em; }
+.anki-source mark { margin-left:calc(.3em - 3px); }   /* its 3px padding is part of the gap */
+.anki-legend { margin:0 0 10px; font-size:12px; color:var(--fg-2); }
 .anki-source rt { font:12px var(--body); color:var(--fg-2); }
 .anki-choices { margin:0; font-size:14px; }
 .anki-choices > div { display:grid; grid-template-columns:68px 1fr; align-items:baseline; gap:8px; margin:8px 0; }
 .anki-choices dt { color:var(--fg-2); font-size:12px; }
 .anki-choices dd { margin:0; }
 .anki-choices small { display:block; font-size:12px; color:var(--fg-2); }
-.anki-audio { width:100%; height:auto; display:block; margin:24px 0 8px; overflow:visible; }
+.anki-audio { width:100%; height:auto; display:block; margin:8px 0 8px; overflow:visible; }
 .anki-audio text { fill:var(--fg); font:16px var(--body); }
 .anki-audio .boundary { stroke:var(--red-fg); stroke-width:2; }
 .anki-flow .anki-schematic { font-size:12px; }
-.anki-transfer { display:flex; align-items:center; gap:8px; margin-top:20px; font-size:12px; color:var(--fg-2); }
+.anki-transfer { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:12px; color:var(--fg-2); }
 .anki-transfer svg { width:24px; height:16px; flex:none; }
-.anki-note { margin-top:18px; padding:18px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); }
+.anki-note { margin-top:0; padding:18px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); }
 .anki-note-head { display:flex; align-items:center; gap:10px; font:700 17px var(--display); }
 .anki-note-head img { width:40px; height:auto; flex:none; }
 .anki-note-head small { display:block; font:12px var(--body); color:var(--fg-2); }
@@ -325,6 +330,7 @@ footer.site .grow { flex:1; }
           <dl class="anki-choices">
             <div><dt>Word</dt><dd lang="zh-Hans">学习</dd></div>
             <div><dt>Group</dt><dd><mark lang="zh-Hans">学习中文</mark><small>Selected in this example</small></dd></div>
+          <p class="anki-legend">Pinyin colours = tones · underline = your selection</p>
             <div><dt>Sentence</dt><dd lang="zh-Hans">我每天学习中文。</dd></div>
           </dl>
           <div class="anki-transfer">Preview selection <svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h19m-6-5 6 5-6 5"/></svg></div>
@@ -355,7 +361,7 @@ footer.site .grow { flex:1; }
           <div class="anki-destination">Choose <strong>an existing or new deck</strong>.</div>
         </li>
       </ol>
-      <figcaption id="anki-caption">In this Pianpian example, the selected words, audio and sentence context stay together in one Anki note. Pinyin colours indicate tones; the underline marks your selection.</figcaption>
+      <figcaption id="anki-caption">One Anki note keeps the words, their audio and the sentence together.</figcaption>
     </figure>
   </section>
 
