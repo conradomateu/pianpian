@@ -176,6 +176,8 @@ class Job:
 
 JOBS: list = []
 QUEUE: "queue.Queue[Job]" = queue.Queue()
+STARTING = threading.Lock()                                  # a job and the setup (it may move the library) never overlap
+SETUP_RUNS = "The setup is running. Try again when it has finished."
 
 
 def worker():
@@ -204,9 +206,12 @@ def worker():
 
 
 def enqueue(job: Job) -> Job:
-    JOBS.append(job)
-    del JOBS[:-30]
-    QUEUE.put(job)
+    with STARTING:
+        if engine.SETUP.state == "running":
+            raise RuntimeError(SETUP_RUNS)
+        JOBS.append(job)
+        del JOBS[:-30]
+        QUEUE.put(job)
     return job
 
 
@@ -393,6 +398,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(400, "drop a video file (" + ", ".join(VIDEO_EXT) + ")")
         if not size:
             return self.fail(400, "empty file")
+        if engine.SETUP.state == "running":                   # before copying: the setup may be moving the library
+            return self.fail(409, SETUP_RUNS)
         lib = CFG["library"]
         target, n = lib / name, 2
         while target.exists() or (lib / (target.stem + "_study")).exists():   # never overwrite: "name (2).mp4"
@@ -410,7 +417,10 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ConnectionError) as e:
             part.unlink(missing_ok=True)
             return self.fail(500, f"could not copy the video into the library: {e}")
-        job = rebuild_job(target.name, translate=q.get("translate") == "1")
+        try:
+            job = rebuild_job(target.name, translate=q.get("translate") == "1")
+        except RuntimeError as e:                             # the setup started meanwhile: the copy stays, as a loose video
+            return self.fail(409, str(e))
         job.kind = "add"                                      # like a new link: the app opens it when it is done
         return self.send_json(job.public())
 
@@ -444,10 +454,13 @@ class Handler(BaseHTTPRequestHandler):
                 for d in (library, folder):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
-                try:
-                    engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
-                except RuntimeError as e:
-                    return self.fail(409, str(e))
+                with STARTING:
+                    if busy := next((j for j in JOBS if j.state in ("queued", "running")), None):
+                        return self.fail(409, f"Wait for “{busy.label}” to finish, then run the setup.")
+                    try:
+                        engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
+                    except RuntimeError as e:
+                        return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
                 return self.send_json(engine.SETUP.public())
@@ -478,6 +491,8 @@ class Handler(BaseHTTPRequestHandler):
             self.fail(404, "not found")
         except json.JSONDecodeError:                          # before ValueError, its parent
             self.fail(400, "bad JSON")
+        except RuntimeError as e:                             # enqueue: the setup is running
+            self.fail(409, str(e))
         except (ValueError, FileNotFoundError) as e:
             self.fail(404, str(e))
         except OSError as e:                                  # a name the system refuses, a folder it can't write
@@ -551,7 +566,10 @@ def keep_up_to_date() -> None:
     while True:
         UPDATE["app"] = updates.check_app(VERSION)
         if engine.STATE["engine"] and updates.ytdlp_due() and not any(j.kind == "update" and j.state in ("queued", "running") for j in JOBS):
-            downloader_job()
+            try:
+                downloader_job()
+            except RuntimeError:                              # the setup is running: next round
+                pass
         time.sleep(6 * 3600)
 
 

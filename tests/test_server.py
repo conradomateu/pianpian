@@ -277,3 +277,41 @@ def test_an_os_error_on_a_path_answers_instead_of_dropping_the_connection(tmp_pa
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_setup_and_jobs_never_overlap(tmp_path, monkeypatch):
+    (tmp_path / "vid").mkdir()
+    (tmp_path / "vid" / "source.mp4").write_bytes(b"video")
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "QUEUE", server.queue.Queue())         # no worker: queued jobs stay queued
+    started = []
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *a, **kw: started.append(a))
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+
+    def call(path, data=b"{}", method="POST"):
+        req = urllib.request.Request(base + path, data=data, method=method, headers={"X-Kit": "1"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    try:
+        assert call("/api/videos/vid/rebuild")[0] == 200
+        code, body = call("/api/setup")
+        assert code == 409 and "Rebuild" in body["error"] and not started
+        server.JOBS[0].state = "done"
+        monkeypatch.setattr(server.engine.SETUP, "state", "running")
+        assert call("/api/setup")[0] == 200 and started
+        server.CFG["library"] = tmp_path                                 # the fake setup saved no config to re-read
+        for path in ("/api/videos/vid/rebuild", "/api/videos/vid/translate", "/api/update-downloader"):
+            code, body = call(path)
+            assert code == 409 and body["error"] == server.SETUP_RUNS, path
+        assert call("/api/import?name=new.mp4", b"video", "PUT")[0] == 409
+        assert not (tmp_path / "new.mp4").exists() and len(server.JOBS) == 1
+    finally:
+        srv.shutdown()
+        srv.server_close()
