@@ -13,6 +13,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ICON = HERE / "design" / "icons" / "20-pianpian-watermelon.svg"
 PORT = 8771          # not 8770, so it can run next to `python3 server.py`; fixed, so the page's saved settings persist
+MUTEX = "PianpianApp"  # the installer's AppMutex (tools/windows/pianpian.iss): keep the two names equal
+_mutex = None          # held, never closed: Windows frees it when the process ends
 
 import engine  # noqa: E402  (stdlib only: the paths, including the logs folder)
 
@@ -76,7 +78,22 @@ class Api:
         return picked[0] if picked else None
 
 
+def first_instance() -> bool:
+    """The installed Windows app holds a named mutex, so the installer can tell it is running and a second
+    copy does not start another server and window. False when another copy already holds it."""
+    global _mutex
+    if not (engine.WINDOWS and engine.FROZEN):
+        return True
+    import ctypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _mutex = kernel32.CreateMutexW(None, False, MUTEX)
+    return ctypes.get_last_error() != 183                    # ERROR_ALREADY_EXISTS
+
+
 def main():
+    if not first_instance():
+        logging.info("Pianpian is already running: not starting a second copy")
+        return
     url = serve()
     window = webview.create_window("Pianpian 片片", url="about:blank", width=1440, height=900, js_api=Api(),
                                    min_size=(900, 600), background_color="#14120F", hidden=True)
