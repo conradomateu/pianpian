@@ -242,3 +242,38 @@ def test_links_in_the_library_do_not_lead_out_of_it(tmp_path, monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+@pytest.mark.parametrize("name", ["CON", "nul.mp4", "Com1.srt", "lpt9", "AUX .txt", "CONIN$", "x.mp4.", "zh.srt "])
+def test_windows_device_names_are_not_safe(monkeypatch, name):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    assert not server.safe_name(name)
+    monkeypatch.setattr(server.engine, "WINDOWS", False)
+    assert server.safe_name(name) == (not name.startswith(".")), "macOS keeps every one of these names"
+
+
+def test_windows_names_that_only_look_like_devices_are_safe(monkeypatch):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    for name in ("CONSOLE.mp4", "COM10.srt", "nullable", "lpt.txt", "zh.srt", "con_study"):
+        assert server.safe_name(name), name
+
+
+def test_an_os_error_on_a_path_answers_instead_of_dropping_the_connection(tmp_path, monkeypatch):
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+
+    def refused(vid_id):
+        raise OSError(22, "Invalid argument", vid_id)
+    monkeypatch.setattr(server, "entry_path", refused)
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        for req, code in ((base + "/api/videos/x", 404), (base + "/library/x/zh.srt", 404),
+                          (urllib.request.Request(base + "/api/videos/x/rebuild", data=b"{}", headers={"X-Kit": "1"}), 400),
+                          (urllib.request.Request(base + "/api/add", data=b"{bad", headers={"X-Kit": "1"}), 400)):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req)
+            assert error.value.code == code
+    finally:
+        srv.shutdown()
+        srv.server_close()

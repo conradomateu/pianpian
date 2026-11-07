@@ -39,6 +39,8 @@ LOG = logging.getLogger("pianpian")
 SCRIPT = HERE / "pipeline" / "study.py"
 VIDEO_EXT = anki_export.VIDEO_EXT
 SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name: no separators or NUL
+# Windows opens these as devices whatever the folder or extension (NUL.mp4 is NUL); it also drops a trailing dot or space
+DEVICE = re.compile(r"(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³]|CONIN\$|CONOUT\$) *(\..*)?|.*[. ]", re.I | re.S)
 TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
 mimetypes.add_type("text/plain; charset=utf-8", ".srt")
 mimetypes.add_type("text/vtt; charset=utf-8", ".vtt")
@@ -121,7 +123,8 @@ def library() -> list:
 
 
 def safe_name(name: str) -> bool:
-    return bool(SAFE_ID.fullmatch(name)) and not name.startswith(".") and (not engine.WINDOWS or ":" not in name)
+    return bool(SAFE_ID.fullmatch(name)) and not name.startswith(".") and \
+        (not engine.WINDOWS or ":" not in name and not DEVICE.fullmatch(name))
 
 
 def entry_path(vid_id: str) -> Path:
@@ -289,7 +292,7 @@ class Handler(BaseHTTPRequestHandler):
                 while left > 0 and (buf := f.read(min(256 * 1024, left))):
                     self.wfile.write(buf)
                     left -= len(buf)
-        except (BrokenPipeError, ConnectionResetError):       # the browser cancels ranges all the time
+        except OSError:                                       # the browser cancels ranges all the time; headers are out
             pass
 
     def body(self) -> dict:
@@ -353,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
                     and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md"):
                 return self.send_file(f)
             self.fail(404, "not found")
-        except (ValueError, FileNotFoundError) as e:
+        except (ValueError, OSError) as e:                    # OSError: a name the system refuses, a file it can't read
             self.fail(404, str(e))
 
     def thumb(self, p: Path, name: str):
@@ -473,10 +476,12 @@ class Handler(BaseHTTPRequestHandler):
                 engine.reveal(entry_path(m[1]))
                 return self.send_json({"ok": True})
             self.fail(404, "not found")
+        except json.JSONDecodeError:                          # before ValueError, its parent
+            self.fail(400, "bad JSON")
         except (ValueError, FileNotFoundError) as e:
             self.fail(404, str(e))
-        except json.JSONDecodeError:
-            self.fail(400, "bad JSON")
+        except OSError as e:                                  # a name the system refuses, a folder it can't write
+            self.fail(400, str(e))
 
     def anki_request(self, path, data):
         try:
