@@ -13,8 +13,8 @@ Layer 10 of Hy-MT2-1.8B was chosen on your vlog: it agreed with the CC-CEDICT di
 the words both could link, and together with the dictionary 86% of English words get a link.
 Links to grammar words (的, 了…) are dropped: there the vectors are not reliable.
 The player uses these links only where the dictionary found none. About 3 s for 120 lines.
-It needs the model's hidden states, so it is MLX only: elsewhere it stops with one line and study.py
-carries on without these links.
+It needs the model's hidden states, so it is MLX only: study.py runs it through backend_mac.align(),
+and backends without align() (Windows) skip it. Run by hand without MLX, it stops with one line.
 """
 import json
 import re

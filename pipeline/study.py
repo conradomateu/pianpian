@@ -230,9 +230,10 @@ def main() -> None:
     if Path("zh.en.srt").exists():
         tool("stack", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "-o", "zh.trilingual.srt")
         tool("ass", "zh.pinyin.srt", "zh.en.srt", "-o", "zh.pinyin-en.ass", "--margin-v", "190")
-        if not newer("zh.align.json", "zh.en.srt", "zh.srt"):  # English word ↔ Chinese word links
+        align = getattr(backend.impl(), "align", None)        # English word ↔ Chinese word links, where the backend can
+        if align and not newer("zh.align.json", "zh.en.srt", "zh.srt"):
             try:
-                run(PY, HERE / "align_srt.py", "zh.srt", "zh.en.srt")
+                align(Path("zh.srt"), Path("zh.en.srt"))
             except subprocess.CalledProcessError:
                 print("word links skipped (align_srt.py failed)", flush=True)
 

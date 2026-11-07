@@ -53,6 +53,21 @@ def test_the_promised_signatures():
     assert params(impl.transcribe) == ["audio", "model_dir", "srt", "words_json"]
     assert params(impl.translator) == ["model_dir"]
     assert params(impl.ocr) == ["frames_dir"]
+    for mod in (backend_mac, backend_win):                 # align is optional: study.py skips the links without it
+        if hasattr(mod, "align"):
+            assert params(mod.align) == ["zh_srt", "en_srt"]
+
+
+def test_only_the_mlx_backend_aligns_words():
+    # align_srt.py needs MLX hidden states: backend_win has no align(), so no job runs it and fails there
+    assert hasattr(backend_mac, "align") and not hasattr(backend_win, "align")
+
+
+def test_mac_align_runs_align_srt(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(backend_mac.subprocess, "run", lambda cmd, check: calls.append(cmd))
+    backend_mac.align(tmp_path / "zh.srt", tmp_path / "zh.en.srt")
+    assert calls[0][1].endswith("align_srt.py") and calls[0][2:] == [str(tmp_path / "zh.srt"), str(tmp_path / "zh.en.srt")]
 
 
 def test_this_platform_has_the_three_functions():
