@@ -76,6 +76,23 @@ def test_settings_default_and_persist(monkeypatch, tmp_path):
     assert e.models_dir() == tmp_path / "models"
 
 
+def test_concurrent_settings_saves_keep_every_change(monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    e = fresh(monkeypatch, tmp_path)
+    together = Barrier(12)
+
+    def save(i):
+        together.wait(timeout=10)
+        e.save_config(**{f"setting_{i}": i})
+
+    with ThreadPoolExecutor(12) as pool:
+        list(pool.map(save, range(12)))
+    assert {k: v for k, v in e.config().items() if k.startswith("setting_")} == {f"setting_{i}": i for i in range(12)}
+    assert not e.CONFIG.with_suffix(".json.tmp").exists()
+
+
 @pytest.mark.parametrize("windows", [False, True])
 @pytest.mark.parametrize("overrides", [False, True])
 def test_setup_relocates_app_paths_before_starting_downloads(monkeypatch, tmp_path, windows, overrides):
