@@ -133,6 +133,70 @@ def test_relocation_installs_and_checks_the_destination_engine(monkeypatch, tmp_
         assert "could not start after setup" in e.SETUP.error
 
 
+def fake_setup(monkeypatch, e, working=lambda py: True):
+    """[simulated] uv and the engine's Python: `uv venv` makes a python file, check() asks working(py)."""
+    monkeypatch.delenv("PIANPIAN_PYTHON", raising=False)
+    monkeypatch.setattr(e, "FROZEN", True)
+    monkeypatch.setattr(e.models, "status", lambda: [])
+    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: "cpu")
+    monkeypatch.setattr(e, "mirror_env", lambda: {})
+    monkeypatch.setattr(e, "uv", lambda: "uv")
+    calls = []
+
+    def install(self, cmd, env, sid):
+        calls.append(cmd)
+        if cmd[1] == "venv":
+            py = e.engine_python(Path(cmd[-1]))
+            py.parent.mkdir(parents=True)
+            py.touch()
+            (Path(cmd[-1]) / "pyvenv.cfg").touch()
+
+    monkeypatch.setattr(e.Setup, "_exec", install)
+    monkeypatch.setattr(e.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(
+        cmd, 0 if Path(cmd[0]).is_file() and working(Path(cmd[0])) else 1))
+    return calls
+
+
+def run_setup(e, *args, **kw):
+    e.SETUP.start(*args, **kw)
+    e.SETUP.thread.join(timeout=10)
+    assert not e.SETUP.thread.is_alive()
+
+
+@pytest.mark.parametrize("broken", ["cannot-start", "no-python"])
+def test_setup_rebuilds_an_engine_that_cannot_start(monkeypatch, tmp_path, broken):
+    # [simulated] engine/ is there but its Python is gone or won't start: the setup makes it again instead of
+    # failing the same way on every retry (`uv venv` alone exits 2 on an existing folder, uv 0.13.7)
+    e = fresh(monkeypatch, tmp_path)
+    eng = e.engine_dir()
+    py = e.engine_python(eng)
+    py.parent.mkdir(parents=True)
+    (eng / "pyvenv.cfg").touch()
+    (eng / ".pianpian-requirements").write_text(e.requirements_id() + "\n")
+    if broken == "cannot-start":
+        py.write_text("old")                                  # the base interpreter it pointed to was removed
+    # only this engine counts (a checkout's .venv would otherwise stand in for a missing one)
+    calls = fake_setup(monkeypatch, e, working=lambda p: p == py and p.read_text() != "old")
+    e.check()
+    assert e.STATE["engine"] is False
+    run_setup(e, None, None, [])
+    assert calls[0] == ["uv", "venv", "--python", "3.12", str(eng)]
+    assert e.SETUP.state == "done", e.SETUP.error
+    assert py.read_text() == ""                               # made again, not the broken one
+
+
+def test_setup_leaves_a_folder_that_is_not_its_engine(monkeypatch, tmp_path):
+    e = fresh(monkeypatch, tmp_path)
+    eng = e.engine_dir()
+    eng.mkdir(parents=True)
+    (eng / "notes.txt").write_text("mine")
+    fake_setup(monkeypatch, e)
+    run_setup(e, None, None, [])
+    assert e.SETUP.state == "failed" and "is not Pianpian's engine" in e.SETUP.error
+    assert (eng / "notes.txt").read_text() == "mine"
+
+
 def test_the_packaged_app_never_writes_bytecode_into_itself(monkeypatch, tmp_path):
     """Writing .pyc files into Pianpian.app breaks its code signature, so inside the app Python must not."""
     monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))

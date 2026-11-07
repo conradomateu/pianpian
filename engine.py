@@ -303,7 +303,16 @@ class Setup:
                 self._step("engine", state="running")
                 eng = engine_dir()
                 py = engine_python(eng)
-                if not py.exists():
+                if STATE["engine"] is None:
+                    check()
+                if not py.exists() or not STATE["engine"]:
+                    # missing, or there but unable to start: made again (`uv venv --clear` refuses a folder without
+                    # pyvenv.cfg, uv 0.13.7). engine/ holds only the venv and its stamp, so nothing else is lost
+                    if eng.exists():
+                        if not ((eng / "pyvenv.cfg").exists() or (eng / ".pianpian-requirements").exists() or not any(eng.iterdir())):
+                            raise RuntimeError(f"{eng} is not Pianpian's engine: move it away, or choose another data folder")
+                        self._say(f"the engine in {eng} can't start: making it again")
+                        shutil.rmtree(eng)
                     self._exec([exe, "venv", "--python", "3.12", str(eng)], env, "engine")
                 # sync, not install: the engine ends up exactly as pinned, packages no longer listed are removed
                 self._exec([exe, "pip", "sync", "--python", str(py), str(REQS)], env, "engine")
