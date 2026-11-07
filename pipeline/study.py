@@ -202,7 +202,7 @@ def main() -> None:
         if Path(".from-whisper").exists() and not Path("zh.whisper.json").exists():
             transcribe(video)                                 # Whisper folders made before word timestamps
         if Path("en.lines.txt").exists():                     # the line numbers change: the English is redone
-            Path("en.lines.txt").rename("en.lines.before-split.txt")
+            Path("en.lines.txt").replace("en.lines.before-split.txt")
             Path("zh.en.srt").unlink(missing_ok=True)
             auto_en = True
     if resplit:
@@ -223,7 +223,7 @@ def main() -> None:
     if auto_en and (not Path("en.lines.txt").exists() or env("FORCE_EN")):
         print("translating with a local model (translate_srt.py)", flush=True)
         run(PY, HERE / "translate_srt.py", "zh.srt", "-o", "en.lines.txt.part")
-        Path("en.lines.txt.part").rename("en.lines.txt")
+        Path("en.lines.txt.part").replace("en.lines.txt")     # replace, not rename: Windows rename won't overwrite (7 Nov 2026)
         Path(".english-auto").touch()
     if Path("en.lines.txt").exists() and not newer("zh.en.srt", "en.lines.txt", "zh.srt"):
         tool("import", "zh.srt", "en.lines.txt")
