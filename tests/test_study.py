@@ -1,7 +1,10 @@
 """The pipeline's retry rule (temporary failures are tried again, real ones are not), and which steps a job runs."""
+import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -81,3 +84,77 @@ def test_word_links_run_only_where_the_backend_can_align(monkeypatch, tmp_path):
     monkeypatch.setattr(study.backend, "impl", lambda: types.SimpleNamespace(align=lambda zh, en: aligned.append((zh, en))))
     study.main()
     assert aligned == [(Path("zh.srt"), Path("zh.en.srt"))]
+
+
+def test_segmentation_upgrade_refreshes_cached_tracks_without_redoing_sources(monkeypatch, tmp_path):
+    import srt_tool
+    monkeypatch.chdir(tmp_path)
+    for key in ("HARDSUBS", "RESPLIT", "FORCE_EN", "SPLIT_MAX"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("AUTO_EN", "1")
+    pipeline = tmp_path / "pipeline"
+    pipeline.mkdir()
+    for name in ("srt_tool.py", "align_srt.py", "pinyin_fixes.txt"):
+        path = pipeline / name
+        path.write_text("old code", encoding="utf-8")
+        os.utime(path, (100, 100))
+    monkeypatch.setattr(study, "HERE", pipeline)
+    monkeypatch.setattr(study, "FIXES", pipeline / "pinyin_fixes.txt")
+    timing = "1\n00:00:01,000 --> 00:00:03,000\n"
+    source = {"source.mp4": "unused video", "zh.srt": timing + "今天天气。\n", "zh.long.srt": timing + "今天天气。\n",
+              "en.lines.txt": "1\tToday's weather.\n", "zh.whisper.json": json.dumps({"segments": [{"words": [
+                  {"word": "今天天气。", "start": 1, "end": 3}]}]}), ".split": "18\n", ".from-whisper": ""}
+    cached = {"zh.en.srt": timing + "Today's weather.\n", "zh.pinyin.srt": timing + "jīntiāntiānqì.\n",
+              "zh.zh-pinyin.srt": "old combined track", "zh.words.json": "old word boundaries", "zh.align.json": "old links",
+              "zh.lines.txt": "1\t今天天气。\n"}
+    for files, stamp in ((source, 100), (cached, 200)):
+        for name, text in files.items():
+            Path(name).write_text(text, encoding="utf-8")
+            os.utime(name, (stamp, stamp))
+    os.utime("zh.align.json", (201, 201))
+    preserved = {name: (Path(name).read_bytes(), Path(name).stat().st_mtime_ns) for name in [*source, "zh.en.srt", "zh.lines.txt"]}
+    monkeypatch.setattr(srt_tool, "_DICT", {"今天": [["11", "today", ""]], "天气": [["14", "weather", ""]]})
+    monkeypatch.setattr(sys, "argv", ["study.py", str(tmp_path / "source.mp4")])
+    monkeypatch.setattr(study, "run", lambda *cmd, **kw: pytest.fail(f"unexpected transcription/translation: {cmd}"))
+    calls, clock = [], 1000
+
+    def fresh(name):
+        nonlocal clock
+        clock += 1
+        os.utime(name, (clock, clock))
+
+    def tool(*args):
+        calls.append(args[0])
+        with monkeypatch.context() as m:
+            m.setattr(sys, "argv", ["srt_tool.py", *args])
+            srt_tool.main()
+        for name in {"pinyin": ["zh.pinyin.srt", "zh.zh-pinyin.srt"], "words": ["zh.words.json"],
+                     "stack": ["zh.trilingual.srt"], "ass": ["zh.pinyin-en.ass"]}[args[0]]:
+            fresh(name)
+
+    def align(zh, en):
+        calls.append("align")
+        cue = json.loads(Path("zh.words.json").read_text(encoding="utf-8"))["cues"][0]
+        assert [w[0] for w in cue["w"][0]] == ["今天", "天气", "。"]
+        assert cue["k"] == [[[1, 2], [2, 3], 0]]
+        Path("zh.align.json").write_text("new links", encoding="utf-8")
+        fresh("zh.align.json")
+
+    monkeypatch.setattr(study, "tool", tool)
+    monkeypatch.setattr(study.backend, "impl", lambda: SimpleNamespace(align=align))
+    monkeypatch.setattr(study, "mux", lambda *args: calls.append("mux"))
+    study.main()
+    assert calls == ["stack", "ass", "mux"]                     # all cached tracks are initially current
+    os.utime(pipeline / "srt_tool.py", (300, 300))
+    calls.clear()
+    study.main()
+    assert calls == ["pinyin", "words", "stack", "ass", "align", "mux"]
+    assert srt_tool.read_srt(Path("zh.pinyin.srt"))[0][2] == "jīntiān tiānqì."
+    calls.clear()
+    study.main()
+    assert calls == ["stack", "ass", "mux"]                     # no repeated segmentation or model work
+    fresh(pipeline / "align_srt.py")
+    calls.clear()
+    study.main()
+    assert calls == ["stack", "ass", "align", "mux"]             # an aligner upgrade only refreshes links
+    assert {name: (Path(name).read_bytes(), Path(name).stat().st_mtime_ns) for name in preserved} == preserved

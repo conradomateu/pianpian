@@ -212,12 +212,12 @@ def main() -> None:
         tool("split", "zh.long.srt", "--max", split_max, *words, "-o", "zh.srt")
         Path(".split").write_text(split_max + "\n")
 
-    # pinyin, the translation worksheet and the player's words (redone when zh.srt or the fixes change)
-    if not newer("zh.pinyin.srt", "zh.srt", FIXES) or not Path("zh.zh-pinyin.srt").exists():   # it writes both
+    # Segmentation upgrades invalidate both word tracks, without redoing Chinese or English.
+    if not newer("zh.pinyin.srt", "zh.srt", FIXES, HERE / "srt_tool.py") or not Path("zh.zh-pinyin.srt").exists():   # it writes both
         tool("pinyin", "zh.srt")
     if not newer("zh.lines.txt", "zh.srt"):
         tool("export", "zh.srt")
-    if not newer("zh.words.json", "zh.srt", FIXES):
+    if not newer("zh.words.json", "zh.srt", FIXES, HERE / "srt_tool.py"):
         tool("words", "zh.srt")
 
     # English from the local model; written to a .part file first, so a failed run never loses English you had
@@ -232,7 +232,7 @@ def main() -> None:
         tool("stack", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "-o", "zh.trilingual.srt")
         tool("ass", "zh.pinyin.srt", "zh.en.srt", "-o", "zh.pinyin-en.ass", "--margin-v", "190")
         align = getattr(backend.impl(), "align", None)        # English word ↔ Chinese word links, where the backend can
-        if align and not newer("zh.align.json", "zh.en.srt", "zh.srt"):
+        if align and not newer("zh.align.json", "zh.en.srt", "zh.srt", "zh.words.json", HERE / "align_srt.py"):
             try:
                 align(Path("zh.srt"), Path("zh.en.srt"))
             except subprocess.CalledProcessError:
