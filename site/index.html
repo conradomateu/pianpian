@@ -54,10 +54,6 @@ section { scroll-margin-top:70px; }
 .demo .window-bar { display:flex; align-items:center; gap:7px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-2); }
 .demo .window-bar i { width:11px; height:11px; border-radius:50%; background:var(--line-2); }
 .demo .window-bar span { flex:1; text-align:center; font:12px var(--mono); color:var(--muted); margin-right:40px; }
-.demo-preview { position:relative; }
-.demo-placeholder { position:absolute; inset:0; display:grid; place-items:center; background:#14120f url("demo/library/pianpian-day/thumb.jpg") center/contain no-repeat; color:#fff; }
-.demo-placeholder span { background:#14120fe6; padding:12px 16px; border-radius:8px; }
-.demo-preview:has(iframe[data-loaded]) .demo-placeholder { display:none; }
 .demo iframe { position:relative; display:block; width:100%; height:min(780px, 82vh); border:0; background:var(--bg); }
 
 
@@ -146,11 +142,7 @@ footer.site .grow { flex:1; }
   <section id="demo">
     <div class="frame demo">
       <div class="window-bar"><i></i><i></i><i></i><span>Pianpian 片片 · demo</span></div>
-      <div class="demo-preview">
-        <div class="demo-placeholder"><span role="status">Loading demo…</span></div>
-        <iframe src="app.html?demo#v=pianpian-day" title="Pianpian demo" loading="lazy" allow="fullscreen" allowfullscreen
-          style="opacity:0"></iframe>
-      </div>
+      <iframe src="app.html?demo#v=pianpian-day" title="Pianpian demo" loading="lazy" allow="fullscreen" allowfullscreen></iframe>
     </div>
   </section>
 
@@ -227,8 +219,6 @@ function fitDemo() {
   demoFrame.style.height = Math.ceil(height) + 'px';
 }
 demoFrame.addEventListener('load', () => {
-  demoFrame.dataset.loaded = '';
-  demoFrame.style.opacity = '1';
   const doc = demoFrame.contentDocument, shell = doc && doc.querySelector('.shell');
   if (!shell) return;
   new ResizeObserver(fitDemo).observe(shell);
