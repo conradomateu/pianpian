@@ -174,6 +174,25 @@ _DICT: dict[str, list] | None = None
 MARKS = {"\u0304": "1", "\u0301": "2", "\u030c": "3", "\u0300": "4"}
 
 
+def dictionary_parts(word: str) -> list[str]:
+    """Longest dictionary parts, retaining unknown text and whole known words."""
+    global _DICT
+    if _DICT is None:
+        _DICT = ensure_cedict()
+    if word in _DICT or not _DICT:
+        return [word]
+    parts, i = [], 0
+    while i < len(word):
+        n = next((n for n in range(len(word) - i, 0, -1) if word[i:i + n] in _DICT), 1)
+        part = word[i:i + n]
+        if parts and part not in _DICT and parts[-1] not in _DICT:
+            parts[-1] += part
+        else:
+            parts.append(part)
+        i += n
+    return parts
+
+
 def gloss(word: str, py: str = "") -> str:
     """Meaning of a word, for the reading our pinyin uses (地方 dìfang = place, not dìfāng = local);
     for a jieba compound the dictionary lacks, the meanings of its parts."""
@@ -187,15 +206,7 @@ def gloss(word: str, py: str = "") -> str:
     if word in _DICT:
         readings = _DICT[word]
         return next((r[1] for r in readings if r[0] == tones), readings[0][1])
-    parts, i = [], 0
-    while i < len(word):                             # longest dictionary words inside it
-        for n in range(min(4, len(word) - i), 0, -1):
-            if word[i:i + n] in _DICT:
-                parts.append(f"{word[i:i + n]}: {_DICT[word[i:i + n]][0][1].split('; ')[0]}"); i += n
-                break
-        else:
-            i += 1
-    return " · ".join(parts)
+    return " · ".join(f"{part}: {_DICT[part][0][1].split('; ')[0]}" for part in dictionary_parts(word) if part in _DICT)
 
 
 def measure(word: str, py: str = "") -> str:
@@ -239,10 +250,19 @@ def video_level(levels: list[int]) -> dict:
     return {"level": level, "dist": dist}
 
 
-def word_pairs(text: str) -> list[list[str]]:
-    """[[word, pinyin], …] in jieba's segmentation; punctuation pairs with its ASCII form."""
-    pairs = []
+def segment_words(text: str):
+    """Refine jieba's unknown compounds; preserve whitespace for character offsets."""
     for word in jieba.cut(text):
+        if re.fullmatch(r"[一-鿿]+", word) and word not in OVER_WORDS and not re.fullmatch(r"(.)一\1", word):
+            yield from dictionary_parts(word)
+        else:
+            yield word
+
+
+def word_pairs(text: str) -> list[list[str]]:
+    """[[word, pinyin], …] with dictionary word boundaries; punctuation uses its ASCII form."""
+    pairs = []
+    for word in segment_words(text):
         if not word.strip():
             continue
         pairs.append([word, word_pinyin(word) if HAN.search(word) else word.translate(PUNCT)])
@@ -280,7 +300,7 @@ def cmd_import(a):
         if not line.strip():
             continue
         if "\t" not in line:
-            sys.exit(f"{a.lines}:{n}: no TAB between id and text: {line[:60]!r}")
+            sys.exit(f"{a.lines}:{n}: no TAB between id and text")
         k, v = line.split("\t", 1)
         if k.strip() in got:
             sys.exit(f"{a.lines}:{n}: id {k} appears twice")
