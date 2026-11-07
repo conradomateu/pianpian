@@ -474,15 +474,17 @@
         let at = 0;
         return line.map(([zh, p, g], k) => {
           const han = /[一-鿿]/.test(zh), key = `${L}-${k}`, start = at;
+          const cls = line[k + 1] && !/[一-鿿]/.test(line[k + 1][0]) ? 'w end' : 'w';   // punctuation next: no gap before it
           at += zh.length;
-          if (tr.role === 'pinyin') return han ? `<i class="w" data-w="${key}">${py(p, zh)}</i>` : esc(p);
+          if (tr.role === 'pinyin') return han ? `<i class="${cls}" data-w="${key}">${py(p, zh)}</i>` : esc(p);
           if (!han) return esc(zh);
           const chars = [...zh].map((ch, n) => { const t = marks.get(start + n);
             return t ? `<b class="g ${t.split(':')[0]}" data-g="${t}">${esc(ch)}</b>` : esc(ch); }).join('');
           const tip = inList && g ? ` title="${esc(p)} — ${esc(g)}"` : '';
-          return ruby && !inList ? `<ruby class="w" data-w="${key}">${chars}<rt style="color:${pyColour}">${py(p, zh)}</rt></ruby>`
-                                 : `<i class="w" data-w="${key}"${tip}>${chars}</i>`;
-        }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1');
+          return ruby && !inList ? `<ruby class="${cls}" data-w="${key}">${chars}<rt style="color:${pyColour}">${py(p, zh)}</rt></ruby>`
+                                 : `<i class="${cls}" data-w="${key}"${tip}>${chars}</i>`;
+        }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1')
+          .replace(/<\/i> (?=<i class="w[ "])/g, '</i><i class="sp"> </i>');   // between two pinyin words: the word gap, not a space (kept for copying)
       }).join(inList ? ' ' : '<br>'), w);
     }
     function canOpenAnkiWord() {

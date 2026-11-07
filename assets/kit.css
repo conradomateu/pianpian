@@ -176,7 +176,9 @@ td small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; 
 .cue .w { font-style:normal; border-radius:3px; }
 /* each Chinese word is its own box, 0.3em apart (the website uses the same gap): padding, not margin or spaces,
    so the gap belongs to the words (no dead spot between two click targets) and ruby pinyin stays centred */
-.ov .zh .w, .cue .l.zh .w { padding-inline:.15em; }
+.ov .zh .w, .cue .l.zh .w, .ov .pinyin .w, .cue .l.pinyin .w { padding-inline:.15em; }
+.ov .zh .w.end, .cue .l.zh .w.end, .ov .pinyin .w.end, .cue .l.pinyin .w.end { padding-right:0; }   /* punctuation follows */
+.sp { font-size:0; }                               /* the space between two pinyin words: copied, not drawn (the gap above is) */
 .cue .w.hl { background:var(--red-tint); color:var(--red-fg); }
 .stage .drop { position:absolute; inset:0; display:grid; place-items:center; text-align:center; color:#cfc7bb; padding:20px; background:#14120F; font-size:14px; }
 .stage .drop b { display:block; font-size:18px; color:#fff; margin-bottom:6px; }

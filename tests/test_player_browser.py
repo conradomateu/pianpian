@@ -409,3 +409,37 @@ def test_mobile_demo_layout(browser):
     wait(c, f"!{f}.querySelector('.wsheet').hidden")
     click(c, 'h2')
     wait(c, f"{f}.querySelector('.wsheet').hidden")
+
+
+def test_words_keep_a_gap(browser):
+    """Neighbouring words, Chinese and pinyin, on the video and in the transcript, never touch: 0.3em apart."""
+    c, url, _ = browser
+    c.call('Emulation.setDeviceMetricsOverride', width=1280, height=800, deviceScaleFactor=1, mobile=False)
+    navigate(c, url + '/app.html#v=pianpian-day&t=7.5')
+    wait(c, "!player.video.seeking && document.querySelector('.ov .pinyin .w') && document.querySelector('.cue .l.pinyin .w')")
+    gaps = c.js("""(() => {
+      const glyphs = el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect(); };
+      const out = [];
+      for (const line of document.querySelectorAll('.ov .zh, .ov .pinyin, .cue .l.zh, .cue .l.pinyin')) {
+        const words = [...line.querySelectorAll('.w')], em = parseFloat(getComputedStyle(words[0] || line).fontSize);
+        for (let i = 1; i < words.length; i++) {
+          if (words[i - 1].nextSibling !== words[i] && !words[i - 1].nextSibling?.matches?.('.sp')) continue;   // punctuation between
+          const a = glyphs(words[i - 1]), b = glyphs(words[i]);
+          if (Math.abs(a.top - b.top) < 2) out.push([line.className, words[i - 1].textContent, words[i].textContent, (b.left - a.right) / em]);
+        }
+      }
+      return out;
+    })()""")
+    kinds = {k for k, *_ in gaps}
+    assert {'zh', 'pinyin', 'l zh', 'l pinyin'} <= kinds, kinds
+    assert all(g == pytest.approx(.3, abs=.02) for *_, g in gaps), [x for x in gaps if abs(x[3] - .3) > .02]
+    # punctuation sits right after its word: no word gap before a comma or a full stop
+    tight = c.js("""(() => [...document.querySelectorAll('.ov .pinyin .w.end, .cue .l.pinyin .w.end, .ov .zh .w.end, .cue .l.zh .w.end')].map(w => {
+      const r = document.createRange(); r.selectNodeContents(w); const a = r.getBoundingClientRect();
+      const t = w.nextSibling; if (!t || t.nodeType !== 3) return null;
+      r.setStart(t, 0); r.setEnd(t, 1); const b = r.getBoundingClientRect();
+      return Math.abs(a.top - b.top) < 2 ? (b.left - a.right) / parseFloat(getComputedStyle(w).fontSize) : null;
+    }).filter(x => x !== null))()""")
+    assert tight and all(g < .12 for g in tight), tight
+    # the space between pinyin words is not drawn, but a copy still has it
+    assert c.js("(() => { const r = document.createRange(); r.selectNodeContents(document.querySelector('.cue .l.pinyin')); return r.toString(); })()").startswith('nǐhǎo wǒ jiào')
