@@ -39,6 +39,7 @@ RELEASES = {"whisper": "b5454", "llama": "b11851"}
 EXES = {"whisper": ("whisper-cli.exe", "main.exe"), "llama": ("llama-server.exe",)}
 BASE = "https://github.com/ggml-org/{repo}/releases/download/{tag}/{name}"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)      # the probes run inside the windowed app
+probe_run = subprocess.run                                  # engine.py substitutes its tracked runner; the CLI keeps this one
 
 
 def asset(repo: str, name: str, size: int, sha256: str) -> dict:
@@ -78,7 +79,7 @@ def cache() -> Path:
 def nvidia() -> bool:
     exe = shutil.which("nvidia-smi") or str(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe")
     try:
-        return Path(exe).is_file() and subprocess.run([exe, "-L"], capture_output=True, timeout=15,
+        return Path(exe).is_file() and probe_run([exe, "-L"], capture_output=True, timeout=15,
                                                       creationflags=NO_WINDOW).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -95,7 +96,7 @@ def vulkan() -> bool:
     if not exe:
         return False
     try:
-        out = subprocess.run([exe, "--summary"], capture_output=True, text=True, timeout=20,
+        out = probe_run([exe, "--summary"], capture_output=True, text=True, timeout=20,
                              creationflags=NO_WINDOW).stdout
         return "deviceName" in out
     except (OSError, subprocess.TimeoutExpired):
@@ -147,18 +148,24 @@ def exe(tool: str, backend: str | None = None) -> Path | None:
     return _find(d, tool)
 
 
-def status() -> dict:
-    """What this machine would run, and whether it is installed."""
+def status(probe: bool = True) -> dict:
+    """What this machine would run; probe=False uses saved/installed backends without starting hardware tools."""
     tools = {}
     total = 0
     ready = True
     for tool in ("whisper", "llama"):
-        b = backend_for(tool)
-        ok = exe(tool, b) is not None
+        if probe:
+            b = backend_for(tool)
+        else:
+            want = os.environ.get("PIANPIAN_ACCEL", "").lower()
+            b = want if (tool, want) in ASSETS else next(
+                (candidate for candidate in ("cuda", "vulkan", "cpu") if (tool, candidate) in ASSETS and exe(tool, candidate)), "auto")
+        ok = b != "auto" and exe(tool, b) is not None
         tools[tool] = {"backend": b, "ready": ok, "exe": str(exe(tool, b)) if ok else None}
-        total += sum(a["size"] for a in assets(tool, b))
+        total += sum(a["size"] for a in assets(tool, b)) if b != "auto" else max(
+            sum(a["size"] for a in choices) for backend, choices in ASSETS.items() if backend[0] == tool)
         ready = ready and ok
-    labels = {"cuda": "CUDA (NVIDIA GPU)", "vulkan": "Vulkan GPU", "cpu": "CPU"}
+    labels = {"cuda": "CUDA (NVIDIA GPU)", "vulkan": "Vulkan GPU", "cpu": "CPU", "auto": "auto (GPU detected during setup)"}
     wb, lb = tools["whisper"]["backend"], tools["llama"]["backend"]
     label = (f"whisper.cpp + llama.cpp: {labels.get(wb, wb)}" if wb == lb
              else f"whisper.cpp: {labels.get(wb, wb)}; llama.cpp: {labels.get(lb, lb)}")

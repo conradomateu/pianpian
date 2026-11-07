@@ -99,7 +99,7 @@ def test_vulkan_needs_a_device_listing(monkeypatch, tmp_path):
     monkeypatch.setattr(runtimes.shutil, "which", lambda name: None)
     assert runtimes.vulkan.__wrapped__() is False
     (system32 / "vulkaninfo.exe").write_bytes(b"x")
-    monkeypatch.setattr(runtimes.subprocess, "run",
+    monkeypatch.setattr(runtimes, "probe_run",
                         lambda *a, **k: type("R", (), {"stdout": "deviceName: Some GPU"})())
     assert runtimes.vulkan.__wrapped__() is True
 
@@ -124,10 +124,11 @@ def test_cuda_is_preferred_when_nvidia_is_present(monkeypatch):
     assert runtimes.backend_for("llama") == "cuda"
 
 
-def test_status_lists_both_tools(monkeypatch, tmp_path):
+@pytest.mark.parametrize("probe", [True, False])
+def test_status_lists_both_tools(monkeypatch, tmp_path, probe):
     monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
     monkeypatch.setenv("PIANPIAN_ACCEL", "cpu")
-    s = runtimes.status()
+    s = runtimes.status(probe=probe)
     assert set(s["tools"]) == {"whisper", "llama"}
     assert s["size"] > 0 and s["label"] and not s["ready"]
 
@@ -148,9 +149,23 @@ def test_windows_plan_offers_the_gpu_runtime(monkeypatch, tmp_path):
     e = importlib.reload(engine)
     monkeypatch.setattr(e, "WINDOWS", True)
     monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"backend": "cuda", "label": "gpu", "size": 10, "ready": False, "tools": {}})
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"backend": "cuda", "label": "gpu", "size": 10, "ready": False, "tools": {}})
     e.STATE.update(engine=True, current=True)
     plan = e.SETUP.plan()
     assert plan["runtime"]["label"] == "gpu" and plan["needed"]
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"backend": "cuda", "label": "gpu", "size": 10, "ready": True, "tools": {}})
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"backend": "cuda", "label": "gpu", "size": 10, "ready": True, "tools": {}})
     assert not e.SETUP.plan()["needed"]
+
+
+def test_windows_plan_never_probes_gpu(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))
+    monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path / "runtime"))
+    monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
+    import engine
+    e = importlib.reload(engine)
+    monkeypatch.setattr(e, "WINDOWS", True)
+    monkeypatch.setattr(e.models, "status", lambda: [])
+    monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: (_ for _ in ()).throw(AssertionError("GPU probe ran")))
+    e.STATE.update(engine=True, current=True)
+    plan = e.SETUP.plan()
+    assert plan["runtime"]["backend"] == "auto" and plan["needed"]

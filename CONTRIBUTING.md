@@ -25,7 +25,7 @@ From mainland China set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simp
 - `python3 dev.py check` passes.
 - No videos, subtitles, textbook pages or other people's content, in the repository, tests or screenshots. Use the demo in `demo/`.
 - Say what you tested, on what, and mark the rest "not tested". UI changes are tried with a real click in a real browser.
-- Keep paths, OCR and the model engines behind their small interfaces (a Windows version is planned), and the page free of frameworks and build steps.
+- Keep paths, OCR and the model engines behind their small interfaces shared by macOS and Windows, and the page free of frameworks and build steps.
 - One change per pull request. Its title starts with `fix:`, `feat:`, `docs:` or `chore:`: releases and the changelog are made from it (`python3 dev.py version` shows what the commits so far would release).
 - No personal data in commits, code or screenshots. An AI assistant is fine; you answer for what you send. No AI co-author trailers.
 

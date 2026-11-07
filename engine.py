@@ -8,18 +8,20 @@ The app itself is small. What it needs to make subtitles is installed on first r
   3. the models you pick (pipeline/models.py), into <data>/models.
 <data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\\Pianpian on Windows,
 unless you choose another folder. Downloads come from PyPI and python-build-standalone, or from mirrors
-in mainland China when those are slow to reach. Settings live in <data>/config.json.
+in mainland China when those are slow to reach. Settings stay in SUPPORT/config.json when data moves.
 Standard library only.
 """
 import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
 import time
 from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -69,6 +71,91 @@ import models  # noqa: E402
 import runtimes  # noqa: E402  (the pinned Windows GPU builds; only used when WINDOWS)
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # the app is windowed: its own processes get no console
+PROCESSES = set()
+PROCESS_LOCK = threading.Lock()
+CLOSING = False
+
+
+@contextmanager
+def process(cmd, **kwargs):
+    """A tracked app process; a separate POSIX group lets shutdown include its children."""
+    if not WINDOWS:
+        kwargs["start_new_session"] = True
+    with PROCESS_LOCK:
+        if CLOSING:
+            raise RuntimeError("Pianpian is closing")
+        p = subprocess.Popen(cmd, **kwargs)
+        PROCESSES.add(p)
+    try:
+        yield p
+    finally:
+        with PROCESS_LOCK:
+            PROCESSES.discard(p)
+
+
+def run(cmd, **kwargs):
+    """subprocess.run() through the same registry, including timeout and check semantics."""
+    capture, check, timeout = kwargs.pop("capture_output", False), kwargs.pop("check", False), kwargs.pop("timeout", None)
+    if capture:
+        if "stdout" in kwargs or "stderr" in kwargs:
+            raise ValueError("stdout and stderr may not be used with capture_output")
+        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    with process(cmd, **kwargs) as p:
+        try:
+            stdout, stderr = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _stop_tree(p)
+            p.communicate()
+            raise
+    result = subprocess.CompletedProcess(cmd, p.returncode, stdout, stderr)
+    if check and result.returncode:
+        raise subprocess.CalledProcessError(result.returncode, cmd, output=stdout, stderr=stderr)
+    return result
+
+
+# The pipeline never imports the app. Its GPU probes use this tracked runner in the app, subprocess.run in the CLI.
+runtimes.probe_run = run
+
+
+def _stop_tree(p: subprocess.Popen) -> None:
+    try:
+        if WINDOWS:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=10, creationflags=NO_WINDOW)
+        else:
+            os.killpg(p.pid, signal.SIGTERM)
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            # The parent may exit quickly while a descendant ignores SIGTERM: always finish the group.
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        if not WINDOWS and p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    if p.poll() is None:
+        p.kill()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass                                      # shutdown stays bounded; the OS reaps at process exit
+
+
+def stop_processes() -> None:
+    """Reject new tracked processes and stop the active trees, without blocking app exit indefinitely."""
+    global CLOSING
+    with PROCESS_LOCK:
+        CLOSING = True
+        running = list(PROCESSES)
+    for p in running:
+        if p.poll() is None:
+            _stop_tree(p)
 
 
 # ---------------------------------------------------------------- settings
@@ -207,8 +294,8 @@ def check() -> dict:
     """Can the engine's Python run the pipeline, and was it installed from today's requirements?"""
     py = python()
     try:
-        ok = subprocess.run([py, "-c", CHECK], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+        ok = run([py, "-c", CHECK], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
         ok = False
     stamp = Path(py).parent.parent / ".pianpian-requirements"
     # an engine made by hand (the repository's .venv) is kept up to date by its owner
@@ -223,10 +310,10 @@ def venv_starts(root: Path) -> bool:
     if not (py.exists() and (root / "pyvenv.cfg").exists()):
         return False
     try:
-        return subprocess.run([str(py), "-c", "pass"], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
+        return run([str(py), "-c", "pass"], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
     except subprocess.TimeoutExpired:
         return True
-    except OSError:
+    except (OSError, RuntimeError):
         return False
 
 
@@ -259,7 +346,7 @@ class Setup:
         catalog = models.status()
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
-        runtime = runtimes.status() if WINDOWS else None
+        runtime = runtimes.status(probe=False) if WINDOWS else None
         return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused() + old_engines(),
                 "runtime": runtime, "free": free_bytes(Path(cfg["data"])),
                 "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
@@ -278,18 +365,13 @@ class Setup:
             self.moves = [(src, dst) for src, dst in zip(before, _moveable())
                           if src != dst and src.is_dir() and not dst.is_relative_to(src)
                           and not (dst.exists() and any(dst.iterdir()))]
-            if WINDOWS and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
-                # decided from this machine's GPU (probed once per app start), not the last saved choice; kept for the jobs
-                os.environ.pop("PIANPIAN_ACCEL", None)
-                save_config(accel=runtimes.backend_for("llama"))
-                os.environ.update(pipeline_env())
             if python() != previous_python:
                 STATE.update(engine=False, current=False)
             self.state, self.error = "running", ""
             self.steps = [{"id": "engine", "label": "Engine: Python and the pipeline's tools", "state": "waiting", "done": 0, "total": 0}]
             if WINDOWS:
-                r = runtimes.status()
-                self.steps.append({"id": "runtime", "label": r["label"], "state": "waiting", "done": 0, "total": r["size"]})
+                self.steps.append({"id": "runtime", "label": "whisper.cpp + llama.cpp: detecting GPU in background",
+                                   "state": "waiting", "done": 0, "total": 0})
             self.steps += [{"id": m["id"], "label": m["about"], "state": "waiting", "done": 0, "total": m.get("size") or 0}
                            for m in models.status() if m["id"] in want]
             self.log.clear()
@@ -308,26 +390,31 @@ class Setup:
 
     def _exec(self, cmd: list[str], env: dict, sid: str) -> None:
         self._say("$ " + " ".join(Path(cmd[0]).name if i == 0 else c for i, c in enumerate(cmd)))
-        p = subprocess.Popen(cmd, env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **env},
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                             errors="replace", bufsize=1, creationflags=NO_WINDOW)
-        for line in p.stdout:
-            if line.startswith("@progress "):
-                try:
-                    d = json.loads(line[10:])
-                    with self.lock:
-                        s = next(s for s in self.steps if s["id"] == sid)
-                        s["files"] = {**s.get("files", {}), d["file"]: d["done"]}
-                        s["done"] = sum(s["files"].values())
-                except (ValueError, KeyError, StopIteration):
-                    pass
-                continue
-            self._say(line)
-        if p.wait():
-            raise RuntimeError(f"{Path(cmd[0]).name} stopped (exit {p.returncode}); see the log")
+        with process(cmd, env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **env},
+                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                     errors="replace", bufsize=1, creationflags=NO_WINDOW) as p:
+            for line in p.stdout:
+                if line.startswith("@progress "):
+                    try:
+                        d = json.loads(line[10:])
+                        with self.lock:
+                            s = next(s for s in self.steps if s["id"] == sid)
+                            s["files"] = {**s.get("files", {}), d["file"]: d["done"]}
+                            s["done"] = sum(s["files"].values())
+                    except (ValueError, KeyError, StopIteration):
+                        pass
+                    continue
+                self._say(line)
+            if p.wait():
+                raise RuntimeError(f"{Path(cmd[0]).name} stopped (exit {p.returncode}); see the log")
 
     def _run(self) -> None:
         try:
+            if WINDOWS and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
+                # Slow GPU probes run after start() has admitted the setup, not while the server holds STARTING.
+                os.environ.pop("PIANPIAN_ACCEL", None)
+                save_config(accel=runtimes.backend_for("llama"))
+                os.environ.update(pipeline_env())
             for src, dst in getattr(self, "moves", []):
                 self._say(f"moving {src} to {dst}")
                 if dst.is_dir():
@@ -370,7 +457,7 @@ class Setup:
             self._step("engine", state="done")
             if WINDOWS:                                     # whisper.cpp and llama.cpp for this GPU
                 r = runtimes.status()
-                self._step("runtime", state="running")
+                self._step("runtime", label=r["label"], total=r["size"], state="running")
                 self._exec([python(), str(RUNTIMES_PY), "ensure"], pipeline_env(), "runtime")
                 self._step("runtime", state="done", done=r["size"])
             for s in [x for x in self.steps if x["id"] not in ("engine", "runtime")]:

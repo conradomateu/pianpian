@@ -38,3 +38,12 @@ jobs:
       - run: python dev.py check
         env:
           UV_NO_SYNC: "1"
+      - run: python dev.py build                  # compile the installer on every PR; only windows.yml publishes releases
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Pianpian-Windows-PR
+          path: |
+            dist/Pianpian-Windows-Setup.exe
+            dist/Pianpian-Windows.zip
+          if-no-files-found: error
+          retention-days: 7

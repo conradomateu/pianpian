@@ -105,7 +105,7 @@ def mark_ytdlp_updated() -> None:
 
 def ytdlp_version() -> str:
     try:
-        return subprocess.run([engine.python(), "-c", "import yt_dlp.version as v; print(v.__version__)"],
-                              capture_output=True, text=True, timeout=60).stdout.strip()
+        return engine.run([engine.python(), "-c", "import yt_dlp.version as v; print(v.__version__)"],
+                          capture_output=True, text=True, timeout=60).stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return ""

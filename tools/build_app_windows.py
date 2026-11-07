@@ -73,15 +73,14 @@ def zip_app() -> Path:
     return out
 
 
-def installer() -> Path | None:
-    """dist/Pianpian-Windows-Setup.exe, when Inno Setup 6 is installed (the GitHub windows runners have it)."""
+def installer() -> Path:
+    """dist/Pianpian-Windows-Setup.exe; a normal build fails rather than silently omitting it."""
     iscc = (shutil.which("iscc") or shutil.which("ISCC")
             or next((str(p) for p in (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
                                       Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Inno Setup 6" / "ISCC.exe",
                                       Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Inno Setup 6" / "ISCC.exe") if p.is_file()), None))
     if not iscc:
-        print("Inno Setup 6 was not found: dist/Pianpian and the zip only (winget install JRSoftware.InnoSetup)", flush=True)
-        return None
+        raise RuntimeError("Inno Setup 6 is required for the installer (winget install JRSoftware.InnoSetup), or use --no-installer")
     run(iscc, f"/DMyAppVersion={version()}", f"/DMySourceDir={DIST / 'Pianpian'}", f"/DMyOutputDir={DIST}",
         f"/DMyIcon={ICON}", ISS)
     return SETUP

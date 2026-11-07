@@ -217,7 +217,8 @@ def main() -> None:
         tool("pinyin", "zh.srt")
     if not newer("zh.lines.txt", "zh.srt"):
         tool("export", "zh.srt")
-    if not newer("zh.words.json", "zh.srt", FIXES, HERE / "srt_tool.py"):
+    if not newer("zh.words.json", "zh.srt", FIXES, HERE / "srt_tool.py", HERE / "grammar.py",
+                 HERE / "data" / "hsk3.json", "zh.whisper.json"):
         tool("words", "zh.srt")
 
     # English from the local model; written to a .part file first, so a failed run never loses English you had

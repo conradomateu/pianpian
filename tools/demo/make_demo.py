@@ -61,7 +61,7 @@ def main():
     print("drawing the scenes", flush=True)
     run(sys.executable, HERE / "scenes.py", tmp)
     for i in range(1, len(lines) + 1):
-        run(chrome(), "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
+        run(chrome(), "--headless=new", "--use-mock-keychain", f"--user-data-dir={tmp / 'chrome-profile'}", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
             "--window-size=1280,720", f"--screenshot={tmp / f'{i}.png'}", (tmp / f"{i}.svg").as_uri(), stderr=subprocess.DEVNULL)
 
     print("voicing the lines", flush=True)

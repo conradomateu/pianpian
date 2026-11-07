@@ -127,7 +127,7 @@ def test_retime_ignores_a_whisper_file_linked_from_outside(media, tmp_path, monk
     # GET zh.words.json runs the retime; a zh.whisper.json link out of the video folder must not feed it
     (tmp_path / "elsewhere.json").write_text("{}")
     (media / "zh.whisper.json").symlink_to(tmp_path / "elsewhere.json")
-    monkeypatch.setattr(anki_export.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("retime ran")))
+    monkeypatch.setattr(anki_export.engine, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("retime ran")))
     assert anki_export.study_words(media) == json.loads((media / "zh.words.json").read_text())
 
 
@@ -136,7 +136,7 @@ def test_retime_runs_once_per_change_of_the_files(media, monkeypatch):
     (media / "zh.whisper.json").write_text("{}")
     out = (media / "zh.words.json").read_text()
     runs = []
-    monkeypatch.setattr(anki_export.subprocess, "run", lambda *a, **kw: runs.append(a) or subprocess.CompletedProcess(a, 0, out, ""))
+    monkeypatch.setattr(anki_export.engine, "run", lambda *a, **kw: runs.append(a) or subprocess.CompletedProcess(a, 0, out, ""))
     for _ in range(5):
         anki_export.study_words(media)
     assert len(runs) == 1
@@ -178,6 +178,23 @@ def test_duration_rounding_cannot_reverse_interval(media, monkeypatch):
     assert anki_export.bounds(media / "source.wav", {"start": 2, "end": 3.144}) == (2, 3.14)
     with pytest.raises(ValueError, match="start must be before"):
         anki_export.bounds(media / "source.wav", {"start": 3.141, "end": 3.144})
+
+
+def test_render_uses_fast_input_seek_and_keeps_clip_duration(media, monkeypatch):
+    seen = []
+    real_run = subprocess.run
+
+    def run(cmd, **kwargs):
+        seen.append(cmd)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(anki_export.engine, "run", run)
+    clip = anki_export.render_clip(media / "source.wav", 2, 2.5)
+    assert seen[-1].index("-ss") < seen[-1].index("-i")
+    assert clip.suffix == ".mp3" and clip.stat().st_size > 0
+    duration = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                        "-of", "csv=p=0", str(clip)], text=True)
+    assert abs(float(duration) - .5) < .1
 
 
 def test_export_chooses_the_playing_video_over_audio_sidecar(media):

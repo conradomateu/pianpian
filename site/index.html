@@ -229,7 +229,7 @@ footer.site .grow { flex:1; }
   <a class="link hide-s" href="#anki">Anki</a>
   <a class="link hide-s" href="#faq">FAQ</a>
   <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
-  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="#download">Download</a>
+  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="#download"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{WINDOWS_ICON}}"/></svg>Download</a>
 </div></header>
 
 <main class="wrap">
@@ -237,7 +237,7 @@ footer.site .grow { flex:1; }
     <h1>Watch Chinese. Click any word.</h1>
     <p class="lede">Chinese, pinyin and English subtitles for the videos you choose.<br>AI transcription and translation, on your computer.</p>
     <div class="cta" id="download">
-      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="hero" data-umami-event-os="mac" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
+      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="hero" data-umami-event-os="mac" href="{{DOWNLOAD_URL}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{WINDOWS_ICON}}"/></svg>Download Pianpian</a>
       {{WINDOWS:hero}}
     </div>
     <p class="os-note" id="os-note" role="status" hidden></p>
@@ -376,7 +376,7 @@ footer.site .grow { flex:1; }
   <section id="faq">
     <h2 class="sec">Questions</h2>
     <div class="faq">
-      <details><summary>What do I need to install it?</summary><p><b>Mac:</b> Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, about 4 GB of disk. Open the download and drag Pianpian to Applications.</p><p><b>Windows:</b> a 64-bit (x64) PC with Windows 11, tested on 7 Nov 2026; Windows 10 isn’t tested yet and Windows on ARM isn’t supported. It needs Microsoft’s WebView2, which Windows 11 includes (not checked on a clean install). The installer is for your user only and needs no admin rights. Plus space for your videos.</p></details>
+      <details><summary>What do I need to install it?</summary><p><b>Mac:</b> Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, about 4 GB of disk. Open the download and drag Pianpian to Applications.</p><p><b>Windows:</b> a 64-bit (x64) PC with Windows 11 recommended; Windows 10 isn’t tested yet and Windows on ARM isn’t supported. It needs Microsoft’s WebView2, which Windows 11 includes (not checked on a clean install). The installer is for your user only and needs no admin rights. Plus space for your videos.</p></details>
       <details><summary>What happens on first launch?</summary><p>Choose where to keep your videos and tools. Setup then downloads, with progress:</p><p><b>Mac:</b> the engine (about 0.65 GB), Whisper (1.6 GB) and Hy-MT2 (1 GB).<br><b>Windows:</b> the engine (about 0.46 GB), Whisper for whisper.cpp (1.62 GB), Hy-MT2 for llama.cpp (1.13 GB) and a runtime for your hardware: about 30 MB on the CPU, 50 MB with Vulkan, 1.35 GB with an NVIDIA GPU (CUDA).</p><p>It compares download sources and mirrors, including those reachable from mainland China.</p></details>
       <details><summary>Which AI models does Pianpian use?</summary><p>Whisper transcribes the audio; Hy-MT2 translates the subtitles into English. Both run on your computer (MLX on a Mac; whisper.cpp and llama.cpp on Windows). Your videos stay with you, and no account or API key is needed. The app connects to download videos, models, tools and updates.</p></details>
       <details id="faq-files"><summary>Where are my videos and subtitles saved?</summary><p>In the library folder you choose during setup (default: <code>~/Movies/Pianpian</code> on a Mac, <code>Videos\Pianpian</code> on Windows). Each video has its own folder with the video and its Chinese, pinyin and English subtitle files.</p><p>Demo files: <a href="demo/library/pianpian-day/source.mp4">Video</a> · <a href="demo/library/pianpian-day/zh.srt">Chinese</a> · <a href="demo/library/pianpian-day/zh.pinyin.srt">Pinyin</a> · <a href="demo/library/pianpian-day/zh.en.srt">English</a>.</p></details>
@@ -394,7 +394,7 @@ footer.site .grow { flex:1; }
     <h2>One slice a day.</h2>
     <p lang="zh-Hans">一天一片。</p>
     <div class="cta">
-      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="bottom" data-umami-event-os="mac" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
+      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="bottom" data-umami-event-os="mac" href="{{DOWNLOAD_URL}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{WINDOWS_ICON}}"/></svg>Download Pianpian</a>
       {{WINDOWS:bottom}}
       <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>

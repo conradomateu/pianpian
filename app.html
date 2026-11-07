@@ -209,12 +209,12 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const OFFLINE = location.protocol === 'file:';     // opened from disk: no library, files only
 // app.html?demo: the website's demo. The library is a snapshot in demo/ (tools/build_site.py writes it with
-// the server's own code), and whatever needs the engine on a Mac points to the download instead
+// the server's own code), and whatever needs the local engine points to the download instead
 const DEMO = new URLSearchParams(location.search).has('demo');
 document.documentElement.classList.toggle('demo', DEMO);   // the phone layout of the website's demo (CSS above)
 const LIB = DEMO ? 'demo/library/' : '/library/';
 const GET_APP = 'https://github.com/conradomateu/pianpian/releases/latest';
-const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac.';
+const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac or Windows PC.';
 const PROMPT = `Each line below is: an id, a TAB, then one subtitle in Chinese.
 Translate the Chinese into natural English. Output EXACTLY the same ids, one per line, as: id<TAB>English.
 Do not merge, split, drop or renumber lines. " / " marks a line break; keep it.
@@ -391,7 +391,7 @@ async function select(id, keepPlayer) {
 }
 // the demo answers buttons that need the engine with one line and the download
 function demoNote() {
-  $('notes').innerHTML = `<div class="note">${DEMO_SAYS} <a class="btn primary" href="${GET_APP}" target="_blank" rel="noopener">Download for Mac</a></div>`;
+  $('notes').innerHTML = `<div class="note">${DEMO_SAYS} <a class="btn primary" href="${GET_APP}" target="_blank" rel="noopener">Download Pianpian</a></div>`;
 }
 // one short line above the video, only when something needs doing
 function renderNotes(v) {

@@ -32,7 +32,7 @@ import webview       # noqa: E402  (after the name is set)
 import server        # noqa: E402
 
 
-def serve() -> str:
+def serve() -> tuple[str, server.LocalServer]:
     try:
         srv = server.start(PORT)
     except OSError:  # the port is taken: any free one (the page's saved settings then start fresh)
@@ -41,7 +41,7 @@ def serve() -> str:
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{srv.server_port}/app.html"
     logging.info("serving %s, library %s", url, server.CFG["library"])
-    return url
+    return url, srv
 
 
 def ready(window, url):
@@ -94,12 +94,15 @@ def main():
     if not first_instance():
         logging.info("Pianpian is already running: not starting a second copy")
         return
-    url = serve()
-    window = webview.create_window("Pianpian 片片", url="about:blank", width=1440, height=900, js_api=Api(),
-                                   min_size=(900, 600), background_color="#14120F", hidden=True)
-    # Keep playback positions and player preferences across app launches.
-    webview.start(ready, (window, url), private_mode=False, storage_path=str(engine.data_dir() / "webview"))
-    logging.info("window closed")
+    url, srv = serve()
+    try:
+        window = webview.create_window("Pianpian 片片", url="about:blank", width=1440, height=900, js_api=Api(),
+                                       min_size=(900, 600), background_color="#14120F", hidden=True)
+        # Keep playback positions and player preferences across app launches.
+        webview.start(ready, (window, url), private_mode=False, storage_path=str(engine.data_dir() / "webview"))
+        logging.info("window closed")
+    finally:
+        server.stop(srv)
 
 
 if __name__ == "__main__":

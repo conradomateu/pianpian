@@ -1,4 +1,5 @@
 """The local server: pages, the library API and the guard on writes, on a throwaway library."""
+import io
 import json
 import ntpath
 import os
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -67,6 +69,47 @@ def test_server(tmp_path):
             assert e.code == 404 and "no source video in 视频_study" in e.read().decode(), "POST did not unquote the video id"
     finally:
         srv.shutdown()
+
+
+def test_stop_closes_http_worker_and_job_admission(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "CLOSING", False)
+    monkeypatch.setattr(server, "WORKER", None)
+    monkeypatch.setattr(server, "QUEUE", type(server.QUEUE)())  # no workers from earlier server fixtures share this queue
+    monkeypatch.setattr(server.engine, "CLOSING", False)
+    srv = server.start(0, library=tmp_path)
+    serving = threading.Thread(target=srv.serve_forever, daemon=True)
+    serving.start()
+    base = f"http://127.0.0.1:{srv.server_port}/api/status"
+    assert urllib.request.urlopen(base).status == 200
+    server.stop(srv)
+    serving.join(timeout=5)
+    assert not serving.is_alive() and not server.WORKER.is_alive() and server.CLOSING
+    with pytest.raises(RuntimeError, match="closing"):
+        server.enqueue(server.Job("too late", [sys.executable, "-c", "pass"], str(tmp_path)))
+    with pytest.raises(OSError):
+        urllib.request.urlopen(base, timeout=1)
+
+
+def test_windows_status_never_probes_gpu(monkeypatch):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine, "config", lambda: {})
+    monkeypatch.setattr(server.engine.runtimes, "backend_for", lambda tool: (_ for _ in ()).throw(AssertionError("GPU probe ran")))
+    handler = server.Handler.__new__(server.Handler)
+    handler.path, handler.headers = "/api/status", {}
+    handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+    handler.do_GET()
+    assert handler.response[0] == 200 and handler.response[1]["accel"] == "auto"
+
+
+def test_windows_report_never_probes_gpu(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.models, "status", lambda: [])
+    monkeypatch.setattr(server.engine.runtimes, "backend_for", lambda tool: (_ for _ in ()).throw(AssertionError("GPU probe ran")))
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
+    monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
+    result = server.problem_report({})
+    assert "auto (GPU detected during setup)" in result["details"]
 
 
 def test_library_poster_and_thumbnail(tmp_path, monkeypatch):
@@ -339,7 +382,7 @@ def anki_setup_requests(tmp_path, monkeypatch):
     monkeypatch.setattr(e, "mirror_env", lambda: {})
     monkeypatch.setattr(e, "check", lambda: {"engine": True, "current": True})
     monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"label": "runtime", "size": 0})
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"label": "runtime", "size": 0})
     monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: "cpu")
     monkeypatch.setattr(e.Setup, "_exec", lambda *a: None)
     monkeypatch.setattr(server, "JOBS", [])
@@ -379,7 +422,7 @@ def test_setup_cannot_move_an_active_preview(anki_setup_requests, tmp_path, monk
 
     monkeypatch.setattr(anki, "duration", lambda path: 2)
     monkeypatch.setattr(anki, "_ffmpeg", lambda: "stub-ffmpeg")
-    monkeypatch.setattr(anki.subprocess, "run", render)
+    monkeypatch.setattr(anki.engine, "run", render)
     with ThreadPoolExecutor(2) as pool:
         preview = pool.submit(call, "/api/anki/preview", {
             "id": "clip", "start": 0, "end": 1, "selection": {"cueStart": 0, "cueEnd": 0},
@@ -482,3 +525,93 @@ def test_setup_waits_for_every_admitted_anki_request(anki_setup_requests, monkey
         assert operations[1].result(timeout=5)[0] == 200
     assert server.ANKI_ACTIVE == 0
     assert anki_setup_requests("/api/setup")[0] == 200
+
+
+def import_request(payload, reader=None, name="clip.mp4"):
+    handler = server.Handler.__new__(server.Handler)
+    handler.path = f"/api/import?name={name}"
+    handler.headers = {"X-Kit": "1", "Content-Length": str(len(payload))}
+    handler.rfile = reader or io.BytesIO(payload)
+    handler.send_json = lambda body, status=200: setattr(handler, "response", (status, body))
+    return handler
+
+
+def fake_import_job(monkeypatch):
+    names = []
+    class FakeJob:
+        kind = "add"
+        def __init__(self, name):
+            self.name = name
+        def public(self):
+            return {"name": self.name}
+    monkeypatch.setattr(server, "rebuild_job", lambda name, **kwargs: names.append(name) or FakeJob(name))
+    return names
+
+
+@pytest.mark.parametrize("first,second,expected", [
+    ("clip.mp4", "clip.mp4", "clip (2).mp4"),
+    ("clip.mp4", "CLIP.mp4", "clip (2).mp4"),
+    ("café.mp4", "cafe\u0301.mp4", "café (2).mp4"),
+])
+def test_concurrent_imports_reserve_distinct_destinations(tmp_path, monkeypatch, first, second, expected):
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    monkeypatch.setattr(server, "IMPORTS_ACTIVE", 0)
+    monkeypatch.setattr(server, "IMPORT_TARGETS", set())
+    monkeypatch.setattr(server.engine.SETUP, "state", "idle")
+    names = fake_import_job(monkeypatch)
+    ready, lock, both = 0, threading.Lock(), threading.Event()
+
+    class Reader(io.BytesIO):
+        def read(self, size=-1):
+            nonlocal ready
+            with lock:
+                ready += 1
+                if ready == 2:
+                    both.set()
+            assert both.wait(5)
+            return super().read(size)
+
+    payloads = (b"AAAAAA", b"BBBBBB")
+    requests = [import_request(payload, Reader(payload), name) for payload, name in zip(payloads, (first, second))]
+    with ThreadPoolExecutor(2) as pool:
+        list(pool.map(lambda h: h.do_PUT(), requests))
+    assert [h.response[0] for h in requests] == [200, 200]
+    key = lambda name: unicodedata.normalize("NFC", name.casefold())
+    assert {key(name) for name in names} == {key(first), key(expected)}
+    for h, payload in zip(requests, payloads):
+        assert (tmp_path / h.response[1]["name"]).read_bytes() == payload
+    assert not list(tmp_path.glob("*.part")) and server.IMPORTS_ACTIVE == 0 and not server.IMPORT_TARGETS
+
+
+def test_setup_cannot_change_library_during_import(tmp_path, monkeypatch):
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    monkeypatch.setattr(server, "IMPORTS_ACTIVE", 0)
+    monkeypatch.setattr(server, "IMPORT_TARGETS", set())
+    monkeypatch.setattr(server, "ANKI_ACTIVE", 0)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server.engine.SETUP, "state", "idle")
+    monkeypatch.setattr(server.engine, "config", lambda: {"library": str(tmp_path)})
+    names = fake_import_job(monkeypatch)
+    starts = []
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: starts.append(args))
+
+    def setup():
+        handler = server.Handler.__new__(server.Handler)
+        handler.path, handler.headers = "/api/setup", {"X-Kit": "1"}
+        handler.body = lambda: {"library": str(tmp_path), "data": str(tmp_path), "models": []}
+        handler.send_json = lambda body, status=200: setattr(handler, "response", (status, body))
+        handler.do_POST()
+        return handler.response
+
+    class Reader(io.BytesIO):
+        def read(self, size=-1):
+            if not hasattr(self, "checked"):
+                self.checked = setup()
+            return super().read(size)
+
+    request = import_request(b"video", Reader(b"video"))
+    request.do_PUT()
+    assert request.response[0] == 200 and request.rfile.checked[0] == 409
+    assert names == ["clip.mp4"] and not starts
+    assert setup()[0] == 200 and len(starts) == 1
+    assert server.IMPORTS_ACTIVE == 0 and not server.IMPORT_TARGETS

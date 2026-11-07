@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+from tools import build_site  # noqa: E402
+
 MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
 SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15'
 WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
@@ -43,3 +45,15 @@ def test_classify(name, seen, os, fits):
         assert 'Apple Silicon' in out['note'] and 'macOS 14' in out['note']    # unknown chip: say what it needs, never that it works
     if name == 'win-arm':
         assert 'ARM' in out['note']
+
+
+def test_download_links_only_use_confirmed_release_assets():
+    base = f"https://github.com/{build_site.REPO}/releases"
+    assert build_site.download_url(["Pianpian-macOS.zip", "Pianpian-macOS.dmg"]).endswith("/Pianpian-macOS.dmg")
+    assert build_site.download_url(["Pianpian-macOS.zip"]).endswith("/Pianpian-macOS.zip")
+    for names in (None, []):
+        assert build_site.download_url(names) == base
+        cta = build_site.windows_cta(names, "hero")
+        assert f'href="{base}"' in cta and "coming with" not in cta
+        assert 'data-os="windows"' in cta and 'class="ghost soon"' in cta
+    assert "Pianpian-Windows-Setup.exe" in build_site.windows_cta(["Pianpian-Windows-Setup.exe"], "hero")

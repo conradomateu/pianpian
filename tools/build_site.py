@@ -51,10 +51,10 @@ def release_files() -> list[str] | None:
         return None
 
 
-def download_file(names: list[str] | None) -> str:
-    """The file the Mac button points at: the DMG once the latest release has one (people open it and drag the app
-    to Applications), else the zip every release has. Asked at build time, so the button never points at nothing."""
-    return "Pianpian-macOS.dmg" if names and "Pianpian-macOS.dmg" in names else "Pianpian-macOS.zip"
+def download_url(names: list[str] | None) -> str:
+    """Direct only to a confirmed Mac asset; an offline build or a missing asset uses the releases page."""
+    name = next((n for n in ("Pianpian-macOS.dmg", "Pianpian-macOS.zip") if names and n in names), None)
+    return f"https://github.com/{REPO}/releases/latest/download/{name}" if name else f"https://github.com/{REPO}/releases"
 
 
 WINDOWS_FILE = "Pianpian-Windows-Setup.exe"
@@ -67,7 +67,8 @@ def windows_cta(names: list[str] | None, where: str) -> str:
         return (f'<a class="ghost" data-os="windows" data-umami-event="download" data-umami-event-where="{where}" '
                 f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases/latest/download/{WINDOWS_FILE}">'
                 f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{WINDOWS}"/></svg>Download for Windows</a>')
-    return f'<a class="soon" href="https://github.com/{REPO}/releases">Windows: coming with the next release</a>'
+    return (f'<a class="ghost soon" data-os="windows" data-umami-event="download" data-umami-event-where="{where}" '
+            f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases">Windows downloads</a>')
 
 
 def version() -> str:
@@ -113,7 +114,7 @@ def testimonials() -> str:
 
 def main() -> None:
     ver, names = version(), release_files()
-    download = download_file(names)
+    download = download_url(names)
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
@@ -133,7 +134,7 @@ def main() -> None:
             if text is None:
                 shutil.copy2(f, OUT / f.name)
             else:
-                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{SITE}}", site_url()).replace("{{DOWNLOAD}}", download).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
+                text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{SITE}}", site_url()).replace("{{DOWNLOAD_URL}}", download).replace("{{APPLE}}", APPLE).replace("{{WINDOWS_ICON}}", WINDOWS).replace("{{TESTIMONIALS}}", testimonials())
                 text = re.sub(r"\{\{WINDOWS:(\w+)\}\}", lambda m: windows_cta(names, m[1]), text)
                 (OUT / f.name).write_text(text, encoding="utf-8")
     (OUT / ".nojekyll").touch()                           # serve the files as they are

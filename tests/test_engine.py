@@ -29,7 +29,7 @@ def install_fake_python(monkeypatch, e, root):
     py = e.engine_python(root)
     py.parent.mkdir(parents=True)
     monkeypatch.setenv("PIANPIAN_PYTHON", str(py))
-    monkeypatch.setattr(e.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(e, "run", lambda *a, **k: subprocess.CompletedProcess([], 0))
     return py
 
 
@@ -37,7 +37,7 @@ def test_skipped_model_is_not_asked_for_again(monkeypatch, tmp_path):
     e = fresh(monkeypatch, tmp_path)
     monkeypatch.setattr(e.models, "status", lambda: catalog(False, True))
     if e.WINDOWS:
-        monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "", "tools": {}})
+        monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"ready": True, "size": 0, "label": "", "tools": {}})
     e.STATE.update(engine=True, current=True)
     assert e.SETUP.plan()["needed"]                           # first run: everything missing is offered
     e.save_config(models=["m1"])                              # m0 was left out
@@ -93,6 +93,61 @@ def test_concurrent_settings_saves_keep_every_change(monkeypatch, tmp_path):
     assert not e.CONFIG.with_suffix(".json.tmp").exists()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
+def test_shutdown_stops_the_whole_job_process_tree(monkeypatch, tmp_path):
+    import time
+
+    e = fresh(monkeypatch, tmp_path)
+    pid_file = tmp_path / "grandchild.pid"
+    code = ("import subprocess,sys,time; from pathlib import Path; "
+            "p=subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)']); "
+            f"Path({str(pid_file)!r}).write_text(str(p.pid)); time.sleep(60)")
+    pid = None
+    with e.process([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as parent:
+        try:
+            for _ in range(100):
+                if pid_file.exists():
+                    break
+                time.sleep(.05)
+            pid = int(pid_file.read_text())
+            e.stop_processes()
+            assert parent.wait(timeout=5) != 0
+            for _ in range(50):
+                state = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True)
+                if state.returncode or state.stdout.strip().startswith("Z"):
+                    break
+                time.sleep(.1)
+            assert state.returncode or state.stdout.strip().startswith("Z"), "the grandchild survived shutdown"
+            with pytest.raises(RuntimeError, match="closing"):
+                with e.process([sys.executable, "-c", "pass"]):
+                    pass
+        finally:
+            if parent.poll() is None:
+                e._stop_tree(parent)
+            if pid is not None:
+                subprocess.run(["kill", "-9", str(pid)], capture_output=True)
+
+
+def test_tracked_run_stops_and_rejects_late_processes(monkeypatch, tmp_path):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    e = fresh(monkeypatch, tmp_path)
+    started = tmp_path / "started"
+    code = f"from pathlib import Path; import time; Path({str(started)!r}).touch(); time.sleep(60)"
+    with ThreadPoolExecutor(1) as pool:
+        future = pool.submit(e.run, [sys.executable, "-c", code], capture_output=True, timeout=120)
+        for _ in range(100):
+            if started.exists():
+                break
+            time.sleep(.05)
+        assert started.exists()
+        e.stop_processes()
+        assert future.result(timeout=10).returncode != 0
+    with pytest.raises(RuntimeError, match="closing"):
+        e.run([sys.executable, "-c", "pass"])
+
+
 @pytest.mark.parametrize("windows", [False, True])
 @pytest.mark.parametrize("overrides", [False, True])
 def test_setup_relocates_app_paths_before_starting_downloads(monkeypatch, tmp_path, windows, overrides):
@@ -106,7 +161,7 @@ def test_setup_relocates_app_paths_before_starting_downloads(monkeypatch, tmp_pa
     e.STATE.update(engine=True, current=True)
     seen = []
     monkeypatch.setattr(e.models, "status", lambda: seen.append(e.models.cache()) or [])
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"ready": True, "size": 0, "label": "runtime"})
     workers = []
     monkeypatch.setattr(e.Setup, "_run", lambda self: workers.append(dict(os.environ)))
     os.environ.update(e.pipeline_env())                       # same as server.start()
@@ -137,7 +192,7 @@ def test_relocation_installs_and_checks_the_destination_engine(monkeypatch, tmp_
     e.STATE.update(engine=True, current=True)
     os.environ.update(e.pipeline_env())
     monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"ready": True, "size": 0, "label": "runtime"})
     monkeypatch.setattr(e, "mirror_env", lambda: {})
     monkeypatch.setattr(e, "uv", lambda: "uv")
     calls = []
@@ -150,7 +205,7 @@ def test_relocation_installs_and_checks_the_destination_engine(monkeypatch, tmp_
             py.touch()
 
     monkeypatch.setattr(e.Setup, "_exec", install)
-    monkeypatch.setattr(e.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0 if working and Path(cmd[0]).is_file() else 1))
+    monkeypatch.setattr(e, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0 if working and Path(cmd[0]).is_file() else 1))
     dest = tmp_path / "another-disk"
     e.SETUP.start(None, str(dest), [])
     e.SETUP.thread.join(timeout=5)
@@ -167,7 +222,7 @@ def fake_setup(monkeypatch, e, working=lambda py: True):
     monkeypatch.delenv("PIANPIAN_PYTHON", raising=False)
     monkeypatch.setattr(e, "FROZEN", True)
     monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"ready": True, "size": 0, "label": "runtime"})
     monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: "cpu")
     monkeypatch.setattr(e, "mirror_env", lambda: {})
     monkeypatch.setattr(e, "uv", lambda: "uv")
@@ -182,7 +237,7 @@ def fake_setup(monkeypatch, e, working=lambda py: True):
             (Path(cmd[-1]) / "pyvenv.cfg").touch()
 
     monkeypatch.setattr(e.Setup, "_exec", install)
-    monkeypatch.setattr(e.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(
+    monkeypatch.setattr(e, "run", lambda cmd, **kw: subprocess.CompletedProcess(
         cmd, 0 if Path(cmd[0]).is_file() and working(Path(cmd[0])) else 1))
     return calls
 
@@ -245,7 +300,7 @@ def test_setup_keeps_an_engine_whose_python_starts(monkeypatch, tmp_path, slow):
         if slow == "check-times-out":
             raise subprocess.TimeoutExpired(cmd, 120)
         return subprocess.CompletedProcess(cmd, 1)            # an import fails
-    monkeypatch.setattr(e.subprocess, "run", run)
+    monkeypatch.setattr(e, "run", run)
     e.check()
     assert e.STATE["engine"] is False
     run_setup(e, None, None, [])
@@ -310,8 +365,10 @@ def test_the_setup_keeps_the_gpu_choice_for_the_jobs(monkeypatch, tmp_path):
     monkeypatch.setattr(e, "WINDOWS", True)
     e.STATE.update(engine=True, current=True)
     monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
-    monkeypatch.setattr(e.Setup, "_run", lambda self: setattr(self, "state", "done"))
+    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e, "mirror_env", lambda: {})
+    monkeypatch.setattr(e, "check", lambda: {"engine": True, "current": True})
+    monkeypatch.setattr(e.Setup, "_exec", lambda self, *args: None)
     probes = []
     monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: probes.append(tool) or "cuda")
     assert "PIANPIAN_ACCEL" not in e.pipeline_env()
@@ -323,6 +380,34 @@ def test_the_setup_keeps_the_gpu_choice_for_the_jobs(monkeypatch, tmp_path):
     assert e.pipeline_env()["PIANPIAN_ACCEL"] == "cpu" and len(probes) == 1 and e.config()["accel"] == "cuda"
     monkeypatch.setattr(e, "WINDOWS", False)
     assert "PIANPIAN_ACCEL" not in e.pipeline_env()
+
+
+def test_slow_gpu_probe_does_not_block_setup_admission(monkeypatch, tmp_path):
+    import threading
+    import time
+
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", True)
+    e.STATE.update(engine=True, current=True)
+    monkeypatch.setattr(e.models, "status", lambda: [])
+    monkeypatch.setattr(e, "mirror_env", lambda: {})
+    monkeypatch.setattr(e, "check", lambda: {"engine": True, "current": True})
+    monkeypatch.setattr(e.Setup, "_exec", lambda self, *args: None)
+    started, release = threading.Event(), threading.Event()
+
+    def probe(tool):
+        started.set()
+        release.wait(timeout=5)
+        return "cuda"
+
+    monkeypatch.setattr(e.runtimes, "backend_for", probe)
+    before = time.monotonic()
+    e.SETUP.start(None, None, [])
+    assert time.monotonic() - before < 1 and e.SETUP.state == "running"
+    assert started.wait(timeout=1)                          # the probe is already running in the setup thread
+    release.set()
+    e.SETUP.thread.join(timeout=5)
+    assert not e.SETUP.thread.is_alive() and e.SETUP.state == "done"
 
 
 def test_the_packaged_app_never_writes_bytecode_into_itself(monkeypatch, tmp_path):

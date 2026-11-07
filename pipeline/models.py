@@ -163,7 +163,7 @@ def hf_cached(repo: str, entry: dict | None) -> Path | None:
     hub = Path(os.environ.get("HF_HUB_CACHE") or Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub")
     snaps = hub / f"models--{repo.replace('/', '--')}" / "snapshots"
     for snap in sorted(snaps.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True) if snaps.exists() else []:
-        if entry and matches(snap, entry):
+        if entry and snap.name == entry["huggingface"] and matches(snap, entry):
             return snap
         if not entry and (snap / "config.json").exists() and (any(snap.glob("*.safetensors")) or any(snap.glob("*.npz"))
                                                               or any(snap.glob("*.gguf")) or any(snap.glob("*.bin"))):
@@ -180,7 +180,9 @@ def local_path(repo: str) -> Path | None:
         done = d / ".complete"
         if not done.exists():
             continue
-        if not entry or done.read_text().strip() == lock_id(entry) or matches(d, entry):
+        if not entry:
+            return d
+        if done.read_text().strip() == lock_id(entry) and matches(d, entry):
             return d
     return hf_cached(repo, entry)
 

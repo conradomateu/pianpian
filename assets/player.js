@@ -371,27 +371,29 @@
       if (!anki || !C) return null;
       const cues = C.cues.slice(anki.cueStart, anki.cueEnd + 1);
       if (!cues.length || cues.length !== anki.cueEnd - anki.cueStart + 1) return null;
-      const selected = [], expressions = [], intervals = [];
+      const selected = [], expressions = [], pinyin = [], intervals = [];
       let precise = anki.first !== null;
+      const textFor = (role, start, end) => (tracks.find(t => t.role === role)?.cues || [])
+        .filter(c => c.e > start && c.s < end).map(c => c.text).join('\n');
       cues.forEach((c, i) => {
-        const w = cueWords(c), tokens = w ? w.w.flat() : [];
+        const data = wordsAt(c), w = data ? cueWords(c) : null, tokens = w ? w.w.flat() : [];
         const first = i === 0 && anki.first !== null ? anki.first : 0;
         const last = i === cues.length - 1 && anki.last !== null ? anki.last : tokens.length - 1;
         const part = tokens.slice(first, last + 1);
         selected.push(...part);
         expressions.push(anki.first === null || !w ? c.text : part.map(p => p[0]).join(''));
+        // A missing word cue can use the pinyin track; edited Chinese must not borrow stale readings.
+        pinyin.push(w ? part.map(p => p[1]).filter(Boolean).join(' ') : data ? '' : textFor('pinyin', c.s, c.e));
         const times = timedWords(c, w);
         if (!times) precise = false;
         else intervals.push(...times.slice(first, last + 1).filter(Boolean));
       });
       const start = cues[0].s, end = cues[cues.length - 1].e;
-      const textFor = role => (tracks.find(t => t.role === role)?.cues || [])
-        .filter(c => c.e > start && c.s < end).map(c => c.text).join('\n');
       precise = precise && intervals.length > 0 && intervals.every((tm, i) => tm[1] > tm[0] && (!i || tm[0] >= intervals[i - 1][1]));
       return { sourceId: videoKey, ...anki, expression: expressions.join('\n'),
-        pinyin: selected.length ? selected.map(p => p[1]).filter(Boolean).join(' ').replace(/ ([,.!?:;，。！？；：])/g, '$1') : textFor('pinyin'),
+        pinyin: pinyin.filter(Boolean).join(' ').replace(/ ([,.!?:;，。！？；：])/g, '$1'),
         meaning: selected.map(p => p[2]).filter(Boolean).join('; '),
-        sentence: cues.map(c => c.text).join('\n'), translation: textFor('en'),
+        sentence: cues.map(c => c.text).join('\n'), translation: textFor('en', start, end),
         start: Math.max(0, (precise ? intervals[0][0] : start) + delay),
         end: Math.max(0, (precise ? intervals[intervals.length - 1][1] : end) + delay),
         sentenceStart: Math.max(0, start + delay), sentenceEnd: Math.max(0, end + delay), timing: precise ? 'word' : 'sentence' };

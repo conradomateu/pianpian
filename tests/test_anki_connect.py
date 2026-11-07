@@ -134,6 +134,34 @@ def test_status_is_usable_authenticated_collection(service, monkeypatch):
     assert client.status()["state"] == "unsupported"
 
 
+def test_status_has_one_total_timeout_budget(monkeypatch):
+    now, timeouts = [0.0], []
+    monkeypatch.setattr(anki.time, "monotonic", lambda: now[0])
+
+    class Response:
+        status = 200
+        def __init__(self, result):
+            self.body = json.dumps({"result": result, "error": None}).encode()
+        def read(self, limit):
+            return self.body
+
+    class Connection:
+        def __init__(self, host, port, timeout):
+            timeouts.append(timeout)
+            now[0] += 4
+        def request(self, method, path, body, headers):
+            self.action = json.loads(body)["action"]
+        def getresponse(self):
+            result = 6 if self.action == "version" else "Study" if self.action == "getActiveProfile" else ["Default"]
+            return Response(result)
+        def close(self):
+            pass
+
+    monkeypatch.setattr(anki.http.client, "HTTPConnection", Connection)
+    assert anki.Client().status()["state"] == "connected"
+    assert timeouts == [10, 6, 2, pytest.approx(.1)]
+
+
 @pytest.mark.parametrize("body,status", [(b"<html>another service</html>", 200), (b"{}", 200),
                                         (b'{"result": 6, "error": null}', 302), (b"", 401),
                                         (b'{"error": "Only this local demo session can execute examples."}', 403),

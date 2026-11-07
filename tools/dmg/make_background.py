@@ -20,7 +20,7 @@ def main() -> None:
         raise SystemExit("needs Chrome, Brave or Chromium")
     with tempfile.TemporaryDirectory() as t:
         for scale, name in ((1, "bg.png"), (2, "bg@2x.png")):
-            subprocess.run([exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--force-device-scale-factor={scale}",
+            subprocess.run([exe, "--headless=new", "--use-mock-keychain", f"--user-data-dir={Path(t) / 'chrome-profile'}", "--disable-gpu", "--hide-scrollbars", f"--force-device-scale-factor={scale}",
                             "--window-size=660,400", f"--screenshot={Path(t) / name}", (HERE / "background.svg").as_uri()],
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["tiffutil", "-cathidpicheck", f"{t}/bg.png", f"{t}/bg@2x.png", "-out", str(HERE / "background.tiff")], check=True)

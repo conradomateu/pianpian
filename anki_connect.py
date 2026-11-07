@@ -10,6 +10,7 @@ import http.client
 import json
 import re
 import threading
+import time
 
 
 MODEL = "Pianpian"
@@ -62,9 +63,10 @@ class Client:
         self.key = key
         self.timeout = 10
 
-    def _call(self, action, **params):
+    def _call(self, action, _deadline=None, **params):
         # HTTPConnection uses neither proxy environment variables nor redirects.
-        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=self.timeout)
+        timeout = self.timeout if _deadline is None else max(.1, min(self.timeout, _deadline - time.monotonic()))
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=timeout)
         payload = {"action": action, "version": 6, "params": params}
         if self.key:
             payload["key"] = self.key
@@ -96,8 +98,8 @@ class Client:
         finally:
             connection.close()
 
-    def _profile(self, expected=None):
-        profile = self._call("getActiveProfile")
+    def _profile(self, expected=None, deadline=None):
+        profile = self._call("getActiveProfile", _deadline=deadline)
         if not isinstance(profile, str) or not profile:
             raise AnkiError("no_collection", "Open a profile in Anki Desktop and retry.")
         if expected is not None and profile != expected:
@@ -109,17 +111,18 @@ class Client:
         return self._call(action, **params)
 
     def status(self):
+        deadline = time.monotonic() + self.timeout       # one total budget, not four sequential 10-second waits
         try:
-            version = self._call("version")
+            version = self._call("version", _deadline=deadline)
             if type(version) is not int:
                 raise AnkiError("wrong_service", "This port does not identify itself as AnkiConnect.")
             if version < 6:
                 raise _api_error("unsupported version")
-            profile = self._profile()
-            decks = self._call("deckNames")
+            profile = self._profile(deadline=deadline)
+            decks = self._call("deckNames", _deadline=deadline)
             if not isinstance(decks, list) or not all(isinstance(deck, str) for deck in decks):
                 raise AnkiError("wrong_service", "AnkiConnect returned an invalid deck list.")
-            self._profile(profile)
+            self._profile(profile, deadline)
             return {"state": "connected", "message": f"Connected to Anki · {profile}", "decks": sorted(decks), "profile": profile}
         except AnkiError as exc:
             return {"state": "error" if exc.code == "profile_changed" else exc.code, "message": str(exc), "decks": [], "profile": None}

@@ -94,8 +94,9 @@ def test_segmentation_upgrade_refreshes_cached_tracks_without_redoing_sources(mo
     monkeypatch.setenv("AUTO_EN", "1")
     pipeline = tmp_path / "pipeline"
     pipeline.mkdir()
-    for name in ("srt_tool.py", "align_srt.py", "pinyin_fixes.txt"):
+    for name in ("srt_tool.py", "align_srt.py", "pinyin_fixes.txt", "grammar.py", "data/hsk3.json"):
         path = pipeline / name
+        path.parent.mkdir(exist_ok=True)
         path.write_text("old code", encoding="utf-8")
         os.utime(path, (100, 100))
     monkeypatch.setattr(study, "HERE", pipeline)
@@ -112,7 +113,8 @@ def test_segmentation_upgrade_refreshes_cached_tracks_without_redoing_sources(mo
             Path(name).write_text(text, encoding="utf-8")
             os.utime(name, (stamp, stamp))
     os.utime("zh.align.json", (201, 201))
-    preserved = {name: (Path(name).read_bytes(), Path(name).stat().st_mtime_ns) for name in [*source, "zh.en.srt", "zh.lines.txt"]}
+    preserved = {name: (Path(name).read_bytes(), Path(name).stat().st_mtime_ns)
+                 for name in [*source, "zh.en.srt", "zh.lines.txt"] if name != "zh.whisper.json"}  # touched below
     monkeypatch.setattr(srt_tool, "_DICT", {"今天": [["11", "today", ""]], "天气": [["14", "weather", ""]]})
     monkeypatch.setattr(sys, "argv", ["study.py", str(tmp_path / "source.mp4")])
     monkeypatch.setattr(study, "run", lambda *cmd, **kw: pytest.fail(f"unexpected transcription/translation: {cmd}"))
@@ -153,6 +155,11 @@ def test_segmentation_upgrade_refreshes_cached_tracks_without_redoing_sources(mo
     calls.clear()
     study.main()
     assert calls == ["stack", "ass", "mux"]                     # no repeated segmentation or model work
+    for dependency in (pipeline / "grammar.py", pipeline / "data/hsk3.json", Path("zh.whisper.json")):
+        fresh(dependency)
+        calls.clear()
+        study.main()
+        assert calls == ["words", "stack", "ass", "align", "mux"], dependency
     fresh(pipeline / "align_srt.py")
     calls.clear()
     study.main()

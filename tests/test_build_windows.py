@@ -36,14 +36,24 @@ def test_an_old_installer_is_neither_kept_nor_reported(monkeypatch, tmp_path, ca
     monkeypatch.setattr(bw, "SETUP", dist / "Pianpian-Windows-Setup.exe")
     monkeypatch.setattr(bw.sys, "platform", "win32")
     monkeypatch.setattr(bw, "pyinstaller", lambda debug: (dist / "Pianpian" / "Pianpian.exe").write_text("exe"))
-    monkeypatch.setattr(bw, "installer", lambda: None)        # Inno Setup missing
-    for argv in (["--no-installer"], []):
-        (dist / "Pianpian-Windows-Setup.exe").write_text("from an older build")
-        monkeypatch.setattr(bw.sys, "argv", ["build_app_windows.py", *argv])
-        bw.main()
-        out = capsys.readouterr().out
-        assert not (dist / "Pianpian-Windows-Setup.exe").exists()
-        assert "Setup" not in out and "Pianpian.exe" in out and "Pianpian-Windows.zip" in out
+    monkeypatch.setattr(bw, "installer", lambda: (_ for _ in ()).throw(AssertionError("installer ran")))
+    monkeypatch.setattr(bw.sys, "argv", ["build_app_windows.py", "--no-installer"])
+    bw.main()
+    out = capsys.readouterr().out
+    assert not (dist / "Pianpian-Windows-Setup.exe").exists()
+    assert "Setup" not in out and "Pianpian.exe" in out and "Pianpian-Windows.zip" in out
+
+
+def test_normal_windows_build_requires_inno_setup(monkeypatch, tmp_path):
+    monkeypatch.setattr(bw.shutil, "which", lambda name: None)
+    for name in ("LOCALAPPDATA", "ProgramFiles(x86)", "ProgramFiles"):
+        monkeypatch.setenv(name, str(tmp_path))
+    try:
+        bw.installer()
+    except RuntimeError as e:
+        assert "Inno Setup 6 is required" in str(e) and "--no-installer" in str(e)
+    else:
+        raise AssertionError("a build without the installer would make check-windows green with only the ZIP")
 
 
 def _launcher(monkeypatch, tmp_path):

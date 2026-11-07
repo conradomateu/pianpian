@@ -536,6 +536,32 @@ def test_mac_installs_keep_their_models():
     assert models.lock_id(lock["mlx-community/Hy-MT2-1.8B-4bit"]) == "b12bda06891875f9"
 
 
+def test_model_cache_requires_the_current_complete_files_and_revision(monkeypatch, tmp_path):
+    entry = {"huggingface": "new-revision", "files": [{"name": "weights.bin", "size": 3, "sha256": "aa"}]}
+    monkeypatch.setattr(models, "lock", lambda: {"a/model": entry})
+    monkeypatch.setattr(models, "LEGACY", tmp_path / "legacy")
+    monkeypatch.setenv("PIANPIAN_MODELS", str(tmp_path / "models"))
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    folder = models.cache() / "a__model"
+    folder.mkdir(parents=True)
+    done = folder / ".complete"
+
+    done.write_text(models.lock_id(entry))                    # current marker, but the weight is missing
+    assert models.local_path("a/model") is None
+    (folder / "weights.bin").write_bytes(b"new")
+    done.write_text("old-fingerprint")                       # same-sized files do not make an old install current
+    assert models.local_path("a/model") is None
+    done.write_text(models.lock_id(entry))
+    assert models.local_path("a/model") == folder
+
+    snapshots = tmp_path / "hub/models--a--model/snapshots"
+    for revision in ("old-revision", "new-revision"):
+        snap = snapshots / revision
+        snap.mkdir(parents=True)
+        (snap / "weights.bin").write_bytes(b"new")
+    assert models.hf_cached("a/model", entry) == snapshots / "new-revision"
+
+
 def test_make_lock_pins_every_platform(monkeypatch, tmp_path):
     lockfile = tmp_path / "models.lock.json"
     lockfile.write_text(json.dumps({"platforms": {"win32": {"b/win": {"files": []}}}}))

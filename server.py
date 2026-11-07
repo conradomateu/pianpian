@@ -20,8 +20,10 @@ import re
 import socketserver
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import unicodedata
 import webbrowser
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -177,8 +179,12 @@ class Job:
 
 JOBS: list = []
 QUEUE: "queue.Queue[Job]" = queue.Queue()
-STARTING = threading.Lock()                                  # setup cannot replace paths used by jobs or Anki media
+STARTING = threading.Lock()                                  # setup cannot replace paths used by jobs, imports or Anki media
+CLOSING = False
+WORKER = None
 ANKI_ACTIVE = 0
+IMPORTS_ACTIVE = 0
+IMPORT_TARGETS = set()
 SETUP_RUNS = "The setup is running. Try again when it has finished."
 
 
@@ -196,21 +202,46 @@ def anki_media():
             ANKI_ACTIVE -= 1
 
 
+@contextmanager
+def import_operation(name):
+    """Reserve one destination while copying; setup stays out until the job is queued."""
+    global IMPORTS_ACTIVE
+    with STARTING:
+        if engine.SETUP.state == "running":
+            raise RuntimeError(SETUP_RUNS)
+        lib = CFG["library"]
+        target, n = lib / name, 2
+        # APFS also folds canonical Unicode forms; avoid case/NFC/NFD aliases on every filesystem.
+        key = lambda p: unicodedata.normalize("NFC", str(p.absolute()).casefold())
+        while target.exists() or key(target) in IMPORT_TARGETS or (lib / (target.stem + "_study")).exists():
+            target, n = lib / f"{Path(name).stem} ({n}){Path(name).suffix}", n + 1
+        IMPORT_TARGETS.add(key(target))
+        IMPORTS_ACTIVE += 1
+    try:
+        yield lib, target
+    finally:
+        with STARTING:
+            IMPORT_TARGETS.remove(key(target))
+            IMPORTS_ACTIVE -= 1
+
+
 def worker():
     while True:
         job = QUEUE.get()
+        if job is None:                                       # stop(): let the worker finish before app exit
+            return
         job.state, job.started = "running", time.time()
         job.add("$ " + " ".join(str(c) for c in job.cmd))
         try:
             # The native launcher bypasses main(); every job must match the UTF-8 log decoder below.
-            p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=engine.NO_WINDOW)
-            while chunk := p.stdout.read1(4096):
-                job.feed(chunk)
-            job.feed(b"", final=True)
-            job.code = p.wait()
-            job.state = "done" if job.code == 0 else "failed"
-        except Exception as e:                                # missing tool, permissions…
+            with engine.process(job.cmd, cwd=job.cwd, env={**os.environ, **job.env, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=engine.NO_WINDOW) as p:
+                while chunk := p.stdout.read1(4096):
+                    job.feed(chunk)
+                job.feed(b"", final=True)
+                job.code = p.wait()
+                job.state = "done" if job.code == 0 else "failed"
+        except Exception as e:                                # missing tool, permissions, shutdown…
             job.add(f"error: {e}")
             job.state = "failed"
         job.ended = time.time()
@@ -223,6 +254,8 @@ def worker():
 
 def enqueue(job: Job) -> Job:
     with STARTING:
+        if CLOSING:
+            raise RuntimeError("Pianpian is closing")
         if engine.SETUP.state == "running":
             raise RuntimeError(SETUP_RUNS)
         JOBS.append(job)
@@ -327,9 +360,13 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
                 accel = "mlx"
-                if engine.WINDOWS:                    # the backend names only; the GPU probes are cached
-                    bw, bl = (engine.runtimes.backend_for(t) for t in ("whisper", "llama"))
-                    accel = bw if bw == bl else f"whisper.cpp {bw} · llama.cpp {bl}"
+                if engine.WINDOWS:                    # status never probes hardware: use the saved choice or "auto"
+                    accel = "auto"
+                    choice = engine.PATH_OVERRIDES["PIANPIAN_ACCEL"] or engine.config().get("accel")
+                    if choice in ("cpu", "vulkan", "cuda"):
+                        bw = choice if ("whisper", choice) in engine.runtimes.ASSETS else "cpu"
+                        bl = choice if ("llama", choice) in engine.runtimes.ASSETS else "cpu"
+                        accel = bw if bw == bl else f"whisper.cpp {bw} · llama.cpp {bl}"
                 origin = self.headers.get("Origin")
                 if origin and origin.lower().removeprefix("http://") not in self.own_origins():
                     # another site (or a page from disk) may only learn that the app runs, never the library path
@@ -392,8 +429,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(404, "no thumbnail")
         width = 1280 if name == "poster" else 480
         if not out.exists() and (src := video_in(p)):
-            subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
-                            "-vf", f"scale={width}:-2", str(out)], timeout=30, creationflags=engine.NO_WINDOW)
+            engine.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
+                        "-vf", f"scale={width}:-2", str(out)], timeout=30, creationflags=engine.NO_WINDOW)
         return self.send_file(out) if out.exists() else self.fail(404, "no thumbnail")
 
     def do_OPTIONS(self):                                     # preflight for /api/status only
@@ -418,31 +455,31 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(400, "drop a video file (" + ", ".join(VIDEO_EXT) + ")")
         if not size:
             return self.fail(400, "empty file")
-        if engine.SETUP.state == "running":                   # before copying: the setup may be moving the library
-            return self.fail(409, SETUP_RUNS)
-        lib = CFG["library"]
-        target, n = lib / name, 2
-        while target.exists() or (lib / (target.stem + "_study")).exists():   # never overwrite: "name (2).mp4"
-            target, n = lib / f"{Path(name).stem} ({n}){Path(name).suffix}", n + 1
-        part = lib / f".{target.name}.part"
         try:
-            with part.open("wb") as f:
-                left = size
-                while left > 0 and (buf := self.rfile.read(min(1 << 20, left))):
-                    f.write(buf)
-                    left -= len(buf)
-            if left:
-                raise ConnectionError("upload stopped early")
-            part.rename(target)
-        except (OSError, ConnectionError) as e:
-            part.unlink(missing_ok=True)
-            return self.fail(500, f"could not copy the video into the library: {e}")
-        try:
-            job = rebuild_job(target.name, translate=q.get("translate") == "1")
-        except RuntimeError as e:                             # the setup started meanwhile: the copy stays, as a loose video
+            with import_operation(name) as (lib, target):
+                part = None
+                try:
+                    with tempfile.NamedTemporaryFile(mode="wb", dir=lib, prefix=f".{target.name}.", suffix=".part", delete=False) as f:
+                        part = Path(f.name)
+                        left = size
+                        while left > 0 and (buf := self.rfile.read(min(1 << 20, left))):
+                            f.write(buf)
+                            left -= len(buf)
+                    if left:
+                        raise ConnectionError("upload stopped early")
+                    part.rename(target)
+                except (OSError, ConnectionError) as e:
+                    if part:
+                        part.unlink(missing_ok=True)
+                    return self.fail(500, f"could not copy the video into the library: {e}")
+                try:
+                    job = rebuild_job(target.name, translate=q.get("translate") == "1")
+                except (RuntimeError, FileNotFoundError) as e:
+                    return self.fail(409, str(e))
+                job.kind = "add"                              # like a new link: the app opens it when it is done
+                return self.send_json(job.public())
+        except RuntimeError as e:
             return self.fail(409, str(e))
-        job.kind = "add"                                      # like a new link: the app opens it when it is done
-        return self.send_json(job.public())
 
     # ---- POST (needs X-Kit: other sites cannot send that header without a preflight we never grant)
     def do_POST(self):
@@ -477,6 +514,8 @@ class Handler(BaseHTTPRequestHandler):
                 with STARTING:
                     if ANKI_ACTIVE:
                         return self.fail(409, "Wait for Anki audio and word processing to finish, then run the setup.")
+                    if IMPORTS_ACTIVE:
+                        return self.fail(409, "Wait for the video import to finish, then run the setup.")
                     if busy := next((j for j in JOBS if j.state in ("queued", "running")), None):
                         return self.fail(409, f"Wait for “{busy.label}” to finish, then run the setup.")
                     try:
@@ -556,7 +595,7 @@ def problem_report(q: dict) -> dict:
     problem = report.explain(log) or {"code": "SETUP-FAILED" if setup else "JOB-FAILED" if job else "", "hint": ""}
     st = engine.STATE
     models = ", ".join(f"{m['id'].split('/')[-1]} {'ready' if m['ready'] else 'missing'}" for m in engine.models.status())
-    runtime = engine.runtimes.status() if engine.WINDOWS else None
+    runtime = engine.runtimes.status(probe=False) if engine.WINDOWS else None
     summary = [f"Pianpian {VERSION}", f"engine: {'ok' if st['engine'] else 'not working' if st['engine'] is False else 'not checked'}"
                f"{'' if st['current'] in (None, True) else ', out of date'}", f"models: {models}",
                *([f"runtime: {runtime['label']} ({', '.join(k + ' ' + ('ready' if v['ready'] else 'missing') for k, v in runtime['tools'].items())})"]
@@ -607,6 +646,8 @@ class LocalServer(ThreadingHTTPServer):
 
 def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     """Start the job worker and bind the server (not yet serving). launcher.py uses this too."""
+    global CLOSING, WORKER
+    CLOSING = engine.CLOSING = False
     if not LOG.handlers:                                      # one rotating log: at most 3 × 1 MB
         h = RotatingFileHandler(engine.logs_dir() / "server.log", maxBytes=1 << 20, backupCount=2, encoding="utf-8")
         h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
@@ -619,8 +660,22 @@ def start(port: int = 8770, library: Path | None = None) -> ThreadingHTTPServer:
     os.environ.update(engine.pipeline_env())                      # the pipeline's jobs find the models and dictionary there
     threading.Thread(target=lambda: (engine.check(), keep_up_to_date()), daemon=True).start()
     srv = LocalServer(("127.0.0.1", port), Handler)            # raises OSError if the port is taken
-    threading.Thread(target=worker, daemon=True).start()
+    WORKER = threading.Thread(target=worker, daemon=True)
+    WORKER.start()
     return srv
+
+
+def stop(srv: ThreadingHTTPServer) -> None:
+    """Stop HTTP admission, the active process trees and the job worker."""
+    global CLOSING
+    with STARTING:
+        CLOSING = True
+    engine.stop_processes()
+    QUEUE.put(None)
+    srv.shutdown()
+    srv.server_close()
+    if WORKER:
+        WORKER.join(timeout=10)
 
 
 def main():
@@ -646,6 +701,8 @@ def main():
         srv.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped.")
+    finally:
+        stop(srv)
 
 
 if __name__ == "__main__":

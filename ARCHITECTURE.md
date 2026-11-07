@@ -270,11 +270,11 @@ Library entries and served files must resolve inside the library root; links lea
 The root itself may be a link. App assets are checked by path components and extension instead of
 resolving their bundle links. Windows device names and trailing dots/spaces are refused. Commands run
 without a shell. Setup and queued pipeline/downloader jobs exclude each other under one lock (409
-on conflict). Imports check before copying and again when queueing; if setup starts during a copy,
-the copied file stays as a loose video and the request returns 409. Anki requests run outside this queue,
-but preview/export, word retiming and cached-audio serving register under the same exclusion lock:
-setup cannot start while any is active, and they return 409 while setup runs. Each operation unregisters
-even on failure; the lock is not held during audio processing or network requests.
+on conflict). Each import reserves a case-folded destination and registers from before its unique temporary
+copy until its job is queued; concurrent aliases get a numbered name and setup returns 409 throughout.
+Anki requests run outside this queue, but preview/export, word retiming and cached-audio serving register
+under the same exclusion lock: setup cannot start while any is active, and they return 409 while setup runs.
+Each operation unregisters even on failure; the lock is not held during audio processing or network requests.
 
 ## The page
 
