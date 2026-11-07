@@ -26,7 +26,7 @@ TITLE = "片片的一天 · A day with Pianpian"
 EN_FIXES = {"1": "Hello, my name is Pianpian. I'm a slice of watermelon."}
 LEAD, GAP, TAIL, FADE, FPS = 1.2, 0.9, 3.0, 0.5, 25     # the tail lets the music's last chord ring
 MUSIC = 0.20                                             # the music's level under the voice (it also ducks when he speaks)
-KEEP = {"source.mp4", "title.txt", "thumb.jpg", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "zh.words.json", "zh.align.json",
+KEEP = {"source.mp4", "title.txt", "thumb.jpg", "poster.jpg", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "zh.words.json", "zh.align.json",
         "zh.lines.txt", "en.lines.txt", ".english-auto", ".from-whisper", ".split"}
 BROWSERS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
             "/Applications/Chromium.app/Contents/MacOS/Chromium"]
@@ -115,7 +115,8 @@ def main():
         en.write_text("\n".join(fixed) + "\n", encoding="utf-8")
         (OUT / ".english-auto").unlink(missing_ok=True)
         run(py, ROOT / "pipeline" / "study.py", OUT / "source.mp4")          # imports the fixed English, links the words again
-    run("ffmpeg", "-v", "error", "-y", "-ss", "4", "-i", OUT / "source.mp4", "-frames:v", "1", "-vf", "scale=480:-2", OUT / "thumb.jpg")
+    for name, width in (("thumb", 480), ("poster", 1280)):
+        run("ffmpeg", "-v", "error", "-y", "-ss", "4", "-i", OUT / "source.mp4", "-frames:v", "1", "-vf", f"scale={width}:-2", OUT / f"{name}.jpg")
     for p in OUT.iterdir():
         if p.name not in KEEP:
             p.unlink()

@@ -233,7 +233,7 @@ const player = SubPlayer.mount($('player'), {
 let videos = [], current = null, lastJobs = [];
 let selection;
 const remembered = key => { try { return localStorage.getItem(key); } catch { return null; } };
-const thumbnail = v => v && v.kind === 'folder' && v.video ? LIB + encodeURIComponent(v.id) + '/thumb.jpg' : '';
+const poster = v => v && v.kind === 'folder' && v.video ? LIB + encodeURIComponent(v.id) + '/poster.jpg' : '';
 
 /* ---------- the two panels: same component, one function (left = library, right = transcript) ---------- */
 const isOpen = side => !document.documentElement.classList.contains(side + '-closed');
@@ -320,7 +320,7 @@ async function select(id, keepPlayer) {
   selection?.abort();
   const request = selection = new AbortController(), signal = request.signal;
   const updating = keepPlayer && current?.id === id;
-  if (!updating) player.begin({ poster: thumbnail(videos.find(v => v.id === id)), retry: () => select(id) });
+  if (!updating) player.begin({ poster: poster(videos.find(v => v.id === id)), retry: () => select(id) });
   try {
     const v = await api('/api/videos/' + encodeURIComponent(id), undefined, signal);
     if (signal.aborted) return;
@@ -552,7 +552,7 @@ if (OFFLINE) {
   window.addEventListener('hashchange', () => { const id = hashId(); if (id) select(id); });
   async function start() {
     player.begin({ message: DEMO ? 'Loading demo…' : 'Loading library…',
-      poster: DEMO ? LIB + 'pianpian-day/thumb.jpg' : '', retry: start });
+      poster: DEMO ? LIB + 'pianpian-day/poster.jpg' : '', retry: start });
     $('lib').textContent = 'Loading library…';
     try {
       if (!DEMO) {                                      // first run, or an engine update: the setup page asks first

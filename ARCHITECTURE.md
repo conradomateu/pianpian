@@ -135,12 +135,13 @@ on the right (T). `assets/player.js` is the player, `assets/kit.css` the design 
 The shared player owns loading, buffering and retry feedback. The app owns library selection:
 new selections cancel older requests. The video starts loading alongside the subtitles, dictionary
 and alignment data; late study data is attached without restarting playback. A subtitle failure
-offers a separate retry while the video remains playable. Existing thumbnails appear while
-opening a video; buffering keeps the current frame visible.
+offers a separate retry while the video remains playable. The player uses a separate 1280px-wide
+`poster.jpg`; the library keeps its 480px-wide `thumb.jpg`. The local server generates either image
+on demand from the video and caches it in the video folder. Buffering keeps the current frame visible.
 
 Playback uses the browser's progressive MP4 support, with HTTP byte ranges on both GitHub Pages
 and the local server. `preload="metadata"` hints at a small initial download; the browser decides
-how much to buffer. The self-made demo has its MP4 index first (`faststart`) and a 6.7 KB thumbnail.
+how much to buffer. The self-made demo has its MP4 index first (`faststart`) and ships both images.
 New links still download through yt-dlp before processing; this does not stream an unfinished download.
 
 Library playback positions and the last opened video are saved in browser local storage. Reopening
