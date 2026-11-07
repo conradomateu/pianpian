@@ -1,6 +1,7 @@
 # On main: keeps a "release v0.x.y" pull request up to date (version + CHANGELOG from feat:/fix: commits).
-# Merging it tags the version and creates the GitHub release; then the app is built on Apple Silicon and
-# Pianpian-macOS.dmg and .zip are attached to that release, and the website is rebuilt so its Download button points at them.
+# Merging it tags the version and creates the GitHub release; then the apps are built on Apple Silicon and
+# windows-latest, their files are attached to that release, and the website is rebuilt so its Download button
+# points at them.
 # Needs: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
 name: release-please
 on:
@@ -31,5 +32,14 @@ jobs:
     permissions:
       contents: write
       actions: write
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+
+  windows:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/windows.yml
+    permissions:
+      contents: write
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}

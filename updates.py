@@ -56,6 +56,11 @@ def newer(latest: str, current: str) -> bool:
     return current != "dev" and version_tuple(latest) > version_tuple(current)
 
 
+def _assets() -> tuple[str, ...]:
+    """The release files a person opens on this platform, best first; without them the card links the release page."""
+    return ("Pianpian-Windows-Setup.exe", "Pianpian-Windows.zip") if engine.WINDOWS else ("Pianpian-macOS.dmg", "Pianpian-macOS.zip")
+
+
 def check_app(current: str, force: bool = False) -> dict | None:
     """The latest release, if it is newer than `current`: {version, url, notes, download}. Asks GitHub once a day."""
     with LOCK:
@@ -64,9 +69,9 @@ def check_app(current: str, force: bool = False) -> dict | None:
             try:
                 req = Request(f"https://api.github.com/repos/{report.REPO}/releases/latest", headers={"Accept": "application/vnd.github+json"})
                 rel = json.load(urlopen(req, timeout=10))
-                # the DMG is what a person opens and drags to Applications; older releases only have the zip
-                files = {a["name"].rsplit(".", 1)[-1]: a["browser_download_url"] for a in rel.get("assets", []) if "-macOS." in a["name"]}
-                asset = None if engine.WINDOWS else files.get("dmg") or files.get("zip")
+                # what a person opens: the DMG on macOS (older releases only have the zip), the installer on Windows
+                urls = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+                asset = next((urls[n] for n in _assets() if n in urls), None)
                 state["app"] = {"version": clean_version(rel["tag_name"]), "url": rel["html_url"], "download": asset,
                                 "notes": "\n".join((rel.get("body") or "").splitlines()[:12])}
             except (OSError, ValueError, KeyError):
@@ -74,8 +79,8 @@ def check_app(current: str, force: bool = False) -> dict | None:
             state["appChecked"] = time.time()
             _save(state)
         app = state.get("app")
-        if app and engine.WINDOWS:
-            app = {**app, "download": None}                   # also discard Mac assets cached by earlier Windows builds
+        if app and (app.get("download") or "").rsplit("/", 1)[-1] not in _assets():
+            app = {**app, "download": None}                   # a cache from an older build may hold the other platform's file
     return app if app and newer(app["version"], current) else None
 
 

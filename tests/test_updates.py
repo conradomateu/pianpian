@@ -29,7 +29,7 @@ def test_versions():
 
 def test_github_is_asked_once_a_day(monkeypatch, tmp_path):
     u = fresh(monkeypatch, tmp_path)
-    monkeypatch.setattr(u.engine, "WINDOWS", False)
+    monkeypatch.setattr(u.engine, "WINDOWS", False)              # this release has only the macOS files
     calls = []
 
     def fake(req, timeout):
@@ -58,6 +58,35 @@ def test_windows_update_never_offers_a_mac_asset_even_from_cache(monkeypatch, tm
     monkeypatch.setattr(u, "urlopen", lambda *a, **k: (_ for _ in ()).throw(AssertionError("cached result must not fetch")))
     result = u.check_app("0.2.0")
     assert result["download"] is None and result["url"] == release["html_url"]
+
+
+def test_windows_gets_the_installer(monkeypatch, tmp_path):
+    u = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(u.engine, "WINDOWS", True)
+
+    def fake(req, timeout):
+        body = {"tag_name": "pianpian-v0.3.0", "html_url": "https://github.com/x/y/releases/tag/pianpian-v0.3.0", "body": "",
+                "assets": [{"name": "Pianpian-macOS.dmg", "browser_download_url": "https://example.com/Pianpian-macOS.dmg"},
+                           {"name": "Pianpian-Windows.zip", "browser_download_url": "https://example.com/Pianpian-Windows.zip"},
+                           {"name": "Pianpian-Windows-Setup.exe", "browser_download_url": "https://example.com/Pianpian-Windows-Setup.exe"}]}
+        return io.BytesIO(json.dumps(body).encode())
+    monkeypatch.setattr(u, "urlopen", fake)
+    assert u.check_app("0.2.0")["download"].endswith("Pianpian-Windows-Setup.exe")
+
+
+def test_windows_takes_the_zip_and_the_mac_keeps_its_cache(monkeypatch, tmp_path):
+    u = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(u.engine, "WINDOWS", True)
+    release = {"tag_name": "pianpian-v0.3.0", "html_url": "https://example.test/release",
+               "assets": [{"name": "Pianpian-Windows.zip", "browser_download_url": "https://example.test/dl/Pianpian-Windows.zip"}]}
+    monkeypatch.setattr(u, "urlopen", lambda *a, **k: io.BytesIO(json.dumps(release).encode()))
+    assert u.check_app("0.2.0")["download"] == "https://example.test/dl/Pianpian-Windows.zip"
+    state = u._load()
+    state["app"]["download"] = "https://example.test/dl/Pianpian-macOS.dmg"
+    u._save(state)
+    assert u.check_app("0.2.0")["download"] is None                # a Mac file cached by an older build is not offered
+    monkeypatch.setattr(u.engine, "WINDOWS", False)                # the same cache read by the Mac build keeps its DMG
+    assert u.check_app("0.2.0")["download"] == "https://example.test/dl/Pianpian-macOS.dmg"
 
 
 def test_outdated_models_are_found(monkeypatch, tmp_path):

@@ -11,6 +11,7 @@ Chinese, pinyin and English subtitles for any Bilibili or YouTube video, made on
 [![Release](https://img.shields.io/github/v/release/conradomateu/pianpian?sort=semver&color=DE3B26)](https://github.com/conradomateu/pianpian/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/conradomateu/pianpian/total?color=0E8A63)](https://github.com/conradomateu/pianpian/releases)
 [![macOS 14+ · Apple Silicon](https://img.shields.io/badge/macOS_14+-Apple_Silicon-17130F?logo=apple)](#install)
+[![Windows 11 · x64](https://img.shields.io/badge/Windows_11-x64-17130F)](#install)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-8A7F74)](LICENSE)
 
@@ -55,23 +56,25 @@ And also:
 
 **Needs** a Mac with Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, and about 4 GB of disk.
 
-### Windows (from source)
+### Windows
 
-The Windows installer is separate work. From a checkout:
+1. Download **Pianpian-Windows-Setup.exe** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest) and run it. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If Windows SmartScreen warns about the installer (it isn't signed with a paid certificate): **More info → Run anyway**.
+2. The first start asks where to keep your videos and its tools, then downloads them once, with progress: its engine and the speech and translation models. From mainland China it picks faster mirrors by itself.
 
-```powershell
-git clone https://github.com/conradomateu/pianpian && cd pianpian
-python -m venv .venv
-.venv\Scripts\python -m pip install uv
-python dev.py engine
-python dev.py app        # a native window, or: python dev.py serve for a browser tab
-```
-
-**Needs** Windows x64, Python 3.12 or newer, Git, and the WebView2 runtime. Windows 10 is not tested.
+**Needs** Windows 11 x64 (Windows 10 is not tested) and the WebView2 runtime, which Windows 11 includes;
+on older systems install the free [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) first.
 Pinned models and CUDA runtime archives total about 4.1 GB to download, plus Python and its packages;
 allow extra disk space for installation. NVIDIA uses CUDA; other detected Vulkan GPUs use Vulkan for translation and CPU for
 speech. GPU startup failures retry once on CPU. Models come from ModelScope, then Hugging Face and
 hf-mirror.com; runtime binaries come from GitHub, with `PIANPIAN_GITHUB_MIRROR` as an opt-in proxy prefix.
+
+From a checkout instead: `git clone https://github.com/conradomateu/pianpian`, then `pip install uv`,
+`python dev.py engine` and `python dev.py app` (needs Python 3.12 or newer and Git).
+
+**Installer tested on 7 Nov 2026** (Windows 11 25H2 x64): built with `python dev.py build` (PyInstaller
+plus Inno Setup 6), installed per-user with no admin rights, the installed app opened its WebView2
+window and served the app, and the uninstaller removed it cleanly. The install was silent; the
+installer's own wizard and SmartScreen's warning were not exercised.
 
 **Reported test on 24 Oct 2026:** the demo pipeline ran on Windows 11 Pro 25H2, Ryzen 9 7940HS,
 16 GB RAM, RTX 4060 Laptop 8 GB, driver 591.74. That result predates the rewritten integration;
@@ -96,7 +99,6 @@ python dev.py engine
 python dev.py app
 ```
 
-The Windows update notice links here; the downloadable DMG and ZIP are for macOS.
 The full first-run setup console watch was still pending in the 7 Nov 2026 acceptance report.
 
 Updates: the app tells you when a new version is out, and keeps its video downloader fresh on its own.
@@ -139,7 +141,7 @@ On Windows use `python` instead of `python3`; `dev.py engine` installs the MLX-f
 | Command | Does |
 |---|---|
 | `python3 dev.py app` | A dev `Pianpian.app` in `~/Applications` that runs this checkout (Windows: `launcher.py`) |
-| `python3 dev.py build` | The real `dist/Pianpian.app` and its zip, as releases ship it (macOS) |
+| `python3 dev.py build` | The release build in `dist/`: the app and its zip (macOS), the installer and its zip (Windows) |
 | `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8765 |
 | `python3 dev.py shots` | The screenshots above, taken from the demo |
 | `python3 dev.py lock` | Pin the engine's packages (both platforms) and the models again |

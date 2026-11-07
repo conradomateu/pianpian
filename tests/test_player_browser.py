@@ -134,17 +134,18 @@ def navigate(c, url):
     wait(c, "!window.__leaving && document.readyState === 'complete'")
 
 
-@pytest.mark.parametrize("platform,label", [("win32", "Update from source"), ("darwin", "Download")])
-def test_update_action_matches_the_server_platform(browser, platform, label):
+# the server (updates.check_app) sends only this platform's file, or none: then the card links the release page
+@pytest.mark.parametrize("platform,download", [("win32", "https://example.test/Pianpian-Windows-Setup.exe"), ("win32", None),
+                                               ("darwin", "https://example.test/Pianpian-macOS.dmg")])
+def test_update_action_matches_the_server_platform(browser, platform, download):
     c, url, handler = browser
     handler.platform = platform
-    handler.update = {"version": "0.2.0", "url": "https://example.test/release", "download": "https://example.test/mac.dmg"}
+    handler.update = {"version": "0.2.0", "url": "https://example.test/release", "download": download}
     navigate(c, url + "/app.html")
-    wait(c, f"!document.querySelector('#upd').hidden && document.querySelector('#upddl').textContent === {json.dumps(label)}")
+    wait(c, "!document.querySelector('#upd').hidden && document.querySelector('#upddl').textContent === 'Download'")
     c.js("document.querySelector('#upddl').addEventListener('click', e => { window.clickedUpdate = e.currentTarget.href; e.preventDefault(); })")
     click(c, '#upddl')
-    expected = "https://github.com/conradomateu/pianpian#windows-from-source" if platform == "win32" else handler.update["download"]
-    wait(c, f"window.clickedUpdate === {json.dumps(expected)}")
+    wait(c, f"window.clickedUpdate === {json.dumps(download or handler.update['url'])}")
 
 
 def test_resume_retry_and_player_feedback(browser):

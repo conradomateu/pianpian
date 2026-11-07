@@ -292,8 +292,7 @@ function showUpdate(u) {
   if (!u) return;
   $('updtitle').textContent = `Pianpian ${u.version} is out`;
   $('updnotes').href = u.url;
-  $('upddl').href = PLATFORM === 'win32' ? 'https://github.com/conradomateu/pianpian#windows-from-source' : u.download || u.url;
-  $('upddl').textContent = PLATFORM === 'win32' ? 'Update from source' : 'Download';
+  $('upddl').href = u.download || u.url;                // the server only sends this platform's file
   $('upddismiss').onclick = () => { try { localStorage.setItem('pp-update-seen', u.version); } catch {} $('upd').hidden = true; };
 }
 $('ytdlpbtn').onclick = async () => {

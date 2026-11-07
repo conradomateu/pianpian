@@ -1,7 +1,7 @@
 # How Pianpian fits together
 
 ```
-macOS: Pianpian.app (launcher.py, pywebview/WebKit) · Windows: launcher.py (pywebview/WebView2)
+macOS: Pianpian.app (launcher.py, pywebview/WebKit) · Windows: Pianpian.exe (launcher.py, pywebview/WebView2)
   └── server.py   127.0.0.1 only, Python standard library
         ├── serves   app.html · assets/ · the library folder (with byte ranges, so video can seek)
         └── runs     pipeline/study.py with the engine's Python   (one job at a time, live log)
@@ -45,7 +45,7 @@ the server to make subtitles.
   Explicit model/cache/runtime environment overrides are captured at app startup; app-derived paths
   follow the chosen data folder before setup checks the catalog or starts downloads.
 - `updates.py` asks GitHub for the latest release at most once a day and shows a card in the library
-  when there is a newer one. Windows links to source-update instructions; macOS offers its DMG.
+  when there is a newer one, with this platform's file (the DMG on macOS, the installer on Windows) or the release page.
   yt-dlp is updated on its own at most once a week, and from the job card
   when a download fails because the site changed.
 - `report.py` turns a failed job's log into a short code and a hint, and builds the Report link: GitHub's
@@ -71,7 +71,12 @@ break the signature after the first run.
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
 `Pianpian-macOS.dmg` and `Pianpian-macOS.zip`; the website and Mac update card prefer the DMG.
-Windows runs from source; its installer and release assets are separate work.
+`.github/workflows/windows.yml` (`tools/build_app_windows.py`) does the same on windows-latest with
+`Pianpian-Windows-Setup.exe` and `Pianpian-Windows.zip`. The installer is per-user (Inno Setup, no
+admin) and does not bundle the WebView2 runtime — Windows 11 includes it, and the evergreen
+bootstrapper link always serves the newest build, so a pinned hash would go stale. The update card
+(`updates.py`) offers each platform only its own files (Windows: the installer, then the zip) and
+links the release page when a release has none.
 
 Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,
 never in `app.html`, so the app itself sends nothing to it. Real download totals come from the release files' own counters
