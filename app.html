@@ -71,6 +71,22 @@ body { overflow:hidden; }
   .vc input[type=range] { min-width:24px; }
 }
 @media (min-width:601px) and (max-width:900px) { .panel.right { max-height:300px; } }
+/* the website's demo on a phone: the video, three line switches and the transcript under it. The panel toggles,
+   the library and the menus stay in the page, only hidden (the desktop demo and the app keep them); a tapped
+   word's card opens as a sheet at the bottom, since the card on a phone-sized video would cover the lines */
+@media (max-width:600px) {
+  .demo .ptoggle, .demo .panel.left, .demo .panel.right .panelhead, .demo .pbar > :not(.quick), .demo .ov > .gl { display:none; }
+  .demo .main { padding:12px 12px 0; }
+  .demo.right-closed .panel.right { display:flex; position:static; opacity:1; transform:none; pointer-events:auto; }
+  .demo .panel.right { max-height:280px; border-top:1px solid var(--line); }
+  .demo .pbar .quick { display:flex; gap:6px; width:100%; }
+  .demo .pbar .quick .btn { flex:1; justify-content:center; min-height:44px; font-size:13px; }
+  .demo .wsheet { display:flex; }
+  /* a phone-sized video: bigger lines (the Size slider is hidden here), lifted above the control bar while it shows */
+  .demo .stage { --size:7.5 !important; }
+  .demo .ov { transition:transform .25s var(--ease); }
+  .demo .stage.awake .ov, .demo .stage:not(.loaded) .ov { transform:translateY(-44px); }
+}
 
 .panel.left > .lib { flex-shrink:1; }
 .panelhead .logo { display:block; }
@@ -195,6 +211,7 @@ const OFFLINE = location.protocol === 'file:';     // opened from disk: no libra
 // app.html?demo: the website's demo. The library is a snapshot in demo/ (tools/build_site.py writes it with
 // the server's own code), and whatever needs the engine on a Mac points to the download instead
 const DEMO = new URLSearchParams(location.search).has('demo');
+document.documentElement.classList.toggle('demo', DEMO);   // the phone layout of the website's demo (CSS above)
 const LIB = DEMO ? 'demo/library/' : '/library/';
 const GET_APP = 'https://github.com/conradomateu/pianpian/releases/latest';
 const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac.';

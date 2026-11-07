@@ -198,6 +198,7 @@ footer.site .grow { flex:1; }
   .final { margin-top:64px; padding:36px 16px; }
 }
 @media (max-width:900px) { .demo iframe { height:640px; } }
+@media (max-width:600px) { .demo .window-bar { display:none; } }   /* on a phone the demo is the app itself: no fake window */
 @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .dl, .faq summary::after { transition:none; } .dl:hover { transform:none; } }
 </style>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
@@ -417,6 +418,11 @@ demoFrame.addEventListener('load', () => {
   fitDemo();
 });
 addEventListener('resize', fitDemo);
+/* a tap anywhere else on the page closes the demo's word sheet, as a tap outside it inside the demo does */
+addEventListener('click', e => {
+  const doc = demoFrame.contentDocument;
+  if (doc && !demoFrame.contains(e.target) && doc.querySelector('.wsheet:not([hidden])')) doc.body.click();
+});
 /* the header gets a hairline once the page scrolls */
 const head = document.querySelector('header.top');
 addEventListener('scroll', () => { head.style.borderBottomColor = scrollY > 8 ? 'var(--line)' : 'transparent'; }, { passive: true });
