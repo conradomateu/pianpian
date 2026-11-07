@@ -79,7 +79,7 @@ the server to make subtitles.
 
 `tools/build_app.py` (`dev.py build`) freezes `launcher.py` with PyInstaller into `dist/Pianpian.app`:
 the window, the server, the pages, the pipeline scripts, both locks, `uv`, the OCR helper compiled
-from `ocr_frames.swift`, and a `VERSION` file. About 110 MB, 27 MB zipped. The engine and the models
+from `ocr_frames.swift`, and a `VERSION` file. Measured on 7 Nov 2026: 57 MB of files (bundle links counted once), 27 MB zipped. The engine and the models
 are not inside: the first run installs them. The bundle is signed ad hoc; without a paid Developer ID,
 macOS asks once before opening it. Inside the app, `engine.python()` never falls back to
 `sys.executable` (that would open a second window), and the server checks static paths by name,
@@ -271,7 +271,10 @@ The root itself may be a link. App assets are checked by path components and ext
 resolving their bundle links. Windows device names and trailing dots/spaces are refused. Commands run
 without a shell. Setup and queued pipeline/downloader jobs exclude each other under one lock (409
 on conflict). Imports check before copying and again when queueing; if setup starts during a copy,
-the copied file stays as a loose video and the request returns 409. Anki requests are separate from this queue.
+the copied file stays as a loose video and the request returns 409. Anki requests run outside this queue,
+but preview/export, word retiming and cached-audio serving register under the same exclusion lock:
+setup cannot start while any is active, and they return 409 while setup runs. Each operation unregisters
+even on failure; the lock is not held during audio processing or network requests.
 
 ## The page
 
