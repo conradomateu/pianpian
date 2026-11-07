@@ -92,7 +92,13 @@ def config() -> dict:
 def save_config(**changes) -> dict:
     cfg = {**config(), **{k: v for k, v in changes.items() if v is not None}}
     SUPPORT.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
+    # owner-only (it holds the AnkiConnect key): a new file made 0600, then swapped in whole. On Windows the mode
+    # only sets read-only or not; the user profile's own permissions keep it private there
+    tmp = CONFIG.with_name(CONFIG.name + ".tmp")
+    tmp.unlink(missing_ok=True)
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
+        f.write(json.dumps(cfg, indent=1))
+    os.replace(tmp, CONFIG)
     return cfg
 
 

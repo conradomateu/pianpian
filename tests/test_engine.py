@@ -57,6 +57,17 @@ def test_engine_from_older_requirements_needs_an_update(monkeypatch, tmp_path):
     assert e.check() == {"engine": True, "current": True}
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_settings_are_readable_only_by_their_owner(monkeypatch, tmp_path):
+    # config.json holds the AnkiConnect key: never world-readable, also when an older one was
+    e = fresh(monkeypatch, tmp_path)
+    e.CONFIG.write_text("{}")
+    e.CONFIG.chmod(0o644)
+    e.save_config(library=str(tmp_path / "videos"))
+    assert e.CONFIG.stat().st_mode & 0o777 == 0o600
+    assert e.config()["library"] == str(tmp_path / "videos") and not list(tmp_path.glob("*.tmp"))
+
+
 def test_settings_default_and_persist(monkeypatch, tmp_path):
     e = fresh(monkeypatch, tmp_path)
     assert e.config()["data"] == str(tmp_path)
