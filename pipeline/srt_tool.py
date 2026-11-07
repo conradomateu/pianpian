@@ -351,7 +351,7 @@ def spoken_times(cues: list[dict], whisper: Path) -> None:
 def cmd_retime(a):
     data = json.loads(Path(a.words).read_text(encoding="utf-8"))
     spoken_times(data["cues"], Path(a.whisper))
-    print(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+    print(json.dumps(data, separators=(",", ":")))             # ASCII-safe on Windows consoles; JSON decodes to the same text
 
 
 def cmd_words(a):

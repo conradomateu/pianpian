@@ -264,7 +264,7 @@ def test_links_in_the_library_do_not_lead_out_of_it(tmp_path, monkeypatch):
     (lib / "vid").mkdir(parents=True)
     outside.mkdir()
     (outside / "secret.txt").write_text("secret")
-    (lib / "vid" / "zh.srt").write_text("1\n")
+    (lib / "vid" / "zh.srt").write_bytes(b"1\n")
     (lib / "vid" / "link.srt").symlink_to(outside / "secret.txt")
     (lib / "vid" / "thumb.jpg").symlink_to(outside / "secret.txt")
     (lib / "vid" / "poster.jpg").symlink_to(outside / "new.jpg")       # dangling: ffmpeg must not write through it

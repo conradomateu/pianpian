@@ -34,7 +34,7 @@ def test_tone_segments(pinyin, expression, expected_pinyin, expected_expression)
     if not node:
         pytest.skip('Node required for shared JavaScript helper')
     root = Path(__file__).resolve().parents[1]
-    script = 'global.window = {};\n' + (root / 'assets/player.js').read_text()
+    script = 'global.window = {};\n' + (root / 'assets/player.js').read_text(encoding='utf-8')
     script += f'\nconsole.log(JSON.stringify(window.SubPlayer.toneSegments({json.dumps(pinyin)}, {json.dumps(expression)})));'
     result = subprocess.run([node], input=script, check=True, capture_output=True, text=True, timeout=5)
     segments = json.loads(result.stdout)

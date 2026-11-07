@@ -275,7 +275,7 @@ def test_tones_preserve_escaped_text_and_literal_sentence_matches(service, highl
 
 def test_tone_palette_matches_kit_light_dark_and_is_scoped(service):
     collection, client = service
-    kit = (Path(__file__).resolve().parents[1] / "assets" / "kit.css").read_text()
+    kit = (Path(__file__).resolve().parents[1] / "assets" / "kit.css").read_text(encoding="utf-8")
     parts = [[str(tone), tone] for tone in range(1, 6)]
     client.export("Default", {"Expression": "你好", "Pinyin": "12345"}, "palette", tones={"pinyin": parts})
     value = collection.notes[1000]["fields"]["Pinyin"]["value"]
