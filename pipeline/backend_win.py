@@ -8,7 +8,10 @@ whisper.cpp's JSON offsets are milliseconds; its tokens become "words" here. For
 usually one or two characters, and srt_tool.py spreads each token's time over its characters.
 PIANPIAN_LLAMA_DEVICE (e.g. "Vulkan0" on a hybrid laptop) picks the llama.cpp device: untested, for
 trying things out. Tested on Windows 11 25H2 (build 26200), whisper.cpp b5454 and llama.cpp b11851,
-RTX 4060 Laptop, driver 591.74 (27 Oct 2026); the RapidOCR path has not been run on Windows yet.
+RTX 4060 Laptop, driver 591.74 (27 Oct 2026; acceptance runs 7 Nov 2026, including a forced GPU
+launch failure retrying once on the CPU build). Note: a missing ggml-cuda.dll is not a launch
+failure — both binaries silently run on CPU (whisper logs "no GPU found"); the retry only fires
+when the process cannot start or answer. The RapidOCR path has not been run on Windows yet.
 """
 import json
 import os
@@ -50,7 +53,9 @@ def _segments(data: dict) -> list[dict]:
 def _run_whisper(exe: str, model: Path, audio: Path, base: Path, backend: str) -> None:
     # -mc 0: no conditioning on the previous text, like the MLX path (--condition-on-previous-text False),
     # which avoids repetition loops on long audio; b5454 then also ignores --prompt, and srt_tool.py split
-    # converts to Simplified with zhconv anyway. Punctuation without the prompt: to check (PR #11, item 7).
+    # converts to Simplified with zhconv anyway. On a 16.5-minute Mandarin talk (7 Nov 2026, b5454, RTX 4060):
+    # no repetition loops either way, but -mc 0 had no repeated lines (the default had 2 consecutive, 13 in
+    # all), and punctuation was absent in both (no prompt), so -mc 0 costs nothing and reads cleaner.
     cmd = [exe, "-m", str(model), "-f", str(audio), "-l", "zh", "-ojf", "-of", str(base), "-mc", "0"]
     if backend == "cpu":
         cmd += ["-ng", "-t", str(max(2, (os.cpu_count() or 4) // 2))]
@@ -104,7 +109,8 @@ def _free_port() -> int:
 
 def _start_server(exe: str, model: Path, port: int, backend: str, log) -> subprocess.Popen:
     cmd = [exe, "-m", str(model), "--host", "127.0.0.1", "--port", str(port), "-c", "4096",
-           "--parallel", "1", "--jinja"]               # --jinja: the server applies the GGUF's chat template (to check on a run)
+           "--parallel", "1", "--jinja",              # --jinja: the server applies the GGUF's chat template (verified on a run, 7 Nov 2026)
+           "-lv", "4"]                                # b11851 logs the offload lines only at level 4+ (default 3, checked 7 Nov 2026)
     if backend == "cpu":
         cmd += ["-ngl", "0", "-t", str(max(2, (os.cpu_count() or 4) // 2))]
     else:

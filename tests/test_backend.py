@@ -240,6 +240,7 @@ def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tm
         assert generate("你好", 0.3, 52) == "Hello"
     cmd = procs[0].cmd
     assert "--jinja" in cmd and cmd[cmd.index("-ngl") + 1] == "999"       # the GGUF's chat template, all layers on the GPU
+    assert cmd[cmd.index("-lv") + 1] == "4"                               # b11851 only logs the offload count at level 4+
     assert procs[0].terminated                                            # the server is stopped afterwards
     body = posts[0]
     assert body["messages"] == [{"role": "user", "content": "你好"}]
