@@ -321,7 +321,9 @@ def test_demo_loading_keeps_video_size(browser, width):
     handler.video_gate.clear()
     handler.frame_gate.clear()                 # keep iframe.load pending after the player has rendered
     c.call('Page.navigate', url=url + '/index.html')
-    wait(c, "document.querySelector('.ghost[href=\"#demo\"]')")
+    # clicked while the page was still loading, the hit test sometimes landed on Download: wait until it lands here
+    wait(c, """document.readyState !== 'loading' && (() => { const g = document.querySelector('.ghost[href="#demo"]'), r = g.getBoundingClientRect();
+      return g.contains(document.elementFromPoint(r.x + r.width/2, r.y + r.height/2)); })()""")
     click(c, '.ghost[href="#demo"]')
     wait(c, "document.querySelector('iframe').contentDocument?.querySelector('[data-poster]')?.naturalWidth > 0")
     wait(c, "!document.querySelector('iframe').contentDocument.querySelector('.load-state').hidden")
