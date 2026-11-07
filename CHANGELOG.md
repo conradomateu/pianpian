@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.2.0](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.4...pianpian-v0.2.0) (2026-11-07)
+
+
+### Features
+
+* add Anki export and interactive learning website ([f3205e2](https://github.com/conradomateu/pianpian/commit/f3205e2726bdcdd80d734a05da6e579a49bb3a0f))
+* no primary download on a computer that can run neither build ([f6ef20a](https://github.com/conradomateu/pianpian/commit/f6ef20aa0463305d42342ff03184eb3aadc32850))
+* one primary download button, for the visitor's platform ([b8e5b11](https://github.com/conradomateu/pianpian/commit/b8e5b11b70eb93f42067d040890055c42cd0bc21))
+* phone layout for the website demo ([3d1c33e](https://github.com/conradomateu/pianpian/commit/3d1c33e92ace17dd702a1b821698d98fb831c3d0))
+* space Chinese subtitle words 0.3em apart ([b7995f6](https://github.com/conradomateu/pianpian/commit/b7995f6ac896a6d7ce355b15c9168a81d03c4726))
+* Windows download on the website, ordered for the visitor's computer ([618cc94](https://github.com/conradomateu/pianpian/commit/618cc9464a65939e1a856ba8707e6187ad04da32))
+* Windows installer ([cdb44fc](https://github.com/conradomateu/pianpian/commit/cdb44fcc2fd8e209058d778c013ff78b4fab0fb4))
+
+
+### Bug Fixes
+
+* count bundled files once when reporting Mac app size ([c8b92a9](https://github.com/conradomateu/pianpian/commit/c8b92a9a5be3ac9a93e6df10cc1cc5b77dd0f5e2))
+* escape the Windows paths in engine.py's docstrings ([6067397](https://github.com/conradomateu/pianpian/commit/606739735844abbadd771b69aa70445a640ef493))
+* exclude setup from active Anki media operations ([2a0cec2](https://github.com/conradomateu/pianpian/commit/2a0cec273a193b1f6e6c54f6339cd0342a18bbbb))
+* give every Windows job the GPU build the setup chose ([66cfeb8](https://github.com/conradomateu/pianpian/commit/66cfeb8e6a6b60c8e5da4db9488b797e26db9290))
+* give pinyin words the same 0.3em gap as Chinese words ([18822a5](https://github.com/conradomateu/pianpian/commit/18822a55bac50ceae2a0869e35dd5056bd307e72))
+* harden integrated app and platform downloads ([6f7cf51](https://github.com/conradomateu/pianpian/commit/6f7cf51506ffa23c1e6fc88eb51309823229137d))
+* install on x64 Windows 10+ only, clear old app files on upgrade, one app at a time ([88bd07d](https://github.com/conradomateu/pianpian/commit/88bd07de0d463a1c7f67b6cbde9813d33275e918))
+* integrate current main and close Windows review gaps ([0f6850c](https://github.com/conradomateu/pianpian/commit/0f6850c9de2191917d8dec1b032f0f75f52c9ac8))
+* keep a whole whisper.cpp transcript when the GPU build then fails ([f80c141](https://github.com/conradomateu/pianpian/commit/f80c1411c82aa0ff5ecd37e0b7da144aaa210d66))
+* keep job log lines whole across output chunks ([ab52bd5](https://github.com/conradomateu/pianpian/commit/ab52bd5e836bf71e72eff8e502b83bd77c0887ef))
+* keep mobile word sheets reachable and desktop controls fitted ([e9cde3f](https://github.com/conradomateu/pianpian/commit/e9cde3f32cc921653692e3efee48fc751493e217))
+* keep the setup and the jobs from running at the same time ([9bc0c2c](https://github.com/conradomateu/pianpian/commit/9bc0c2c172c210923aaa1ac76db90445bcdb9d19))
+* keep the words of one OCR line in left-to-right order on Windows ([78bb0a5](https://github.com/conradomateu/pianpian/commit/78bb0a51be8e5d0285cd00b70f68ebbfec6ba17d))
+* keep Windows checks encoding-safe ([5eec2dc](https://github.com/conradomateu/pianpian/commit/5eec2dc0bc78344e36b9d33b162e53a6aa391c7c))
+* let the setup repair an engine that is there but cannot start ([c55a725](https://github.com/conradomateu/pianpian/commit/c55a725c76412307f8ee18d39a49d6b6da1ca3f1))
+* merge the Windows installer and offer each platform its own update file ([92caf14](https://github.com/conradomateu/pianpian/commit/92caf14156efb95c28797dc5e9f1dc7701cc860e))
+* never follow a link out of the library ([28985c1](https://github.com/conradomateu/pianpian/commit/28985c176dfd5b1fb21b41413d619b377062406f))
+* open the website demo on its first subtitle line ([5711d0f](https://github.com/conradomateu/pianpian/commit/5711d0f798c955ce62a3240bb27f38c765cd2015))
+* overwrite existing English lines when re-translating on Windows ([92fc4f1](https://github.com/conradomateu/pianpian/commit/92fc4f1ff348d681811c823a627a8be5bef7c939))
+* print llama-server's last log lines when it dies mid-translation ([f8cb619](https://github.com/conradomateu/pianpian/commit/f8cb6199a47b01df1d5746f4c10dc932e261e50b))
+* rebuild the engine only when its venv is broken, not when a check fails ([aa30ea1](https://github.com/conradomateu/pianpian/commit/aa30ea191ab6cd97411555d56a5d58ba77166fce))
+* redact library names, joined user names and bare timestamps in reports ([8b832c8](https://github.com/conradomateu/pianpian/commit/8b832c83ae449dfecaf95c3fd18121836ac6350c))
+* redact the other ways Windows writes a path in reports ([c954291](https://github.com/conradomateu/pianpian/commit/c954291499590cc222cdf21da897fd2c6e2baf6b))
+* refresh cached word tracks after segmentation upgrades ([50dd556](https://github.com/conradomateu/pianpian/commit/50dd556b3eb429d2de90b9b3843bee5617f44fea))
+* refuse requests for another Host and hide the library from other sites ([c176986](https://github.com/conradomateu/pianpian/commit/c1769865f122e48a141bbc8b20b91abbf137ea82))
+* refuse Windows device names and answer path errors with a status ([3f69151](https://github.com/conradomateu/pianpian/commit/3f6915138b24140cf8d83d597fb2a7645ec32c46))
+* replace a Windows runtime build whole when its pin changes ([5fb4487](https://github.com/conradomateu/pianpian/commit/5fb44878756e51cee5c99e49d492a9462f93a66f))
+* run Anki's audio and retime processes without a console window and in UTF-8 ([049210a](https://github.com/conradomateu/pianpian/commit/049210a29e48c0ac7c1ada8f7d38688c9f1ed23d))
+* run the model's word links only where the backend can align ([47dafca](https://github.com/conradomateu/pianpian/commit/47dafca88f30f4a76cec6fc2548aff640f61cb9e))
+* serialize concurrent settings writes ([1e9a953](https://github.com/conradomateu/pianpian/commit/1e9a95393a3bc930011d6f182deb289527974474))
+* show setup errors before installation starts ([7eebcf3](https://github.com/conradomateu/pianpian/commit/7eebcf31efa8072d4e8e4ef5f1d0a3c06ace1b46))
+* split unknown study compounds and keep import errors private ([0f93d12](https://github.com/conradomateu/pianpian/commit/0f93d127961f797d2ab53bdb014073b3df6b4ac8))
+* start llama-server at -lv 4 so the offload count reaches the job log ([30548ce](https://github.com/conradomateu/pianpian/commit/30548ceb85132a12b0c2a0404a5d82822da2546c))
+* strip Bilibili's locale segment from shared links ([e5e8f93](https://github.com/conradomateu/pianpian/commit/e5e8f93238e94ef7bcd1184e1d0122a67260c368))
+* tailor landing downloads to each platform ([b43a0e0](https://github.com/conradomateu/pianpian/commit/b43a0e0d8b7bcf80f0a5256d2fbd194f6c0d4196))
+* take the downloads along when the setup's data folder changes ([4165099](https://github.com/conradomateu/pianpian/commit/41650996ad5c1d29b4d639e1efc50e28af7f194b))
+* unquote video ids in POST endpoints ([c7fe9d4](https://github.com/conradomateu/pianpian/commit/c7fe9d4616d509b13665854e43ca97d386c32b3b))
+* website shows at once when Google Fonts or Umami are slow or blocked ([c10b3d0](https://github.com/conradomateu/pianpian/commit/c10b3d073852e1c459d76ab9decd10efc70ef315))
+* write config.json readable by its owner only ([5a79245](https://github.com/conradomateu/pianpian/commit/5a792456ce3a8e50fee8f654bc196da8303ed729))
+
 ## [0.1.4](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.3...pianpian-v0.1.4) (2026-11-07)
 
 
