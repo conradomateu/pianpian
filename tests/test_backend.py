@@ -366,6 +366,31 @@ def test_win_translator_cleans_up_when_cpu_retry_fails(monkeypatch, tmp_path, fa
     assert not list(tmp_path.glob("*.log"))
 
 
+def test_win_translator_prints_the_server_log_when_it_dies_mid_run(monkeypatch, tmp_path, capsys):
+    # [simulated on macOS] the server answers /health, then drops the connection: its log tail reaches the job log
+    def start(cmd, stdout, **kw):
+        stdout.write("ggml_cuda: CUDA error: the launch timed out and was terminated\n")
+        stdout.flush()
+        return _Proc(cmd)
+
+    def dead(req, timeout=None):
+        if getattr(req, "full_url", req).endswith("/health"):
+            return _Resp(status=200)
+        raise ConnectionResetError("Remote end closed connection without response")
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "gpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", dead)
+    with pytest.raises(OSError):
+        with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+            generate("你好", 0.0, 10)
+    out = capsys.readouterr().out
+    assert "llama-server stopped answering" in out and "the launch timed out" in out
+    assert not list(tmp_path.glob("*.log"))
+
+
 def test_win_translator_retains_the_offloaded_layer_count(monkeypatch, tmp_path, capsys):
     def start(cmd, stdout, **kw):
         stdout.write("ggml_cuda_init: found 1 CUDA device\nllama_model_load: offloaded 33/33 layers to GPU\n")

@@ -2,7 +2,10 @@
 
 The contract is in backend.py. The pinned binaries come from runtimes.py (CUDA, Vulkan or CPU, picked
 per tool). Failed GPU transcription and translation-server startup are retried once with the CPU
-build. A translation server that fails after startup ends the job; inference is not retried.
+build, except when whisper.cpp exits with an error after writing a whole transcript: that one is kept
+(simulated on macOS only; whether b5454 ever does this is not known). A translation server that fails
+after startup ends the job, after printing its last log lines; inference is not retried. OCR lines are
+rebuilt from RapidOCR's boxes (top to bottom, then left to right).
 
 whisper.cpp's JSON offsets are milliseconds; its tokens become "words" here. For Chinese a token is
 usually one or two characters, and srt_tool.py spreads each token's time over its characters.
@@ -159,6 +162,10 @@ def _wait_ready(proc: subprocess.Popen, port: int) -> bool:
     return False
 
 
+def _tail(log_path: Path, n: int = 30) -> str:
+    return "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-n:])
+
+
 @contextmanager
 def translator(model_dir: str):
     """Hy-MT2 as a GGUF through llama-server, started once for the whole run; yields
@@ -187,16 +194,14 @@ def translator(model_dir: str):
                         proc.wait()
                     proc = None
                 if backend == "cpu":
-                    tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
-                    sys.exit(f"llama-server did not start:\n{tail}")
+                    sys.exit(f"llama-server did not start:\n{_tail(log_path)}")
                 print(f"the {backend} llama build did not start; trying the CPU build", flush=True)
                 backend = "cpu"
                 log.seek(0)
                 log.truncate()
                 proc = _start_server(runtimes.ensure("llama", "cpu"), model, port, backend, log)
                 if not _wait_ready(proc, port):
-                    tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
-                    sys.exit(f"llama-server did not start:\n{tail}")
+                    sys.exit(f"llama-server did not start:\n{_tail(log_path)}")
         lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
         notes = [x.strip() for x in lines if "offload" in x.lower()]
         if not notes:
@@ -211,8 +216,12 @@ def translator(model_dir: str):
                                "stream": False}).encode()
             req = Request(f"http://127.0.0.1:{port}/v1/chat/completions", data=body,
                           headers={"Content-Type": "application/json"})
-            with LOCAL_HTTP.open(req, timeout=300) as r:
-                return json.load(r)["choices"][0]["message"]["content"]
+            try:
+                with LOCAL_HTTP.open(req, timeout=300) as r:
+                    return json.load(r)["choices"][0]["message"]["content"]
+            except OSError:                               # the server died mid-run (a driver reset, out of memory…)
+                print(f"llama-server stopped answering (exit code {proc.poll()}); its last log lines:\n{_tail(log_path)}", flush=True)
+                raise
 
         yield generate
     finally:
