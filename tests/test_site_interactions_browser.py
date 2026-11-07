@@ -93,27 +93,50 @@ def test_landing_examples(browser):  # noqa: F811 (shared pytest fixture)
     assert c.js("parseFloat(getComputedStyle(document.querySelector('.pp-preview .w')).transitionDuration)") <= .00001
 
 
-def test_main_download_buttons_show_both_platforms_and_accept_real_clicks(browser):  # noqa: F811
+def test_mac_shows_only_mac_downloads_and_accepts_real_clicks(browser):  # noqa: F811
     c, url, _ = browser
     navigate(c, url + '/index.html')
-    assert c.js("document.querySelector('header.top .dl').querySelectorAll('svg').length") == 2
+    wait(c, "!document.querySelector('#os-note').hidden")
+    assert c.js("document.querySelectorAll('header.top .dl svg:not([hidden])').length") == 1
+    assert c.js("document.querySelector('header.top .dl svg:not([hidden])').dataset.platform") == 'mac'
+    assert c.js("[...document.querySelectorAll('[data-os]:not([hidden])')].map(a=>a.dataset.os)") == ['mac', 'mac']
     for where in ('hero', 'bottom'):
         selector = f'[data-umami-event-where="{where}"][data-os="mac"]'
         assert c.js(f"""(() => {{ const a = document.querySelector({json.dumps(selector)});
-          return [a.textContent, a.querySelectorAll('svg').length]; }})()""") == ['Download Pianpian', 2]
+          return [a.textContent, a.querySelectorAll('svg').length]; }})()""") == ['Download for Mac', 1]
         c.js(f"document.querySelector({json.dumps(selector)}).addEventListener('click', e => {{ e.preventDefault(); window.downloadClicked = {json.dumps(where)}; }})")
         press(c, selector)
         assert c.js('window.downloadClicked') == where
 
 
-def test_mobile_explains_computer_only_and_highlights_no_download(browser):  # noqa: F811
+def test_windows_shows_only_windows_downloads_and_accepts_real_clicks(browser):  # noqa: F811
+    c, url, _ = browser
+    c.call('Emulation.setUserAgentOverride',
+           userAgent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+           userAgentMetadata={'platform': 'Windows', 'platformVersion': '19.0.0', 'architecture': 'x86',
+                              'bitness': '64', 'mobile': False, 'model': '', 'brands': []})
+    navigate(c, url + '/index.html')
+    wait(c, "!document.querySelector('#os-note').hidden")
+    assert c.js("document.querySelectorAll('header.top .dl svg:not([hidden])').length") == 1
+    assert c.js("document.querySelector('header.top .dl svg:not([hidden])').dataset.platform") == 'windows'
+    assert c.js("[...document.querySelectorAll('[data-os]:not([hidden])')].map(a=>a.dataset.os)") == ['windows', 'windows']
+    for where in ('hero', 'bottom'):
+        selector = f'[data-umami-event-where="{where}"][data-os="windows"]'
+        assert c.js(f"""(() => {{ const a = document.querySelector({json.dumps(selector)});
+          return [a.textContent, a.querySelectorAll('svg').length]; }})()""") == ['Windows releases', 1]
+        c.js(f"document.querySelector({json.dumps(selector)}).addEventListener('click', e => {{ e.preventDefault(); window.downloadClicked = {json.dumps(where)}; }})")
+        press(c, selector)
+        assert c.js('window.downloadClicked') == where
+
+
+def test_mobile_explains_computer_only_and_hides_downloads(browser):  # noqa: F811
     c, url, _ = browser
     c.call('Emulation.setUserAgentOverride', userAgent='Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1')
     c.call('Emulation.setDeviceMetricsOverride', width=390, height=844, deviceScaleFactor=1, mobile=True)
     navigate(c, url + '/index.html')
     wait(c, "!document.querySelector('#os-note').hidden")
     assert 'not phones or tablets' in c.js("document.querySelector('#os-note').textContent")
-    assert c.js("document.querySelectorAll('[data-os].dl').length") == 0
+    assert c.js("document.querySelectorAll('[data-os]:not([hidden])').length") == 0
 
 
 def test_static_landing_without_javascript(browser):  # noqa: F811 (shared pytest fixture)

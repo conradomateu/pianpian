@@ -56,4 +56,5 @@ def test_download_links_only_use_confirmed_release_assets():
         cta = build_site.windows_cta(names, "hero")
         assert f'href="{base}"' in cta and "coming with" not in cta
         assert 'data-os="windows"' in cta and 'class="ghost soon"' in cta
+        assert 'Windows releases</a>' in cta and '<svg' in cta
     assert "Pianpian-Windows-Setup.exe" in build_site.windows_cta(["Pianpian-Windows-Setup.exe"], "hero")

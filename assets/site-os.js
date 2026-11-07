@@ -1,5 +1,5 @@
-/* Landing page: put the visitor's download first and say whether their computer can run Pianpian.
-   Progressive enhancement: both download buttons are always there; this only reorders them and adds a line.
+/* Landing page: show only the visitor's download and say whether their computer can run Pianpian.
+   Progressive enhancement: both buttons work without JavaScript; detection hides the other platform and adds a line.
    What browsers tell (checked 7 Nov 2026 against their docs, not on every device): Chromium gives
    userAgentData and architecture/bitness/platformVersion hints; Safari and Firefox give none, and Safari's
    user agent says "Intel Mac" on Apple Silicon too, so a WebGL renderer name is only a hint. */
@@ -59,27 +59,29 @@
     note.dataset.fits = seen.fits;
     note.hidden = false;
     for (const el of document.querySelectorAll('[data-umami-event="download"]')) el.dataset.umamiEventDetected = seen.os;
-    if (seen.os === 'other') {          // phones, tablets and Linux: explain; do not highlight an incompatible download
-      document.querySelectorAll('[data-os].dl').forEach(a => a.classList.replace('dl', 'ghost'));
+    const head = document.querySelector('header.top .dl');
+    head?.querySelectorAll('[data-platform]').forEach(icon => icon.toggleAttribute('hidden', icon.dataset.platform !== seen.os));
+    if (seen.os === 'other') {          // phones, tablets and Linux: explain; do not offer an incompatible download
+      document.querySelectorAll('[data-os]').forEach(a => { a.hidden = true; a.classList.replace('dl', 'ghost'); });
       return;
     }
     for (const pair of document.querySelectorAll('.cta')) {
-      if (seen.fits === false) {      // this computer can run neither build: no button is the obvious one
-        pair.querySelectorAll('[data-os]').forEach(a => a.classList.replace('dl', 'ghost'));
-        continue;
-      }
+      pair.querySelectorAll('[data-os]').forEach(a => {
+        a.hidden = a.dataset.os !== seen.os;
+        if (seen.fits === false) a.classList.replace('dl', 'ghost');
+      });
+      if (seen.fits === false) continue;  // this computer can run neither build: no button is the obvious one
       const mine = pair.querySelector(`[data-os="${seen.os}"]`);
       if (!mine) continue;
-      pair.querySelectorAll('[data-os]').forEach(a => a.classList.replace('dl', 'ghost'));
       mine.classList.replace('ghost', 'dl');
       mine.classList.remove('soon');   // a releases fallback becomes the primary Windows choice too
       pair.prepend(mine);
     }
     // the header button downloads directly only when this computer is one Pianpian supports or might support
-    const button = cta.querySelector(`a[data-os="${seen.os}"]`), head = document.querySelector('header.top .dl');
+    const button = cta.querySelector(`a[data-os="${seen.os}"]`);
     if (button && seen.fits !== false && head) {
       head.href = button.href;
-      head.dataset.umamiEventOs = seen.os;       // generic Download keeps both platform icons
+      head.dataset.umamiEventOs = seen.os;
     }
   }
 

@@ -33,7 +33,10 @@ def browser(monkeypatch):
     with tempfile.TemporaryDirectory(dir=ROOT / "scratch", prefix="player-test-") as directory:
         dest = Path(directory)
         shutil.copy(ROOT / "app.html", dest)
-        shutil.copy(ROOT / "site" / "index.html", dest / "index.html")
+        landing = (ROOT / "site" / "index.html").read_text()
+        for where in ("hero", "bottom"):
+            landing = landing.replace("{{WINDOWS:" + where + "}}", build_site.windows_cta([], where))
+        (dest / "index.html").write_text(landing)
         shutil.copytree(ROOT / "design" / "icons", dest / "design" / "icons")
         shutil.copytree(ROOT / "assets", dest / "assets")
         shutil.copytree(ROOT / "demo", dest / "demo")

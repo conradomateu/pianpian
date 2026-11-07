@@ -68,7 +68,8 @@ def windows_cta(names: list[str] | None, where: str) -> str:
                 f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases/latest/download/{WINDOWS_FILE}">'
                 f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{WINDOWS}"/></svg>Download for Windows</a>')
     return (f'<a class="ghost soon" data-os="windows" data-umami-event="download" data-umami-event-where="{where}" '
-            f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases">Windows downloads</a>')
+            f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases">'
+            f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{WINDOWS}"/></svg>Windows releases</a>')
 
 
 def version() -> str:
