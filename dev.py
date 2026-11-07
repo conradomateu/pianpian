@@ -69,10 +69,8 @@ def app() -> None:
 
 
 def build() -> None:
-    if WINDOWS:
-        run(UV, "run", "--group", "packaging", "--group", "desktop", "python", "tools/build_app_windows.py")
-    else:
-        run(sys.executable, "tools/build_app.py")
+    # both pin PyInstaller and pywebview in a throwaway environment: the .venv is not used
+    run(sys.executable, "tools/build_app_windows.py" if WINDOWS else "tools/build_app.py")
 
 
 TASKS = {
