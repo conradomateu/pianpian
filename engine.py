@@ -45,8 +45,8 @@ def _support() -> Path:
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
 SUPPORT = _support()
 CONFIG = SUPPORT / "config.json"
-# Capture user overrides before the app publishes its own paths into the worker environment.
-PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME")}
+# Capture user overrides before the app publishes its own paths (and GPU choice) into the worker environment.
+PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME", "PIANPIAN_ACCEL")}
 REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
 RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
@@ -126,11 +126,14 @@ def runtime_dir() -> Path:
 
 
 def pipeline_env() -> dict:
-    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime: set for every
-    job and setup step."""
+    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime, and which GPU build
+    it runs (PIANPIAN_ACCEL: yours, else the one the setup picked): set for every job and setup step."""
     env = {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
     if WINDOWS:
         env["PIANPIAN_RUNTIME"] = str(runtime_dir())
+        # the GPU probes can take 35 s and a job that saw another GPU would download another 1.35 GB build
+        if accel := PATH_OVERRIDES["PIANPIAN_ACCEL"] or config().get("accel"):
+            env["PIANPIAN_ACCEL"] = accel
     return env
 
 
@@ -252,6 +255,11 @@ class Setup:
             self.moves = [(src, dst) for src, dst in zip(before, _moveable())
                           if src != dst and src.is_dir() and not dst.is_relative_to(src)
                           and not (dst.exists() and any(dst.iterdir()))]
+            if WINDOWS and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
+                # decided from this machine's GPU (probed once per app start), not the last saved choice; kept for the jobs
+                os.environ.pop("PIANPIAN_ACCEL", None)
+                save_config(accel=runtimes.backend_for("llama"))
+                os.environ.update(pipeline_env())
             if python() != previous_python:
                 STATE.update(engine=False, current=False)
             self.state, self.error = "running", ""

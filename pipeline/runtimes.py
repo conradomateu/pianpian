@@ -11,6 +11,8 @@ itself goes through models.download(). Backends:
   cuda    NVIDIA GPU (the CUDA 12.4 builds; tested on 27 Oct 2026 with an RTX 4060 Laptop, driver 591.74)
   vulkan  any Vulkan GPU (AMD, Intel, or NVIDIA when CUDA is not chosen)
   cpu     no usable GPU, or PIANPIAN_ACCEL=cpu (also: vulkan / cuda to force one)
+The app's setup probes once and passes its choice to every job as PIANPIAN_ACCEL (engine.pipeline_env()),
+so a job neither waits for the probes nor picks another build than the setup downloaded.
 whisper.cpp has no Vulkan Windows asset in its official release yet, so a Vulkan-only machine uses
 the CPU build for speech and the Vulkan build for translation. That gap is deliberate and visible in
 `status`; a Vulkan whisper.cpp build can be added here once one is pinned.

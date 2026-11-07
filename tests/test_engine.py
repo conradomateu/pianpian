@@ -12,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def fresh(monkeypatch, tmp_path):
     monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))
-    for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME"):
-        monkeypatch.delenv(key, raising=False)
+    for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME", "PIANPIAN_ACCEL"):
+        monkeypatch.setenv(key, "")                           # recorded, so what the setup writes is undone afterwards
+        monkeypatch.delenv(key)
     import engine
     return importlib.reload(engine)
 
@@ -234,6 +235,27 @@ def test_moving_back_never_offers_the_engine_in_use(monkeypatch, tmp_path):
     run_setup(e, None, str(old), [])
     assert e.config()["moved_from"] == [str(new)]
     assert all(not o["path"].startswith(str(old / "engine")) for o in e.SETUP.plan()["old"])
+
+
+def test_the_setup_keeps_the_gpu_choice_for_the_jobs(monkeypatch, tmp_path):
+    # [simulated] the GPU probes (up to 35 s) run once at setup; every job gets the answer as PIANPIAN_ACCEL
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", True)
+    e.STATE.update(engine=True, current=True)
+    monkeypatch.setattr(e.models, "status", lambda: [])
+    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e.Setup, "_run", lambda self: setattr(self, "state", "done"))
+    probes = []
+    monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: probes.append(tool) or "cuda")
+    assert "PIANPIAN_ACCEL" not in e.pipeline_env()
+    run_setup(e, None, None, [])
+    assert e.config()["accel"] == "cuda" and e.pipeline_env()["PIANPIAN_ACCEL"] == "cuda" and len(probes) == 1
+    assert os.environ["PIANPIAN_ACCEL"] == "cuda"            # the server process too: its /api/status needs no probe
+    monkeypatch.setitem(e.PATH_OVERRIDES, "PIANPIAN_ACCEL", "cpu")   # yours wins, and is not probed or saved
+    run_setup(e, None, None, [])
+    assert e.pipeline_env()["PIANPIAN_ACCEL"] == "cpu" and len(probes) == 1 and e.config()["accel"] == "cuda"
+    monkeypatch.setattr(e, "WINDOWS", False)
+    assert "PIANPIAN_ACCEL" not in e.pipeline_env()
 
 
 def test_the_packaged_app_never_writes_bytecode_into_itself(monkeypatch, tmp_path):
