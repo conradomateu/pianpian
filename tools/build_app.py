@@ -109,7 +109,7 @@ def main() -> None:
     zip_path.unlink(missing_ok=True)
     run("ditto", "-c", "-k", "--keepParent", APP, zip_path)       # ditto keeps the bundle's links and signature
     dmg = make_dmg()
-    size = sum(f.stat().st_size for f in APP.rglob("*") if f.is_file())
+    size = sum(f.stat().st_size for f in APP.rglob("*") if f.is_file() and not f.is_symlink())
     print(f"\n{APP.relative_to(ROOT)}: {size / 1e6:.0f} MB · {dmg.relative_to(ROOT)}: {dmg.stat().st_size / 1e6:.0f} MB · "
           f"{zip_path.relative_to(ROOT)}: {zip_path.stat().st_size / 1e6:.0f} MB · v{ver}")
 
