@@ -43,6 +43,12 @@ section { scroll-margin-top:70px; }
   text-decoration:none; font:650 16px var(--body); transition:border-color .16s ease, color .16s ease; }
 .ghost:hover { border-color:var(--red); color:var(--red-fg); }
 .ghost svg { width:19px; height:19px; margin-top:-2px; transition:color .16s ease; }
+.dl[data-os="windows"] svg { width:16px; height:16px; margin-top:0; }
+.dl.small[data-umami-event-os="windows"] svg { width:13px; height:13px; margin-top:0; }
+.cta .soon { font-size:14px; color:var(--fg-2); }
+#download { scroll-margin-top:120px; }
+.os-note { margin:14px auto 0; max-width:60ch; font-size:14px; color:var(--fg-2); text-wrap:balance; }
+.os-note[data-fits="false"] { color:var(--fg); }
 .meta { margin-top:14px; font:12.5px var(--mono); color:var(--fg-2); }
 a:focus-visible, summary:focus-visible, button:focus-visible { outline:2px solid var(--red-fg); outline-offset:4px; }
 
@@ -79,13 +85,13 @@ a:focus-visible, summary:focus-visible, button:focus-visible { outline:2px solid
 .pp-preview .l { line-height:1.8; overflow-wrap:anywhere; }
 .pp-preview .l.zh { font-size:28px; }
 .pp-preview .l.pinyin, .pp-preview .l.en { font-size:18px; }
+.pp-preview .l.zh .w + .w { margin-left:.14em; }   /* + .08em padding on each side = 0.3em between words, as in the app */
 .pp-preview button.w { padding:0 .08em; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 .pp-preview .w:hover { background:var(--red-tint); }
 .pp-preview .w.hl.say { background:var(--red-tint); box-shadow:none; }
 .pp-preview .pp-selection { margin:14px 0 0; border-top:1px solid var(--line); padding-top:12px; color:var(--fg-2); font-size:14px; }
 .pp-preview-compact.cue { padding:0; margin-top:12px; border:0; border-radius:0; background:transparent; }
 .pp-preview-compact .l.zh { font-size:23px; }
-.pp-preview .l.zh .w + .w { margin-left:.14em; }   /* + .08em padding on each side = 0.3em between words, as in the app */
 .pp-preview-compact .l.pinyin { font-size:16px; }
 .pp-preview-compact .l.en { font-size:14.5px; }
 .pp-words .pp-role-pinyin { min-height:22px; margin:0 0 5px; font-size:12px; }
@@ -208,6 +214,7 @@ footer.site .grow { flex:1; }
 <script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
 <script defer src="assets/player.js"></script>
 <script defer src="assets/site-interactions.js"></script>
+<script defer src="assets/site-os.js"></script>
 </head>
 <body>
 <header class="top"><div class="wrap in">
@@ -219,22 +226,19 @@ footer.site .grow { flex:1; }
   <a class="link hide-s" href="#anki">Anki</a>
   <a class="link hide-s" href="#faq">FAQ</a>
   <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
-  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download</a>
+  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="#download">Download</a>
 </div></header>
 
 <main class="wrap">
   <div class="hero">
     <h1>Watch Chinese. Click any word.</h1>
     <p class="lede">Chinese, pinyin and English subtitles for the videos you choose.<br>AI transcription and translation, on your computer.</p>
-    <div class="cta">
-      <a class="dl" id="download" data-umami-event="download" data-umami-event-where="hero" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
-        Download for Mac
-      </a>
-      <a class="ghost" href="#demo">Try the demo</a>
+    <div class="cta" id="download">
+      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="hero" data-umami-event-os="mac" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
+      {{WINDOWS:hero}}
     </div>
-    <div class="meta">Free and <a href="https://github.com/{{REPO}}">open source</a> · Apple Silicon · macOS 14+</div>
+    <p class="os-note" id="os-note" role="status" hidden></p>
+    <div class="meta">Free and <a href="https://github.com/{{REPO}}">open source</a> · Mac (Apple Silicon) · Windows 11 x64</div>
     <section class="platforms" aria-label="Video sources">
       <ul class="platforms-list">
         <li><img src="assets/platforms/bilibili.svg" width="36" height="36" alt="Bilibili"></li>
@@ -326,11 +330,11 @@ footer.site .grow { flex:1; }
         <li>
           <h3><span aria-hidden="true">1</span> Select words</h3>
           <div class="anki-source" lang="zh-Hans"><ruby>我<rt><span class="t3">wǒ</span></rt></ruby><ruby>每天<rt><span class="t3">měi</span><span class="t1">tiān</span></rt></ruby><mark><ruby>学习<rt><span class="t2">xué</span><span class="t2">xí</span></rt></ruby><ruby>中文<rt><span class="t1">Zhōng</span><span class="t2">wén</span></rt></ruby></mark>。</div>
+          <p class="anki-legend">Pinyin colours = tones · underline = your selection</p>
           <p>I study Chinese every day.</p>
           <dl class="anki-choices">
             <div><dt>Word</dt><dd lang="zh-Hans">学习</dd></div>
             <div><dt>Group</dt><dd><mark lang="zh-Hans">学习中文</mark><small>Selected in this example</small></dd></div>
-          <p class="anki-legend">Pinyin colours = tones · underline = your selection</p>
             <div><dt>Sentence</dt><dd lang="zh-Hans">我每天学习中文。</dd></div>
           </dl>
           <div class="anki-transfer">Preview selection <svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8h19m-6-5 6 5-6 5"/></svg></div>
@@ -387,10 +391,8 @@ footer.site .grow { flex:1; }
     <h2>One slice a day.</h2>
     <p lang="zh-Hans">一天一片。</p>
     <div class="cta">
-      <a class="dl" data-umami-event="download" data-umami-event-where="bottom" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
-        Download for Mac
-      </a>
+      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="bottom" data-umami-event-os="mac" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
+      {{WINDOWS:bottom}}
       <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>
   </div>

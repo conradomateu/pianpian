@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 from report import REPO  # noqa: E402  (one place for the repository name)
 sys.path.insert(0, str(ROOT / "tools" / "demo"))
 from scenes import APPLE  # noqa: E402  (the same logo as on the demo video's button)
+WINDOWS = "M3 3h8.5v8.5H3zm9.5 0H21v8.5h-8.5zM3 12.5h8.5V21H3zm9.5 0H21V21h-8.5z"  # a plain four-pane glyph
 
 
 def site_url() -> str:
@@ -39,17 +40,34 @@ def site_url() -> str:
     return f"https://{owner}.github.io/{name}/"
 
 
-def download_file() -> str:
-    """The file the Download button points at: the DMG once the latest release has one (people open it and drag the app
-    to Applications), else the zip every release has. Asked at build time, so the button never points at nothing."""
+def release_files() -> list[str] | None:
+    """The file names in the latest release, or None when GitHub can't be asked (offline, rate limit)."""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     req = Request(f"https://api.github.com/repos/{REPO}/releases/latest",
                   headers={"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})})
     try:
-        names = [a["name"] for a in json.load(urlopen(req, timeout=10)).get("assets", [])]
+        return [a["name"] for a in json.load(urlopen(req, timeout=10)).get("assets", [])]
     except (OSError, ValueError, KeyError):
-        return "Pianpian-macOS.zip"
-    return "Pianpian-macOS.dmg" if "Pianpian-macOS.dmg" in names else "Pianpian-macOS.zip"
+        return None
+
+
+def download_file(names: list[str] | None) -> str:
+    """The file the Mac button points at: the DMG once the latest release has one (people open it and drag the app
+    to Applications), else the zip every release has. Asked at build time, so the button never points at nothing."""
+    return "Pianpian-macOS.dmg" if names and "Pianpian-macOS.dmg" in names else "Pianpian-macOS.zip"
+
+
+WINDOWS_FILE = "Pianpian-Windows-Setup.exe"
+
+
+def windows_cta(names: list[str] | None, where: str) -> str:
+    """The Windows button, only when the latest release has the installer (unknown counts as no); else a line
+    pointing at the releases page."""
+    if names and WINDOWS_FILE in names:
+        return (f'<a class="dl" data-os="windows" data-umami-event="download" data-umami-event-where="{where}" '
+                f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases/latest/download/{WINDOWS_FILE}">'
+                f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{WINDOWS}"/></svg>Download for Windows</a>')
+    return f'<a class="soon" href="https://github.com/{REPO}/releases">Windows: coming with the next release</a>'
 
 
 def version() -> str:
@@ -94,7 +112,8 @@ def testimonials() -> str:
 
 
 def main() -> None:
-    ver, download = version(), download_file()
+    ver, names = version(), release_files()
+    download = download_file(names)
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
@@ -115,10 +134,11 @@ def main() -> None:
                 shutil.copy2(f, OUT / f.name)
             else:
                 text = text.replace("{{VERSION}}", ver).replace("{{REPO}}", REPO).replace("{{SITE}}", site_url()).replace("{{DOWNLOAD}}", download).replace("{{APPLE}}", APPLE).replace("{{TESTIMONIALS}}", testimonials())
+                text = re.sub(r"\{\{WINDOWS:(\w+)\}\}", lambda m: windows_cta(names, m[1]), text)
                 (OUT / f.name).write_text(text, encoding="utf-8")
     (OUT / ".nojekyll").touch()                           # serve the files as they are
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
-    print(f"_site/: version {ver}, {size / 1e6:.1f} MB, Download -> {download}")
+    print(f"_site/: version {ver}, {size / 1e6:.1f} MB, Mac -> {download}, Windows -> {WINDOWS_FILE if names and WINDOWS_FILE in names else 'none'}")
 
 
 class RangedHandler(http.server.SimpleHTTPRequestHandler):

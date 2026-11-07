@@ -321,10 +321,8 @@ def test_demo_loading_keeps_video_size(browser, width):
     handler.video_gate.clear()
     handler.frame_gate.clear()                 # keep iframe.load pending after the player has rendered
     c.call('Page.navigate', url=url + '/index.html')
-    # clicked while the page was still loading, the hit test sometimes landed on Download: wait until it lands here
-    wait(c, """document.readyState !== 'loading' && (() => { const g = document.querySelector('.ghost[href="#demo"]'), r = g.getBoundingClientRect();
-      return g.contains(document.elementFromPoint(r.x + r.width/2, r.y + r.height/2)); })()""")
-    click(c, '.ghost[href="#demo"]')
+    wait(c, "document.readyState !== 'loading'")
+    c.js("document.querySelector('#demo').scrollIntoView({behavior:'instant'})")   # the lazy iframe loads once it is in view
     wait(c, "document.querySelector('iframe').contentDocument?.querySelector('[data-poster]')?.naturalWidth > 0")
     wait(c, "!document.querySelector('iframe').contentDocument.querySelector('.load-state').hidden")
     assert c.js("getComputedStyle(document.querySelector('iframe')).opacity") == '1'
@@ -352,7 +350,7 @@ def test_mobile_demo_layout(browser):
     c, url, _ = browser
     c.call('Emulation.setDeviceMetricsOverride', width=390, height=844, deviceScaleFactor=1, mobile=True)
     navigate(c, url + '/index.html')
-    click(c, '.ghost[href="#demo"]')
+    c.js("document.querySelector('#demo').scrollIntoView({behavior:'instant'})")
     wait(c, "document.querySelector('iframe').contentDocument?.querySelector('.load-state')?.hidden")
     wait(c, "Math.abs(parseFloat(document.querySelector('iframe').style.height) - document.querySelector('iframe').contentDocument.querySelector('.shell').getBoundingClientRect().height) < 2")
     wait(c, "getComputedStyle(document.querySelector('iframe').contentDocument.querySelector('.vc')).opacity === '1'")
