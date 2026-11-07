@@ -222,6 +222,21 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):                        # quiet: the app shows what matters
         pass
 
+    def own_origins(self) -> set:
+        port = self.server.server_port
+        return {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+    def parse_request(self):
+        # DNS rebinding: a site can point its own name at 127.0.0.1 and then count as same-origin, so the
+        # X-Kit guard would no longer hold. Every request must name this server in its Host header.
+        if not super().parse_request():
+            return False
+        if (self.headers.get("Host") or "").lower() not in self.own_origins():
+            self.close_connection = True                     # its body, if any, is never read
+            self.fail(403, "wrong Host header")
+            return False
+        return True
+
     # ---- helpers
     def send_json(self, obj, status=200, cors=False):
         body = json.dumps(obj, ensure_ascii=False).encode()
@@ -229,7 +244,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        if cors:                                              # only /api/status: lets a page opened from disk see the server
+        if cors:                                              # only /api/status: lets another page see that the app runs
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
@@ -283,9 +298,13 @@ class Handler(BaseHTTPRequestHandler):
                 if engine.WINDOWS:                    # the backend names only; the GPU probes are cached
                     bw, bl = (engine.runtimes.backend_for(t) for t in ("whisper", "llama"))
                     accel = bw if bw == bl else f"whisper.cpp {bw} · llama.cpp {bl}"
+                origin = self.headers.get("Origin")
+                if origin and origin.lower().removeprefix("http://") not in self.own_origins():
+                    # another site (or a page from disk) may only learn that the app runs, never the library path
+                    return self.send_json({"ok": True, "version": VERSION}, cors=True)
                 return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": engine.STATE["engine"], "current": engine.STATE["current"],
                                        "platform": "win32" if engine.WINDOWS else "darwin", "accel": accel, "browsers": engine.installed_browsers(),
-                                       "busy": busy, "update": UPDATE.get("app")}, cors=True)
+                                       "busy": busy, "update": UPDATE.get("app")})
             if path == "/api/videos":
                 return self.send_json(library())
             if path == "/api/anki/status":

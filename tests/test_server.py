@@ -176,3 +176,40 @@ def test_job_log_keeps_lines_whole_across_chunks(tmp_path):
     job.feed(b"no newline at the end")
     job.feed(b"", final=True)
     assert job.log[-1] == "no newline at the end"
+
+
+def test_host_header_and_cross_origin_status(tmp_path, monkeypatch):
+    # DNS rebinding: only this server's own Host is served; other sites see that the app runs, not the library path
+    import http.client
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_port
+
+    def get(path, method="GET", **headers):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.putrequest(method, path, skip_host=True)
+        for k, v in headers.items():
+            c.putheader(k.replace("_", "-"), v)
+        c.endheaders()
+        r = c.getresponse()
+        return r.status, r.headers, r.read()
+
+    try:
+        for host in ("rebind.attacker.example:%d" % port, "127.0.0.1", "127.0.0.1:1", "evil.localhost:%d" % port):
+            assert get("/api/videos", Host=host)[0] == 403, host
+        assert get("/api/videos", "POST", Host="rebind.example:%d" % port, X_Kit="1", Content_Length="0")[0] == 403
+        assert get("/api/videos")[0] == 403                     # no Host at all
+        for host in (f"127.0.0.1:{port}", f"LOCALHOST:{port}"):
+            assert get("/api/videos", Host=host)[0] == 200, host
+        full = json.loads(get("/api/status", Host=f"127.0.0.1:{port}")[2])
+        assert full["library"] == str(tmp_path)
+        same = get("/api/status", Host=f"localhost:{port}", Origin=f"http://localhost:{port}")
+        assert json.loads(same[2])["library"] == str(tmp_path) and "Access-Control-Allow-Origin" not in same[1]
+        for origin in ("https://pianpian.app", "null"):
+            status, headers, body = get("/api/status", Host=f"127.0.0.1:{port}", Origin=origin)
+            assert status == 200 and headers["Access-Control-Allow-Origin"] == "*"
+            assert json.loads(body) == {"ok": True, "version": server.VERSION}, origin
+    finally:
+        srv.shutdown()
+        srv.server_close()
