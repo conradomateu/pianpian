@@ -77,10 +77,14 @@ hf-mirror.com; runtime binaries come from GitHub, with `PIANPIAN_GITHUB_MIRROR` 
 16 GB RAM, RTX 4060 Laptop 8 GB, driver 591.74. That result predates the rewritten integration;
 see [PR #11](https://github.com/conradomateu/pianpian/pull/11) for benchmarks and acceptance checks.
 
-**Not tested on Windows as of 31 Oct 2026:** the rewritten source app on a fresh installation,
-Chinese paths through the native window, forced GPU failure, console visibility, a merged
-Bilibili/YouTube download without system ffmpeg, RapidOCR, mainland-China first-run downloads,
-AMD/Intel Vulkan inference, and the long-video comparison with/without whisper.cpp `-mc 0`.
+**Acceptance runs on 7 Nov 2026** (Windows 11 25H2 build 26200, Ryzen 9 7940HS, RTX 4060 Laptop,
+driver 591.74, commit `8db674f` plus two fixes): the source app installed and opened from a clean
+checkout, a job with a Chinese file name completed through the native window, a forced GPU launch
+failure retried once on the CPU builds (whisper and translation) with no leftover processes, no
+console windows flashed during jobs, a YouTube download merged with the bundled engine ffmpeg
+(no system ffmpeg), and on a 16.5-minute Mandarin talk whisper.cpp `-mc 0` repeated less than the
+default context (punctuation was absent in both). RapidOCR, Windows 10, mainland-China first-run
+downloads and AMD/Intel Vulkan inference remain untested.
 Windows ARM64 is unsupported. Model-based English↔Chinese alignment remains MLX-only;
 Windows word links use the dictionary.
 
