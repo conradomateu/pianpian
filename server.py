@@ -282,8 +282,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(problem_report(parse_qs(urlparse(self.path).query)))
             if path == "/api/jobs":
                 return self.send_json([j.public() for j in reversed(JOBS)])
-            if m := re.fullmatch(r"/library/([^/]+)/thumb\.jpg", path):
-                return self.thumb(entry_path(m[1]))
+            if m := re.fullmatch(r"/library/([^/]+)/(thumb|poster)\.jpg", path):
+                return self.thumb(entry_path(m[1]), m[2])
             if m := re.fullmatch(r"/library/([^/]+)(?:/([^/]+))?", path):
                 p = entry_path(m[1])
                 f = p / m[2] if m[2] else p
@@ -302,13 +302,14 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, FileNotFoundError) as e:
             self.fail(404, str(e))
 
-    def thumb(self, p: Path):
+    def thumb(self, p: Path, name: str):
         if p.is_file():
             return self.fail(404, "no thumbnail for a loose file")
-        out = p / "thumb.jpg"
+        out = p / f"{name}.jpg"
+        width = 1280 if name == "poster" else 480
         if not out.exists() and (src := video_in(p)):
             subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
-                            "-vf", "scale=480:-2", str(out)], timeout=30)
+                            "-vf", f"scale={width}:-2", str(out)], timeout=30)
         return self.send_file(out) if out.exists() else self.fail(404, "no thumbnail")
 
     def do_OPTIONS(self):                                     # preflight for /api/status only

@@ -136,6 +136,9 @@ def test_resume_retry_and_player_feedback(browser):
     handler.delay = 1
     click(c, '.item')
     wait(c, "!document.querySelector('.load-state').hidden && document.querySelector('[data-poster]').naturalWidth > 0")
+    assert c.js("document.querySelector('[data-poster]').naturalWidth") == 1280
+    assert c.js("player.video.poster.endsWith('/poster.jpg')")
+    assert c.js("getComputedStyle(document.querySelector('.item .thumb')).backgroundImage.includes('/thumb.jpg')")
     (ROOT / 'scratch' / 'player-loading.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
     handler.delay = 0
     wait(c, "document.querySelector('video').readyState >= 3 && document.querySelector('.load-state').hidden")
@@ -196,6 +199,8 @@ def test_switching_during_loading_and_website(browser):
     navigate(c, url + '/index.html')
     click(c, 'a[href="#demo"]')
     wait(c, "document.querySelector('iframe').contentDocument?.querySelector('[data-poster]')?.naturalWidth > 0")
+    assert c.js("document.querySelector('iframe').contentDocument.querySelector('[data-poster]').naturalWidth") == 1280
+    assert c.js("document.querySelector('iframe').contentDocument.querySelector('video').poster.endsWith('/poster.jpg')")
     assert c.js("document.querySelector('iframe').contentDocument.querySelector('.drop').checkVisibility({visibilityProperty:true})") is False
     wait(c, "document.querySelector('iframe').contentDocument.querySelector('.load-state').hidden")
     assert c.js("document.querySelector('iframe').contentDocument.querySelector('video').paused")

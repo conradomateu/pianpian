@@ -1,12 +1,16 @@
 """The local server: pages, the library API and the guard on writes, on a throwaway library."""
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("PIANPIAN_HOME", tempfile.mkdtemp())   # logs and settings in a throwaway folder, not your ~/Library
@@ -50,5 +54,35 @@ def test_server(tmp_path):
                 raise AssertionError(f"{bad} was served")
             except urllib.error.HTTPError as e:
                 assert e.code == 404, bad
+    finally:
+        srv.shutdown()
+
+
+def test_library_poster_and_thumbnail(tmp_path, monkeypatch):
+    ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("ffmpeg and ffprobe required")
+    monkeypatch.setattr(server.engine, "ffmpeg", lambda: ffmpeg)
+    clip = tmp_path / "clip"
+    clip.mkdir()
+    shutil.copy(Path(__file__).resolve().parents[1] / "demo/library/pianpian-day/source.mp4", clip)
+    srv = server.start(0, library=tmp_path)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}/library/clip/"
+    try:
+        for name, dimensions in (("thumb", "480x270"), ("poster", "1280x720")):
+            image = clip / f"{name}.jpg"
+            with urllib.request.urlopen(base + image.name) as response:
+                assert response.headers["Content-Type"] == "image/jpeg"
+                assert response.read() == image.read_bytes()
+            actual = subprocess.check_output([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                              "stream=width,height", "-of", "csv=s=x:p=0", str(image)], text=True)
+            assert actual.strip() == dimensions
+        # Reusing either image must not regenerate it or overwrite the other size.
+        before = {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in clip.glob("*.jpg")}
+        for image, (_, content) in before.items():
+            with urllib.request.urlopen(base + image.name) as response:
+                assert response.read() == content
+        assert before == {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in before}
     finally:
         srv.shutdown()
