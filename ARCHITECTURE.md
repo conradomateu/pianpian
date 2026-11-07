@@ -60,7 +60,8 @@ the server to make subtitles.
   destination is not merged; the source stays. Cross-disk moves have not been tested. Changing the
   library setting selects a folder; it does not move existing videos.
 - Settings stay in the support folder named above, even when the data folder changes. `save_config()`
-  atomically replaces `config.json` with POSIX mode `0600` (owner read/write only). The optional AnkiConnect
+  serializes read/merge/write operations across threads in the app process, then atomically replaces
+  `config.json` with POSIX mode `0600` (owner read/write only). The optional AnkiConnect
   API key is stored there in clear text. Windows privacy depends on filesystem ACLs; these are neither
   set by that mode nor verified by the POSIX permissions test.
 - `updates.py` asks GitHub for the latest release at most once a day and shows a card in the library
@@ -166,13 +167,19 @@ output is newer than its inputs, so it can run again after `zh.srt` is fixed by 
 2. **Chinese**: the platform's subtitles, else OCR when the Chinese is burned into the picture
    (macOS Vision; RapidOCR on Windows — not tested there as of 7 Nov 2026), else Whisper with word timestamps (MLX on
    macOS, whisper.cpp on Windows). `srt_tool.py split` cuts long lines at word boundaries.
-3. **Pinyin and words**: pypinyin and jieba, with `pinyin_fixes.txt` on top. `zh.words.json` holds
+3. **Pinyin and words**: pypinyin and dictionary-refined jieba segmentation, with `pinyin_fixes.txt` on top. `zh.words.json` holds
    each word's pinyin, CC-CEDICT gloss, HSK level and measure words, the tense tags from `grammar.py`
    and Whisper's word times (for the spoken-word highlight).
 4. **English**: `translate_srt.py` runs Hy-MT2 line by line (MLX on macOS, `llama-server` on Windows),
    with the title and the previous lines as context, so every English line keeps its Chinese line's
    timing. On macOS, `align_srt.py` then links English words to Chinese words where the dictionary can't.
 5. **study.mkv**: every track in one file, for IINA, mpv or VLC.
+
+`srt_tool.segment_words()` keeps known CC-CEDICT words whole and splits unknown Chinese jieba
+compounds into the longest dictionary parts, preserving unmatched text: `今天天气` becomes `今天 天气`.
+Pinyin overrides and V一V constructions stay whole; without the dictionary, jieba's boundaries remain.
+Pinyin tracks, word JSON and macOS model alignment share these boundaries. This is a greedy dictionary
+heuristic, not a linguistic parser; it can also split names or reduplications absent from the dictionary.
 
 The model engines sit behind `pipeline/backend.py`, the only platform check in `pipeline/`:
 `backend.impl()` is `backend_mac.py` (mlx-whisper, mlx-lm, macOS OCR) or `backend_win.py` (whisper.cpp,
@@ -189,8 +196,10 @@ Windows; dictionary links remain available. Running `align_srt.py` directly with
 
 Everything lives in the video's folder, so the app and the command line always agree: `source.*`,
 `title.txt`, `source.url`, `.hardsubs`, `.english-auto`, `.from-whisper`, `.split`, the `.srt` tracks,
-`zh.words.json`, `zh.align.json`, `en.lines.txt` and `study.mkv`. The first Anki export adds
-`.pianpian-source-id`, a UUID that moves with the folder. Jobs live in memory.
+`zh.words.json`, `zh.align.json`, `zh.whisper.json` when transcribed, `en.lines.txt` and `study.mkv`.
+The self-made demo retains its original `zh.whisper.json` timing source so word-data regeneration can
+reuse spoken timings without retranscription. The first Anki export adds `.pianpian-source-id`, a UUID
+that moves with the folder. Jobs live in memory.
 
 ## Anki export
 
@@ -308,12 +317,16 @@ produced a real media stall, showed buffering feedback, and recovered when the l
 
 At **600 CSS pixels or narrower**, only the website demo (`html.demo`) replaces the menu row with
 中文 / Pinyin / English switches, hides the library and panel toggles, and keeps the transcript under
-the video in a bounded scroll area. Tapping a word pauses playback and opens a dismissible word sheet.
+the video in a bounded scroll area. Tapping or keyboard-activating a word pauses playback, opens a word
+sheet and focuses its close button. Close or Escape returns focus to that word, or Play if unavailable.
 The switches use the existing subtitle-track state. The local app keeps its regular menus. At every
 width, the demo opens paused on its first Chinese cue unless a timestamp or playback already takes precedence.
 The website sizes its same-origin iframe from the demo content so the outer page can scroll normally.
+On short viewports, the parent page scrolls only as needed to reveal the sheet or returning focus clear
+of the sticky header. The sheet remains inside the iframe, covering part of the transcript while open.
 
-Reported for the phone-demo changes on **7 Nov 2026**: headless Chrome on macOS with
-390 CSS-pixel touch emulation exercised real taps, track switches, transcript following and sheet
-dismissal; desktop clicks at 1280 CSS pixels checked word cards and Anki selection. These are browser
-checks, not physical-device tests. iPhone Safari and Android browsers remain untested.
+Reported for the phone-demo changes on **7 Nov 2026**: headless Chrome on macOS with touch emulation,
+including a 390 × 480 CSS-pixel viewport, exercised real taps, keyboard focus restoration, sheet
+visibility and reduced motion. Desktop clicks checked toolbar/footer hit targets. These are browser
+checks, not physical-device tests. iPhone Safari, Android browsers and native fullscreen remain untested;
+fullscreen checks cover button dispatch with the native API stubbed.

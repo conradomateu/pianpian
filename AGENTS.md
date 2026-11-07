@@ -34,6 +34,7 @@ A Mandarin study app: a video becomes Chinese + pinyin + English subtitles you c
 - Motion uses `--ease` in `kit.css`, animates `width`/`opacity`/`transform` (not grid tracks, which jump), and is switched off by `prefers-reduced-motion`.
 - No build step and no frameworks: `app.html` must open from disk.
 - `zh.words.json` v2 (made by `srt_tool.py words`): each Chinese word is `[zh, pinyin, meaning, HSK level (0 = not listed), measure words]`, each cue has `g` (per line: `[[char index, tag], …]` from `pipeline/grammar.py`) and, for Whisper videos, `k` (per line, `[start, end]` per word, 0 if unknown), the file has `hsk` (the video's level). Change the format and you must regenerate it for every video.
+- `srt_tool.segment_words()` refines unknown jieba compounds with CC-CEDICT; pinyin, word JSON and macOS model alignment share it. Keep their boundaries and freshness dependencies together when changing segmentation. Retain the demo's `zh.whisper.json` so regenerated words keep spoken timings.
 - Grammar tags are heuristics: add a sentence to `tests/test_grammar.py` for every rule you change (`uv run --with jieba --with pytest pytest tests/`).
 
 ## Rules

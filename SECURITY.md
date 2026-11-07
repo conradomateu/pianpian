@@ -12,8 +12,9 @@ Of most interest: bypasses of the local server's loopback-only binding, local `H
 `ok`/`version` status; reports that leak private details (`report.py`); and unverified engine, model
 or runtime downloads. Setup and queued pipeline/downloader jobs must not overlap.
 
-The optional AnkiConnect API key is stored in clear text in `config.json`. Writes replace that file
-with POSIX mode `0600` (owner read/write only); this does not establish Windows ACL protection. Windows
-ACLs have not been verified. `/api/anki/status` does not return the key. [Implementation details](ARCHITECTURE.md#server-api).
+The optional AnkiConnect API key is stored in clear text in `config.json`. Settings writes are serialized
+across threads in the app process and atomically replace that file with POSIX mode `0600` (owner
+read/write only); this does not establish Windows ACL protection. Windows ACLs have not been verified.
+`/api/anki/status` does not return the key. [Implementation details](ARCHITECTURE.md#server-api).
 
 Problems in video sites, yt-dlp or the models belong upstream.
