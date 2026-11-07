@@ -13,7 +13,9 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="design/icons/20-pianpian-watermelon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<!-- fonts and analytics never hold the page: Google and Umami are slow or blocked from mainland China -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap" onload="this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap"></noscript>
 <link rel="stylesheet" href="assets/kit.css">
 <link rel="stylesheet" href="assets/platforms.css">
 <style>
@@ -211,7 +213,7 @@ footer.site .grow { flex:1; }
 @media (max-width:900px) { .demo iframe { height:640px; } }
 @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .dl, .faq summary::after { transition:none; } .dl:hover { transform:none; } }
 </style>
-<script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
+<script async src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
 <script defer src="assets/player.js"></script>
 <script defer src="assets/site-interactions.js"></script>
 <script defer src="assets/site-os.js"></script>
