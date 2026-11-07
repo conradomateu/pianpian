@@ -64,7 +64,7 @@ Lines too long? **Video ▾ → Lines** cuts them again from Whisper's word timi
 
 Something went wrong? The app says what in plain words; **Report** opens a GitHub issue already filled in with details that leave out your files and links. Nothing is sent until you press Submit.
 
-### Send a selection to Anki (development checkout)
+### Send a selection to Anki
 
 1. Open Anki Desktop, install [AnkiConnect](https://ankiweb.net/shared/info/2055492159) with add-on code **2055492159**, then restart Anki and open your profile.
 2. In a processed library video, click a Chinese word. **Shift+click** another word to select a range. Open the editor with the **Anki icon** in the word's pinned dictionary card or the toolbar; **Use full sentence** selects the current sentence.
@@ -77,7 +77,7 @@ Expand the text/color controls to edit the fields or choose a highlight. Pinyin 
 
 If Anki is unavailable, the open draft stays in place for **Retry connection**. Reloading Pianpian or selecting another item clears the draft. **Connection settings** accepts a local port and optional AnkiConnect API key; the default port is 8765. A different service on that port must use another port, or AnkiConnect and Pianpian must be configured to agree on a free one.
 
-Word times are estimates: preview and listen before saving. Missing or invalid word times use sentence bounds. Export requires the local app/server; the website demo and files opened directly from disk cannot send notes. This feature is implemented in this checkout and has not been released yet. Audio-only extraction is covered by backend tests; audio-only library import and a Windows app are still planned.
+Word times are estimates: preview and listen before saving. Missing or invalid word times use sentence bounds. Export requires the local app/server; the website demo and files opened directly from disk cannot send notes. Audio-only extraction is covered by backend tests; audio-only library import and a Windows app are still planned.
 
 ## How it works
 

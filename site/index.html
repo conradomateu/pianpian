@@ -118,13 +118,11 @@ h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
   .pp-preview { padding:14px; } .pp-preview .l.zh { font-size:24px; } .pp-preview .l.pinyin, .pp-preview .l.en { font-size:16px; }
 }
 
-/* A schematic of the development feature; the selection stays the same through all three steps. */
+/* The selection stays the same through all three steps. */
 #anki > p { max-width:75ch; color:var(--fg-2); }
 .anki-brand { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; vertical-align:bottom; }
 .anki-brand img { width:1em; height:auto; }
 .anki-figure { margin:26px 0 0; padding:24px; border:1px dashed var(--line-2); border-radius:16px; }
-.anki-status { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; color:var(--fg-2); font-size:13px; }
-.anki-status strong { color:var(--amber-fg); background:var(--amber-tint); padding:3px 9px; border-radius:6px; }
 .anki-flow { display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:32px; list-style:none; padding:0; margin:24px 0; }
 .anki-flow > li { min-width:0; }
 .anki-flow h3 { display:flex; align-items:center; gap:8px; margin:0 0 10px; color:var(--fg); font:700 17px var(--display); letter-spacing:normal; text-transform:none; }
@@ -319,7 +317,6 @@ footer.site .grow { flex:1; }
     <h2 class="sec" id="anki-title">From a video to your <span class="anki-brand"><img src="assets/anki-logo.png" width="40" height="40" alt="">Anki</span> deck</h2>
     <p>Keep a word or sentence with its original audio. Requires <a href="https://apps.ankiweb.net">Anki Desktop</a> with AnkiConnect installed.</p>
     <figure class="anki-figure" aria-labelledby="anki-caption">
-      <div class="anki-status"><strong>Development checkout · unreleased</strong><span>Illustrative example by Pianpian</span></div>
       <ol class="anki-flow">
         <li>
           <h3><span aria-hidden="true">1</span> Select words</h3>
@@ -358,7 +355,7 @@ footer.site .grow { flex:1; }
           <div class="anki-destination">Choose <strong>an existing or new deck</strong>.</div>
         </li>
       </ol>
-      <figcaption id="anki-caption">The selected words, audio and sentence context stay together in one Anki note. Pinyin colours indicate tones; the underline marks your selection.</figcaption>
+      <figcaption id="anki-caption">In this Pianpian example, the selected words, audio and sentence context stay together in one Anki note. Pinyin colours indicate tones; the underline marks your selection.</figcaption>
     </figure>
   </section>
 
@@ -371,7 +368,7 @@ footer.site .grow { flex:1; }
       <details><summary>Which AI models does Pianpian use?</summary><p>Whisper transcribes the audio; Hy-MT2 translates the subtitles into English. Both run locally on your Mac. Your videos stay on your computer, and no account or API key is needed. The app connects to download videos, models, tools and updates.</p></details>
       <details id="faq-files"><summary>Where are my videos and subtitles saved?</summary><p>In the library folder you choose during setup (default: <code>~/Movies/Pianpian</code>). Each video has its own folder with the video and its Chinese, pinyin and English subtitle files.</p><p>Demo files: <a href="demo/library/pianpian-day/source.mp4">Video</a> · <a href="demo/library/pianpian-day/zh.srt">Chinese</a> · <a href="demo/library/pianpian-day/zh.pinyin.srt">Pinyin</a> · <a href="demo/library/pianpian-day/zh.en.srt">English</a>.</p></details>
       <details><summary>Are the subtitles always accurate?</summary><p>Transcription, translation and grammar hints can be wrong. Check them against the audio. The library’s HSK level estimates vocabulary difficulty, not listening difficulty.</p></details>
-      <details><summary>Can the website demo send notes to Anki?</summary><p>Anki export needs the local <a href="#anki">development checkout</a> and Anki Desktop running with AnkiConnect. The browser demo is for trying the player.</p></details>
+      <details><summary>Can the website demo send notes to Anki?</summary><p>Export from the local Pianpian app, with Anki Desktop running and AnkiConnect installed. The website demo lets you try the player.</p></details>
       <details><summary>How do I open the unsigned Mac app?</summary><p>Pianpian is not yet signed with an Apple developer certificate. After trying to open it, go to System Settings → Privacy &amp; Security and choose Open Anyway. You can inspect the <a href="https://github.com/{{REPO}}">source code</a> before installing.</p></details>
       <details><summary>What is planned?</summary><p>A Windows app and audio-only import. The current app processes video on Apple Silicon Macs.</p></details>
     </div>
