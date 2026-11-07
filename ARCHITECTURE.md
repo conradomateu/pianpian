@@ -21,17 +21,22 @@ the server to make subtitles.
   lists it for a conversion tool the app never uses), which keeps that engine at about 700 MB. The
   Windows engine is about 460 MB (measured 24 Oct 2026) and installs neither MLX nor llama-cpp-python.
 - **The Windows GPU runtime** is not a Python package: `pipeline/runtimes.py` downloads pinned
-  whisper.cpp and llama.cpp Windows builds (CUDA for NVIDIA — the CUDA 12.4 builds, tested with driver
-  591.74 — Vulkan for llama.cpp on other GPUs, CPU fallback) into `<data>/runtime` (`$PIANPIAN_RUNTIME`)
+  whisper.cpp and llama.cpp Windows builds (CUDA for NVIDIA — the CUDA 12.4 builds were reported tested
+  on 27 Oct 2026 with an RTX 4060 Laptop, driver 591.74 — Vulkan for llama.cpp on other GPUs, CPU fallback) into `<data>/runtime` (`$PIANPIAN_RUNTIME`)
   and checks every archive against its SHA-256. whisper.cpp has no Vulkan asset in its official release
   yet, so Vulkan-only machines run speech on the CPU. A GPU build that won't start is retried once with
   the CPU build (`backend_win.py`). Downloads come from GitHub; `PIANPIAN_GITHUB_MIRROR` is an opt-in
   prefix for networks where GitHub is slow — there is no default proxy, because one would see the
   download whenever GitHub fails, and the SHA-256 pins are what keep the bytes safe.
+  Each build's `.complete` records the tool, backend, release and archive SHA-256s. A changed pin makes
+  the installed build stale; setup downloads and unpacks a replacement before replacing the whole
+  build folder, so old DLLs do not survive an upgrade. A failed download leaves the old folder intact.
+  Setup saves its GPU choice as `accel` in the config and passes it to every Windows job through
+  `PIANPIAN_ACCEL`; an explicit environment override wins. Vulkan still means CPU speech recognition.
 
 `engine.python()` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
 `<data>/engine` (`Scripts/python.exe` on Windows, `bin/python` on macOS), the repository's `.venv`
-(`uv sync --group runtime`), then the Python running the server.
+(`python dev.py engine`), then the Python running the server (source runs only).
 
 ## First run, updates and problems
 
@@ -44,14 +49,30 @@ the server to make subtitles.
   the setup page, which then says "An update for Pianpian" and only fetches what changed (`uv pip sync`).
   Explicit model/cache/runtime environment overrides are captured at app startup; app-derived paths
   follow the chosen data folder before setup checks the catalog or starts downloads.
+- **Repair:** setup recreates the engine only when its Python or `pyvenv.cfg` is missing, or the
+  interpreter cannot launch or exits with an error on `python -c "pass"`. A slow interpreter probe
+  timing out does not trigger deletion. Failed imports are repaired by package sync. A nonempty folder
+  without a venv config or Pianpian requirements stamp is refused rather than deleted.
+- **Moving data:** choosing a new data folder moves `models/`, `runtime/` and `cache/` when their
+  destinations are empty and outside the source folders; explicit path overrides stay put. Setup
+  recreates the engine in the new location because venv paths are absolute. Recognized old `engine/`
+  and managed `python/` folders are offered under **Delete old files**, checked by default. A nonempty
+  destination is not merged; the source stays. Cross-disk moves have not been tested. Changing the
+  library setting selects a folder; it does not move existing videos.
+- Settings stay in the support folder named above, even when the data folder changes. `save_config()`
+  atomically replaces `config.json` with POSIX mode `0600` (owner read/write only). The optional AnkiConnect
+  API key is stored there in clear text. Windows privacy depends on filesystem ACLs; these are neither
+  set by that mode nor verified by the POSIX permissions test.
 - `updates.py` asks GitHub for the latest release at most once a day and shows a card in the library
   when there is a newer one, with this platform's file (the DMG on macOS, the installer on Windows) or the release page.
   yt-dlp is updated on its own at most once a week, and from the job card
   when a download fails because the site changed.
 - `report.py` turns a failed job's log into a short code and a hint, and builds the Report link: GitHub's
-  bug form filled in with redacted details (no home folder, file names, link paths, cookies or
-  transcript). Opening the link sends those details to GitHub; Submit publishes the issue. Logs live in
-  `~/Library/Logs/Pianpian` on macOS and `<data>\logs` on Windows.
+  bug form filled in with redacted details: filters remove home/library paths, known video names,
+  link paths, cookies and recognized transcript lines. Redaction is pattern-based, not a guarantee
+  against every tool's output format. Opening the link sends those details to GitHub; Submit publishes the issue. Logs live in
+  `~/Library/Logs/Pianpian` on macOS and `%LOCALAPPDATA%\Pianpian\logs` on Windows; with
+  `PIANPIAN_HOME`, settings and logs use that support folder. Changing the data folder does not move logs.
 
 ## Packaging and releases
 
@@ -72,11 +93,43 @@ Releases: merging release-please's pull request tags a version and creates the G
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
 `Pianpian-macOS.dmg` and `Pianpian-macOS.zip`; the website and Mac update card prefer the DMG.
 `.github/workflows/windows.yml` (`tools/build_app_windows.py`) does the same on windows-latest with
-`Pianpian-Windows-Setup.exe` and `Pianpian-Windows.zip`. The installer is per-user (Inno Setup, no
-admin) and does not bundle the WebView2 runtime — Windows 11 includes it, and the evergreen
-bootstrapper link always serves the newest build, so a pinned hash would go stale. The update card
+`Pianpian-Windows-Setup.exe` and `Pianpian-Windows.zip`. Both build scripts use an isolated uv environment
+with PyInstaller 6.22.3 and pywebview 6.2.1; CI bundles uv 0.13.7. The Windows build needs Inno Setup 6
+for the installer; without it (or with `--no-installer`) it produces the app folder and zip only.
+The installer is per-user (no admin), allows x64 Windows 10 or newer, and rejects ARM64 and 32-bit Windows.
+It replaces `{app}\_internal` on upgrade and checks the `PianpianApp` mutex held by the frozen app,
+which also refuses a second instance. Engine, models and user data live outside the installation folder;
+uninstalling the app leaves them there. WebView2 is required but not bundled — Windows 11 normally
+includes it; Windows 10 users may need to install it separately. The update card
 (`updates.py`) offers each platform only its own files (Windows: the installer, then the zip) and
 links the release page when a release has none.
+
+Each platform's release workflow rebuilds the website after uploading its files. `tools/build_site.py`
+reads release assets at build time: it offers the Windows installer only when attached, otherwise a
+release-page link. `assets/site-os.js` orders and emphasizes download links using browser platform hints;
+this is a compatibility hint, not a hardware test. Windows CI installs the hashed Windows engine lock
+before running `dev.py check` with `UV_NO_SYNC=1`.
+
+### Windows test history
+
+These are reports for earlier builds, **not acceptance of the current integrated build**:
+
+- **24 Oct 2026:** demo pipeline on Windows 11 Pro 25H2, Ryzen 9 7940HS, 16 GB RAM, RTX 4060 Laptop
+  8 GB, driver 591.74. This predates the rewritten integration; see [PR #11](https://github.com/conradomateu/pianpian/pull/11).
+- **7 Nov 2026, source:** Windows 11 25H2 build 26200, Ryzen 9 7940HS, RTX 4060 Laptop, driver 591.74;
+  `8db674f` plus `c7fe9d4`, `30548ce` and `92fc4f1`. Reported: clean-checkout launch, a Chinese-filename
+  job through the native window, forced GPU startup failures retrying on CPU without leftover processes,
+  no console flashes during jobs, and YouTube merging with the engine's ffmpeg. On a 16.5-minute Mandarin
+  talk, whisper.cpp `-mc 0` repeated less than default context; both lacked punctuation.
+- **7 Nov 2026, earlier installer:** Windows 11 25H2 x64; build, silent per-user install without admin,
+  installed WebView2 window/server launch and uninstall were reported successful. The installer wizard
+  and SmartScreen warning were not exercised. This predates the x64-only gate, upgrade cleanup, mutex
+  and isolated pinned build changes. The full first-run setup console watch was still pending.
+
+As of **7 Nov 2026**, the integrated app, revised installer, engine repair/data migration and security
+changes have not been exercised natively on Windows. The integration reports use macOS Apple Silicon
+tests, including simulated Windows paths/processes. RapidOCR, Anki export, Windows 10, AMD/Intel Vulkan
+inference and mainland-China Windows first-run downloads remain untested. Windows ARM64 is unsupported.
 
 Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,
 never in `app.html`, so the app itself sends nothing to it. Real download totals come from the release files' own counters
@@ -111,25 +164,26 @@ output is newer than its inputs, so it can run again after `zh.srt` is fixed by 
 1. **Video**: yt-dlp, H.264 first (AV1 does not play everywhere), plus the platform's Chinese
    subtitles if any. A browser name borrows that browser's Bilibili login for the AI subtitles.
 2. **Chinese**: the platform's subtitles, else OCR when the Chinese is burned into the picture
-   (macOS Vision; RapidOCR on Windows — not run there yet), else Whisper with word timestamps (MLX on
+   (macOS Vision; RapidOCR on Windows — not tested there as of 7 Nov 2026), else Whisper with word timestamps (MLX on
    macOS, whisper.cpp on Windows). `srt_tool.py split` cuts long lines at word boundaries.
 3. **Pinyin and words**: pypinyin and jieba, with `pinyin_fixes.txt` on top. `zh.words.json` holds
    each word's pinyin, CC-CEDICT gloss, HSK level and measure words, the tense tags from `grammar.py`
    and Whisper's word times (for the spoken-word highlight).
 4. **English**: `translate_srt.py` runs Hy-MT2 line by line (MLX on macOS, `llama-server` on Windows),
    with the title and the previous lines as context, so every English line keeps its Chinese line's
-   timing. `align_srt.py` then links English words to Chinese words where the dictionary can't.
+   timing. On macOS, `align_srt.py` then links English words to Chinese words where the dictionary can't.
 5. **study.mkv**: every track in one file, for IINA, mpv or VLC.
 
 The model engines sit behind `pipeline/backend.py`, the only platform check in `pipeline/`:
 `backend.impl()` is `backend_mac.py` (mlx-whisper, mlx-lm, macOS OCR) or `backend_win.py` (whisper.cpp,
-llama.cpp's `llama-server`, RapidOCR) and gives three functions,
+llama.cpp's `llama-server`, RapidOCR) and requires three functions,
 `transcribe()`, `translator()` (a context manager yielding `generate(prompt, temperature, max_tokens)`)
 and `ocr()`. The steps above call those, so the prompt, the per-line loop and the line cutting are the
 same for every engine. `tests/test_backend.py` has the checks a new backend reuses (the signature
 test and the `assert_*` output helpers) and adds its own cases to.
-`align_srt.py` reads the model's hidden states and is MLX only; elsewhere it stops and the dictionary
-links stay.
+The optional `align(zh_srt, en_srt)` capability exists only in `backend_mac.py`, which runs
+`align_srt.py` to read MLX hidden states. `study.py` skips that step on backends without it, including
+Windows; dictionary links remain available. Running `align_srt.py` directly without MLX exits with a message.
 
 ## State
 
@@ -179,7 +233,8 @@ layout is unit-tested on macOS; execution on Windows remains untested.
 
 | Method | Path | Does |
 |---|---|---|
-| GET | `/api/status` | Version, library folder, engine ready or not, platform (`win32`/`darwin`), subtitle accelerator (CUDA/Vulkan/CPU or MLX), installed browsers, busy |
+| GET | `/api/status` | Local status: version, library, engine readiness, platform, accelerator, browsers, busy; foreign origins get only `ok`/`version` |
+| GET / POST | `/api/setup` | Setup plan/progress; start setup with library/data folders, model choices and cleanup option |
 | GET | `/api/videos` | Library folders with title, link, HSK level and the tracks they have |
 | GET | `/api/videos/<id>` | One video, plus its `zh.lines.txt` for translating by hand |
 | GET | `/api/jobs` | Recent jobs with their state and the end of their log |
@@ -197,9 +252,17 @@ layout is unit-tested on macOS; execution on Windows remains untested.
 | POST | `/api/anki/export` | Add, detect an existing occurrence, or explicitly update it |
 | POST | `/api/anki/open` | Open the exported note in Anki's browser |
 
-Safety: the server listens on 127.0.0.1 only. Requests that change anything need an `X-Kit: 1`
-header, so other websites can't start jobs. Video ids and paths are checked, and commands run
-without a shell.
+Safety: the server listens on 127.0.0.1 only and accepts only `Host: 127.0.0.1:<bound port>` or
+`Host: localhost:<bound port>`; other or missing hosts get 403, including DNS-rebinding names.
+POST and PUT require `X-Kit: 1`; cross-origin preflights do not grant that header. `/api/status`
+with a foreign `Origin` (including `null` from disk) returns only `ok` and `version` with CORS enabled.
+Same-origin requests, or requests without `Origin`, get full status without CORS headers.
+Library entries and served files must resolve inside the library root; links leading out are excluded.
+The root itself may be a link. App assets are checked by path components and extension instead of
+resolving their bundle links. Windows device names and trailing dots/spaces are refused. Commands run
+without a shell. Setup and queued pipeline/downloader jobs exclude each other under one lock (409
+on conflict). Imports check before copying and again when queueing; if setup starts during a copy,
+the copied file stays as a loose video and the request returns 409. Anki requests are separate from this queue.
 
 ## The page
 
@@ -241,8 +304,16 @@ server answered head and tail byte ranges with 206. At 32 KB/s and 150 ms simula
 playback started with roughly 4–5 of 44.8 seconds buffered. Throttling the local player to 1 byte/s
 produced a real media stall, showed buffering feedback, and recovered when the limit was lifted.
 
-On narrow screens the website measures its same-origin demo's content height, including open
-menus, so the host page scrolls normally and only the transcript has a bounded scroll area.
-The decorative window bar has its own class, separate from the shared sticky navigation style.
-Verified on 1 Nov 2026 with Chrome at 320, 390 and 768 CSS pixels, including an actual dropdown
-click and navigation stacking. Physical iPhone/Android browsers have not been tested.
+### Phone-sized website demo
+
+At **600 CSS pixels or narrower**, only the website demo (`html.demo`) replaces the menu row with
+中文 / Pinyin / English switches, hides the library and panel toggles, and keeps the transcript under
+the video in a bounded scroll area. Tapping a word pauses playback and opens a dismissible word sheet.
+The switches use the existing subtitle-track state. The local app keeps its regular menus. At every
+width, the demo opens paused on its first Chinese cue unless a timestamp or playback already takes precedence.
+The website sizes its same-origin iframe from the demo content so the outer page can scroll normally.
+
+Reported for the phone-demo changes on **7 Nov 2026**: headless Chrome on macOS with
+390 CSS-pixel touch emulation exercised real taps, track switches, transcript following and sheet
+dismissal; desktop clicks at 1280 CSS pixels checked word cards and Anki selection. These are browser
+checks, not physical-device tests. iPhone Safari and Android browsers remain untested.

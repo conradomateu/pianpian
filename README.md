@@ -5,7 +5,7 @@
 # Pianpian 片片
 
 **Learn Mandarin from the videos you actually watch.**<br>
-Chinese, pinyin and English subtitles for any Bilibili or YouTube video, made on your own computer. Hover any word, practise line by line.
+Chinese, pinyin and English subtitles for Bilibili, YouTube and your own videos, made on your computer. Click a word, practise line by line.
 
 [![CI](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml/badge.svg)](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/conradomateu/pianpian?sort=semver&color=DE3B26)](https://github.com/conradomateu/pianpian/releases/latest)
@@ -15,7 +15,7 @@ Chinese, pinyin and English subtitles for any Bilibili or YouTube video, made on
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-8A7F74)](LICENSE)
 
-[**Download for Mac**](https://github.com/conradomateu/pianpian/releases/latest) · [**Try it in your browser**](https://conradomateu.github.io/pianpian/) · [What's new](https://github.com/conradomateu/pianpian/releases)
+[**Releases: Mac + Windows**](https://github.com/conradomateu/pianpian/releases/latest) · [**Try it in your browser**](https://conradomateu.github.io/pianpian/) · [What's new](https://github.com/conradomateu/pianpian/releases)
 
 <img src="site/shots/app-dark.png" alt="Pianpian: the library on the left, a video with Chinese, pinyin and English subtitles in the middle, the transcript on the right" width="100%">
 
@@ -23,10 +23,7 @@ Chinese, pinyin and English subtitles for any Bilibili or YouTube video, made on
 
 ## Why
 
-Real videos are the best way to learn a language, but Chinese subtitles alone are a wall of characters,
-and English ones teach you nothing. Pianpian puts the three lines together and links them: hover 三个 and
-you see sāngè, its meaning, its HSK level, and "three" lights up in the English. Everything runs on
-your computer with local models: no account, no API key, nothing uploaded.
+Pianpian links Chinese, pinyin and English: click a word for its pronunciation, meaning and HSK level, with matching English highlighted where a word link is available. Speech recognition and translation run locally: no account or model API key, and your videos aren't uploaded.
 
 The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: one slice a day.
 
@@ -34,13 +31,11 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 
 | | |
 |---|---|
-| <img src="site/shots/word.png" alt="Hovering a word shows its pinyin, meaning and English" width="420"> | **Every word.** Hover a word for its pinyin, a dictionary meaning, its HSK level and its measure words. The same word lights up in the pinyin and in the English, so you see which part of the translation it is. |
+| <img src="site/shots/word.png" alt="Hovering a word shows its pinyin, meaning and English" width="420"> | **Word lookup.** Hover or click a word for its pinyin, dictionary meanings, HSK level and measure words where available. Matching pinyin and linked English light up together. |
 | <img src="site/shots/practice.png" alt="The Playback menu: lines, replay, loop, pause after line, speed" width="420"> | **Practise line by line.** <kbd>←</kbd> <kbd>→</kbd> jump between lines, <kbd>R</kbd> replays, <kbd>L</kbd> loops, <kbd>P</kbd> pauses after every line so you can say it yourself, and the speed goes down to half. Click any line in the transcript to jump there. |
 | <img src="site/shots/grammar.png" alt="The grammar cheat sheet with word order in colours" width="420"> | **See how a sentence is built.** A cheat sheet for word order, every part in its own colour with pinyin above, and optional marks under 了, 过, 在 and 要 that say past, now or later. |
 
-And also:
-
-- **Any video:** Bilibili, YouTube and most video sites, or a file you drop on the window. It uses the platform's subtitles when there are some; otherwise Whisper hears the Chinese, and burned-in subtitles are read with macOS's own text recognition or, on Windows, RapidOCR (not tested on Windows as of 31 Oct 2026).
+- **Links or files:** Bilibili, YouTube and other sites supported by yt-dlp, or a video you drop on the window. It uses available Chinese subtitles, Whisper speech recognition or OCR for burned-in subtitles (macOS Vision; Windows RapidOCR remains untested as of 7 Nov 2026).
 - **Tone colours** on the pinyin, which can also sit right above each character.
 - **Follow the voice:** the word being said lights up as it is spoken.
 - **Your level:** each video in your library shows the HSK level that covers 90% of its words.
@@ -58,38 +53,15 @@ And also:
 
 ### Windows
 
-1. Download **Pianpian-Windows-Setup.exe** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest) and run it. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If Windows SmartScreen warns about the installer (it isn't signed with a paid certificate): **More info → Run anyway**.
+1. Get **Pianpian-Windows-Setup.exe** from [releases](https://github.com/conradomateu/pianpian/releases), when attached, and run it; otherwise use the source commands below. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If Windows SmartScreen warns about the unsigned installer: **More info → Run anyway**.
 2. The first start asks where to keep your videos and its tools, then downloads them once, with progress: its engine and the speech and translation models. From mainland China it picks faster mirrors by itself.
 
-**Needs** Windows 11 x64 (Windows 10 is not tested) and the WebView2 runtime, which Windows 11 includes;
-on older systems install the free [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) first.
-Pinned models and CUDA runtime archives total about 4.1 GB to download, plus Python and its packages;
-allow extra disk space for installation. NVIDIA uses CUDA; other detected Vulkan GPUs use Vulkan for translation and CPU for
-speech. GPU startup failures retry once on CPU. Models come from ModelScope, then Hugging Face and
-hf-mirror.com; runtime binaries come from GitHub, with `PIANPIAN_GITHUB_MIRROR` as an opt-in proxy prefix.
+**Needs** Windows 11 x64 and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/), normally included with Windows 11. The installer also allows Windows 10 (untested) and rejects Windows ARM64 and 32-bit Windows. Pinned models and CUDA archives total about 4.1 GB to download, plus Python and packages; allow extra space for installation.
+NVIDIA uses CUDA; other detected Vulkan GPUs use Vulkan for translation and CPU for speech. GPU startup failures retry once on CPU. Windows word links use the dictionary; model-based alignment is macOS-only. [Download sources and runtime details](ARCHITECTURE.md#two-python-environments).
 
-From a checkout instead: `git clone https://github.com/conradomateu/pianpian`, then `pip install uv`,
-`python dev.py engine` and `python dev.py app` (needs Python 3.12 or newer and Git).
+From source: install Python 3.12 or newer and Git, run `git clone https://github.com/conradomateu/pianpian`, then `cd pianpian`, `python -m pip install uv`, `python dev.py engine` and `python dev.py app`.
 
-**Installer tested on 7 Nov 2026** (Windows 11 25H2 x64): built with `python dev.py build` (PyInstaller
-plus Inno Setup 6), installed per-user with no admin rights, the installed app opened its WebView2
-window and served the app, and the uninstaller removed it cleanly. The install was silent; the
-installer's own wizard and SmartScreen's warning were not exercised.
-
-**Reported test on 24 Oct 2026:** the demo pipeline ran on Windows 11 Pro 25H2, Ryzen 9 7940HS,
-16 GB RAM, RTX 4060 Laptop 8 GB, driver 591.74. That result predates the rewritten integration;
-see [PR #11](https://github.com/conradomateu/pianpian/pull/11) for benchmarks and acceptance checks.
-
-**Acceptance runs on 7 Nov 2026** (Windows 11 25H2 build 26200, Ryzen 9 7940HS, RTX 4060 Laptop,
-driver 591.74, commit `8db674f` plus fixes `c7fe9d4`, `30548ce` and `92fc4f1`): the source app installed and opened from a clean
-checkout, a job with a Chinese file name completed through the native window, a forced GPU launch
-failure retried once on the CPU builds (whisper and translation) with no leftover processes, no
-console windows flashed during jobs, a YouTube download merged with the bundled engine ffmpeg
-(no system ffmpeg), and on a 16.5-minute Mandarin talk whisper.cpp `-mc 0` repeated less than the
-default context (punctuation was absent in both). RapidOCR, Windows 10, mainland-China first-run
-downloads and AMD/Intel Vulkan inference remain untested.
-Windows ARM64 is unsupported. Model-based English↔Chinese alignment remains MLX-only;
-Windows word links use the dictionary.
+**Windows test scope, 7 Nov 2026:** earlier source and installer builds ran on Windows 11 25H2 x64; the source acceptance machine had a Ryzen 9 7940HS and RTX 4060 Laptop. **The current integrated build and revised installer have not been tested on Windows.** RapidOCR, Anki export, AMD/Intel Vulkan inference and mainland-China first-run downloads remain untested there. [Dated test history](ARCHITECTURE.md#windows-test-history).
 
 To update a source checkout, close Pianpian, then run these commands in its folder:
 
@@ -99,19 +71,19 @@ python dev.py engine
 python dev.py app
 ```
 
-The full first-run setup console watch was still pending in the 7 Nov 2026 acceptance report.
-
 Updates: the app tells you when a new version is out, and keeps its video downloader fresh on its own.
 
 ## Use
 
 1. Paste a Bilibili or YouTube link (or the text a *Share* button copies: the link inside is found, and tracking is removed) and press **Add** (or drop a video file on the window). For Bilibili's own AI subtitles, pick the browser you're logged in with under *options*.
-2. A ten-minute video is ready in about a minute. It opens by itself.
+2. Wait for processing; the video opens when ready. Time depends on the video, hardware and downloads.
 3. Hover, click, loop. Menus under the video: **Subtitles**, **Playback**, **Grammar**, **Video**, **Resources**, **Anki**. Keys: <kbd>B</kbd> library, <kbd>T</kbd> transcript, <kbd>?</kbd> all shortcuts.
 
 Lines too long? **Video ▾ → Lines** cuts them again from Whisper's word timings. A wrong pinyin? Add the word to [`pipeline/pinyin_fixes.txt`](pipeline/pinyin_fixes.txt) and press **Video ▾ → Rebuild**.
 
 Something went wrong? The app says what in plain words; **Report** opens GitHub's issue form with redacted details. Opening it sends those details to GitHub; pressing Submit publishes the issue.
+
+Videos default to `~/Movies/Pianpian` on macOS or `%USERPROFILE%\Videos\Pianpian` on Windows. Setup can change the tools/data folder and move its downloads; choosing a different library folder does not move existing videos. [Storage and cleanup](ARCHITECTURE.md#first-run-updates-and-problems).
 
 ### Send a selection to Anki
 
@@ -128,20 +100,9 @@ If Anki is unavailable, the open draft stays in place for **Retry connection**. 
 
 Word times are estimates: preview and listen before saving. Missing or invalid word times use sentence bounds. Export requires the local app/server; the website demo and files opened directly from disk cannot send notes. Audio-only extraction is covered by backend tests; audio-only library import is still planned. Anki export has not been tested on Windows.
 
-## How it works
-
-```
-link or file ─► yt-dlp ─► Chinese: the platform's subtitles, Whisper (MLX or whisper.cpp) or OCR (macOS Vision / RapidOCR)
-                          ─► pinyin and words: jieba, pypinyin, CC-CEDICT, HSK 3.0 levels
-                          ─► English: Tencent's Hy-MT2 (MLX or llama.cpp), line by line, then word links
-                          ─► the player, and study.mkv
-```
-
-The app is a small local server (Python standard library) and one page, in a native window. The pipeline
-runs in its own environment with pinned packages and pinned models and, on Windows, pinned prebuilt
-whisper.cpp / llama.cpp binaries. More in [ARCHITECTURE.md](ARCHITECTURE.md).
-
 ## Development
+
+Needs Python 3.12 or newer, Git and uv (`python3 -m pip install uv`); Node.js enables JavaScript syntax checks. [ARCHITECTURE.md](ARCHITECTURE.md) describes the pipeline, APIs, packaging and test scope.
 
 ```bash
 git clone https://github.com/conradomateu/pianpian && cd pianpian
@@ -150,24 +111,19 @@ python3 dev.py serve      # the app in your browser at http://127.0.0.1:8770
 python3 dev.py check      # lint and tests, the same as CI
 ```
 
-On Windows use `python` instead of `python3`; `dev.py engine` installs the MLX-free Windows runtime
-(the same pinned packages plus RapidOCR) and `dev.py app` opens the pywebview window.
+On Windows use `python` instead of `python3`; `dev.py engine` installs the Windows dependency group (including RapidOCR, without MLX), and `dev.py app` opens the native window. Development resolves dependencies from `pyproject.toml`; packaged setup uses the hashed requirements files.
 
 | Command | Does |
 |---|---|
 | `python3 dev.py app` | A dev `Pianpian.app` in `~/Applications` that runs this checkout (Windows: `launcher.py`) |
-| `python3 dev.py build` | The release build in `dist/`: the app and its zip (macOS), the installer and its zip (Windows) |
+| `python3 dev.py build` | Release files in `dist/`: app, DMG and zip (macOS); app and zip, plus installer with Inno Setup 6 (Windows) |
 | `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8766 (AnkiConnect uses 8765) |
 | `python3 dev.py shots` | The screenshots above, taken from the demo |
 | `python3 dev.py lock` | Pin the engine's packages (both platforms) and the models again |
 | `python3 dev.py version` | Preview the next release: its version, and which commits decide it |
 
 From mainland China, set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple` first.
-Commit messages and pull request titles start with `feat:`, `fix:`, `docs:` or `chore:`: release-please
-writes the changelog and the version from them, and each release builds the app. `fix:` makes a patch
-release (0.1.0 → 0.1.1), `feat:` a minor one (0.2.0), `feat!:` a major one (a minor while we are on 0.x), and
-`docs:`/`chore:` none. `python3 dev.py version` shows what the commits so far would make; a line
-`Release-As: 0.1.1` at the end of a commit message forces the number.
+Commit and pull request titles use `feat:`, `fix:`, `docs:` or `chore:`; [AGENTS.md](AGENTS.md#rules) has the release rules.
 
 ## Contributing
 
