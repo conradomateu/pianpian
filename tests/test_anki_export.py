@@ -190,7 +190,7 @@ def test_anki_http_requires_guard_and_returns_readable_validation(media, monkeyp
 
 def test_windows_engine_executable_layout(tmp_path, monkeypatch):
     monkeypatch.delenv("PIANPIAN_PYTHON", raising=False)
-    monkeypatch.setattr(engine.sys, "platform", "win32")
+    monkeypatch.setattr(engine, "WINDOWS", True)                # computed at import: patch the flag, not sys.platform
     monkeypatch.setattr(engine, "engine_dir", lambda: tmp_path)
     py = tmp_path / "Scripts" / "python.exe"
     py.parent.mkdir()
