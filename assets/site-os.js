@@ -59,8 +59,12 @@
     note.dataset.fits = seen.fits;
     note.hidden = false;
     for (const el of document.querySelectorAll('[data-umami-event="download"]')) el.dataset.umamiEventDetected = seen.os;
-    if (seen.os === 'other' || seen.fits === false) return;   // unknown or unsupported: Mac stays primary, Windows secondary
+    if (seen.os === 'other') return;   // Linux, phones: Mac stays primary, Windows secondary
     for (const pair of document.querySelectorAll('.cta')) {
+      if (seen.fits === false) {      // this computer can run neither build: no button is the obvious one
+        pair.querySelectorAll('[data-os]').forEach(a => a.classList.replace('dl', 'ghost'));
+        continue;
+      }
       const mine = pair.querySelector(`[data-os="${seen.os}"]`);
       if (!mine) continue;
       pair.querySelectorAll('[data-os]').forEach(a => a.classList.replace('dl', 'ghost'));
