@@ -12,7 +12,9 @@ import platform
 import re
 import subprocess
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
+
+import engine  # standard library only too: WINDOWS, the one platform check on the app side
 
 REPO = "conradomateu/pianpian"                          # where reports go, and where releases come from
 # (code, pattern in the log, what to do): the first match from the end of the log wins
@@ -54,7 +56,13 @@ KNOWN = [
     ("VIDEO-FILE", r"moov atom not found|Invalid data found when processing input|Error opening input",
      "The video file couldn't be read: it may be damaged, or in a format ffmpeg can't open."),
 ]
-TRANSCRIPT = re.compile(r"^\s*\[(?:\d+:)?\d\d:\d\d[.:]\d\d\d? --> ")      # MLX and whisper.cpp timestamps
+# MLX ([00:01.840 --> …] text) and whisper.cpp ([00:00:01.840 --> …] text) print a cue per line; the same without the
+# bracket, or an SRT timing (00:00:01,840 --> …), is never an error line either
+TRANSCRIPT = re.compile(r"^\s*\[?(?:\d+:)?\d\d:\d\d[.:,]\d\d\d? --> ")
+SRT_TIMING = re.compile(r"^\s*\d\d:\d\d:\d\d[,.]\d{3} --> \d\d:\d\d:\d\d[,.]\d{3}\s*$")   # an echoed .srt: text on the next lines
+# what ends such a cue's text early: a log line (ERROR: …, RuntimeError: …, a traceback, [tool] …, $ command).
+# shortcut: an English subtitle shaped like one ("Note: …") stays in the report; nothing echoes a .srt today
+LOG_LINE = re.compile(r"^\s*(?:\[|\$ |Traceback|File \")|^\S+: |(?:Error|Exception|Warning)\b")
 URL = re.compile(r"https?://[^\s'\"<>]+")
 # first path words that only say what kind of page it is (never a person or a title)
 KIND = {"video", "bangumi", "watch", "shorts", "live", "play", "embed", "playlist", "list", "cheese", "medialist", "s", "e"}
@@ -80,25 +88,72 @@ def explain(lines: list[str]) -> dict | None:
     return None
 
 
+def _forms(path) -> list[str]:
+    """The ways a log writes one folder: escaped backslashes (exceptions, command lists, JSON in them), as given, with forward
+    slashes (as_posix, repr of a WindowsPath, ffmpeg) and inside a file:/// link. Longest first."""
+    s = str(path)
+    posix = s.replace("\\", "/")
+    return list(dict.fromkeys([s.replace("\\", "\\" * 4), s.replace("\\", "\\\\"), s, posix, quote(posix, safe="/:"), posix.replace(" ", "%20")]))
+
+
+def _short(name: str) -> str | None:
+    """The 8.3 short form Windows may write for a long folder name (Wang Wei -> WANGWE~1), ASCII names only.
+    shortcut: the pattern is the usual one, not read from the disk (GetShortPathNameW); non-ASCII names get
+    hashed short names it misses. Not tested on Windows."""
+    base = re.sub(r"[ .]", "", name)
+    return base[:6] if base.isascii() and (len(name) > 8 or " " in name) else None
+
+
+def _entries(library) -> list[str]:
+    """The names a log can use for the library's videos: folder and file names, file names without the extension,
+    and the titles in title.txt. Longest first, so a name inside a longer one doesn't leave the rest behind."""
+    names = set()
+    try:
+        for p in Path(library).iterdir() if library else ():
+            names |= {p.name, p.stem if p.is_file() else p.name.removesuffix("_study")}
+            try:
+                names.add((p / "title.txt").read_text(encoding="utf-8").strip())
+            except OSError:
+                pass
+    except OSError:                                           # no library (yet), or one we can't read
+        pass
+    return sorted((n for n in names if len(n) >= 2 and not n.startswith(".")), key=len, reverse=True)
+
+
 def redact(text: str, library: Path | None = None) -> str:
     home, user = str(Path.home()), getpass.getuser()
-    lines = [ln for ln in text.splitlines() if not TRANSCRIPT.match(ln)]
+    flags = re.I if engine.WINDOWS else 0                     # Windows paths ignore case: C:\Users = c:\users
+    if engine.WINDOWS and len(user) > 2 and (short := _short(user)):
+        text = re.sub(rf"\b{re.escape(short)}~\d+", user.replace("\\", "\\\\"), text, flags=re.I)   # then the long forms below match
+    lines, cue = [], 0
+    for ln in text.splitlines():
+        if TRANSCRIPT.match(ln):
+            cue = 3 if SRT_TIMING.match(ln) else 0            # a study track has at most 3 lines (zh, pinyin, en)
+        elif cue and not re.fullmatch(r"\s*\d+\s*", ln) and not LOG_LINE.search(ln):   # up to the next cue or log line
+            cue -= 1
+        else:
+            cue = 0
+            lines.append(ln)
     text = "\n".join(ln for ln in lines if not re.search(r"cookie|SESSDATA|Authorization", ln, re.I) or "cookies from browser" in ln)
     if library:
         # Spaces/quotes make the path's end ambiguous: hide the rest of its line, including later diagnostics.
-        # Exceptions and command lists escape Windows backslashes.
-        for prefix in (str(library).replace("\\", "\\\\"), str(library)):
-            text = re.sub(re.escape(prefix) + r"[\\/]+[^\r\n]*", "<library>/<video>", text)
-            text = text.replace(prefix, "<library>")
-    text = text.replace(home.replace("\\", "\\\\"), "~").replace(home, "~")
-    text = re.sub(rf"\b{re.escape(user)}\b", "<user>", text) if len(user) > 2 else text
-    text = URL.sub(_shape, text)
+        for prefix in _forms(library):
+            text = re.sub(re.escape(prefix) + r"(?:[\\/]|%5C|%2F)+[^\r\n]*", "<library>/<video>", text, flags=flags)
+            text = re.sub(re.escape(prefix), "<library>", text, flags=flags)
+    for form in _forms(home):
+        text = re.sub(re.escape(form), "~", text, flags=flags)
+    if len(user) > 2:
+        for form in dict.fromkeys([user, quote(user), re.sub(r"[ ._-]", "", user)]):   # Wang Wei, Wang%20Wei, WangWei
+            text = re.sub(rf"\b{re.escape(form)}\b", "<user>", text, flags=flags)
+    text = URL.sub(_shape, text)                              # first: a folder named by its video id would break the shape
+    if names := _entries(library):                            # a video named on its own, without the library in front
+        text = re.sub(r"(?<!<)(?:" + "|".join(map(re.escape, names)) + r")(?!>)", "<video>", text, flags=flags)
     return EMAIL.sub("<email>", text)
 
 
 def system() -> str:
     """Machine, chip and OS version: enough to reproduce, nothing personal."""
-    if platform.system() == "Windows":
+    if engine.WINDOWS:
         return " · ".join(x for x in (platform.platform(), platform.machine(),
                                       platform.processor() or platform.uname().processor) if x)
     def sysctl(key):

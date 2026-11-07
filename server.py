@@ -10,6 +10,7 @@ Everything it knows about a video lives in that video's folder (see PLAN.md), so
 the command line always agree. Listens on 127.0.0.1 only.
 """
 import argparse
+import codecs
 import json
 import logging
 import mimetypes
@@ -38,6 +39,8 @@ LOG = logging.getLogger("pianpian")
 SCRIPT = HERE / "pipeline" / "study.py"
 VIDEO_EXT = anki_export.VIDEO_EXT
 SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name: no separators or NUL
+# Windows opens these as devices whatever the folder or extension (NUL.mp4 is NUL); it also drops a trailing dot or space
+DEVICE = re.compile(r"(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³]|CONIN\$|CONOUT\$) *(\..*)?|.*[. ]", re.I | re.S)
 TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
 mimetypes.add_type("text/plain; charset=utf-8", ".srt")
 mimetypes.add_type("text/vtt; charset=utf-8", ".vtt")
@@ -99,27 +102,36 @@ def describe(entry: Path) -> dict:
             "split": int(read(entry / ".split")) if read(entry / ".split").isdigit() else None,
             "needsEnglish": (entry / "zh.lines.txt").exists() and not has["en"],
             "hsk": video_hsk(entry),
-            "mtime": max((p.stat().st_mtime for p in entry.iterdir()), default=entry.stat().st_mtime)}
+            "mtime": max((p.lstat().st_mtime for p in entry.iterdir()), default=entry.stat().st_mtime)}
+
+
+def inside_library(f: Path) -> bool:
+    """By the real path: a link in the library must not lead out of it. (The app's own files are checked by name.)"""
+    try:
+        return f.resolve().is_relative_to(CFG["library"].resolve())
+    except (OSError, RuntimeError):                          # a link loop, a name the system refuses
+        return False
 
 
 def library() -> list:
     lib = CFG["library"]
     lib.mkdir(parents=True, exist_ok=True)
-    folders = [p for p in lib.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    folders = [p for p in lib.iterdir() if p.is_dir() and not p.name.startswith(".") and inside_library(p)]
     done = {p.name[:-len("_study")] for p in folders if p.name.endswith("_study")}
-    files = [p for p in lib.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT and p.stem not in done]
+    files = [p for p in lib.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT and p.stem not in done and inside_library(p)]
     return sorted((describe(p) for p in folders + files), key=lambda v: -v["mtime"])
 
 
 def safe_name(name: str) -> bool:
-    return bool(SAFE_ID.fullmatch(name)) and not name.startswith(".") and (not engine.WINDOWS or ":" not in name)
+    return bool(SAFE_ID.fullmatch(name)) and not name.startswith(".") and \
+        (not engine.WINDOWS or ":" not in name and not DEVICE.fullmatch(name))
 
 
 def entry_path(vid_id: str) -> Path:
     if not safe_name(vid_id):
         raise ValueError("bad id")
     p = CFG["library"] / vid_id
-    if not p.exists():
+    if not p.exists() or not inside_library(p):
         raise FileNotFoundError(vid_id)
     return p
 
@@ -134,6 +146,14 @@ class Job:
         self.state, self.log, self.started, self.ended, self.code = "queued", [], None, None, None
         self.kind = "rebuild"
         self.on_done = None                                   # called after a successful run
+        # Output arrives in chunks that can cut a line or a UTF-8 character in two. A cut transcript line would lose its
+        # [00:..-->] prefix and slip past report.TRANSCRIPT, so only whole lines reach the log.
+        self._tail, self._utf8 = "", codecs.getincrementaldecoder("utf-8")("replace")
+
+    def feed(self, chunk: bytes, final=False):
+        lines = re.split(r"[\r\n]+", self._tail + self._utf8.decode(chunk, final))
+        self._tail = "" if final else lines.pop()[:64 * 1024]   # a line that never ends: bounded, still one line
+        self.add("\n".join(lines))
 
     def add(self, text):
         for part in re.split(r"[\r\n]+", text):
@@ -156,6 +176,8 @@ class Job:
 
 JOBS: list = []
 QUEUE: "queue.Queue[Job]" = queue.Queue()
+STARTING = threading.Lock()                                  # a job and the setup (it may move the library) never overlap
+SETUP_RUNS = "The setup is running. Try again when it has finished."
 
 
 def worker():
@@ -168,7 +190,8 @@ def worker():
             p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=engine.NO_WINDOW)
             while chunk := p.stdout.read1(4096):
-                job.add(chunk.decode("utf-8", "replace"))
+                job.feed(chunk)
+            job.feed(b"", final=True)
             job.code = p.wait()
             job.state = "done" if job.code == 0 else "failed"
         except Exception as e:                                # missing tool, permissions…
@@ -183,9 +206,12 @@ def worker():
 
 
 def enqueue(job: Job) -> Job:
-    JOBS.append(job)
-    del JOBS[:-30]
-    QUEUE.put(job)
+    with STARTING:
+        if engine.SETUP.state == "running":
+            raise RuntimeError(SETUP_RUNS)
+        JOBS.append(job)
+        del JOBS[:-30]
+        QUEUE.put(job)
     return job
 
 
@@ -212,6 +238,21 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):                        # quiet: the app shows what matters
         pass
 
+    def own_origins(self) -> set:
+        port = self.server.server_port
+        return {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+    def parse_request(self):
+        # DNS rebinding: a site can point its own name at 127.0.0.1 and then count as same-origin, so the
+        # X-Kit guard would no longer hold. Every request must name this server in its Host header.
+        if not super().parse_request():
+            return False
+        if (self.headers.get("Host") or "").lower() not in self.own_origins():
+            self.close_connection = True                     # its body, if any, is never read
+            self.fail(403, "wrong Host header")
+            return False
+        return True
+
     # ---- helpers
     def send_json(self, obj, status=200, cors=False):
         body = json.dumps(obj, ensure_ascii=False).encode()
@@ -219,7 +260,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        if cors:                                              # only /api/status: lets a page opened from disk see the server
+        if cors:                                              # only /api/status: lets another page see that the app runs
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
@@ -256,7 +297,7 @@ class Handler(BaseHTTPRequestHandler):
                 while left > 0 and (buf := f.read(min(256 * 1024, left))):
                     self.wfile.write(buf)
                     left -= len(buf)
-        except (BrokenPipeError, ConnectionResetError):       # the browser cancels ranges all the time
+        except OSError:                                       # the browser cancels ranges all the time; headers are out
             pass
 
     def body(self) -> dict:
@@ -273,9 +314,13 @@ class Handler(BaseHTTPRequestHandler):
                 if engine.WINDOWS:                    # the backend names only; the GPU probes are cached
                     bw, bl = (engine.runtimes.backend_for(t) for t in ("whisper", "llama"))
                     accel = bw if bw == bl else f"whisper.cpp {bw} · llama.cpp {bl}"
+                origin = self.headers.get("Origin")
+                if origin and origin.lower().removeprefix("http://") not in self.own_origins():
+                    # another site (or a page from disk) may only learn that the app runs, never the library path
+                    return self.send_json({"ok": True, "version": VERSION}, cors=True)
                 return self.send_json({"ok": True, "version": VERSION, "library": str(CFG["library"]), "engine": engine.STATE["engine"], "current": engine.STATE["current"],
                                        "platform": "win32" if engine.WINDOWS else "darwin", "accel": accel, "browsers": engine.installed_browsers(),
-                                       "busy": busy, "update": UPDATE.get("app")}, cors=True)
+                                       "busy": busy, "update": UPDATE.get("app")})
             if path == "/api/videos":
                 return self.send_json(library())
             if path == "/api/anki/status":
@@ -302,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
                 if m[2] and not safe_name(m[2]):
                     return self.fail(404, "bad filename")
                 f = p / m[2] if m[2] else p
-                if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]):
+                if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]) and inside_library(f):
                     if p.is_dir() and f.name == "zh.words.json":
                         return self.send_json(anki_export.study_words(p))
                     return self.send_file(f)
@@ -316,13 +361,15 @@ class Handler(BaseHTTPRequestHandler):
                     and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md"):
                 return self.send_file(f)
             self.fail(404, "not found")
-        except (ValueError, FileNotFoundError) as e:
+        except (ValueError, OSError) as e:                    # OSError: a name the system refuses, a file it can't read
             self.fail(404, str(e))
 
     def thumb(self, p: Path, name: str):
         if p.is_file():
             return self.fail(404, "no thumbnail for a loose file")
         out = p / f"{name}.jpg"
+        if not inside_library(out):                           # a link: never write through it or serve it
+            return self.fail(404, "no thumbnail")
         width = 1280 if name == "poster" else 480
         if not out.exists() and (src := video_in(p)):
             subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
@@ -351,6 +398,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(400, "drop a video file (" + ", ".join(VIDEO_EXT) + ")")
         if not size:
             return self.fail(400, "empty file")
+        if engine.SETUP.state == "running":                   # before copying: the setup may be moving the library
+            return self.fail(409, SETUP_RUNS)
         lib = CFG["library"]
         target, n = lib / name, 2
         while target.exists() or (lib / (target.stem + "_study")).exists():   # never overwrite: "name (2).mp4"
@@ -368,7 +417,10 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ConnectionError) as e:
             part.unlink(missing_ok=True)
             return self.fail(500, f"could not copy the video into the library: {e}")
-        job = rebuild_job(target.name, translate=q.get("translate") == "1")
+        try:
+            job = rebuild_job(target.name, translate=q.get("translate") == "1")
+        except RuntimeError as e:                             # the setup started meanwhile: the copy stays, as a loose video
+            return self.fail(409, str(e))
         job.kind = "add"                                      # like a new link: the app opens it when it is done
         return self.send_json(job.public())
 
@@ -402,10 +454,13 @@ class Handler(BaseHTTPRequestHandler):
                 for d in (library, folder):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
-                try:
-                    engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
-                except RuntimeError as e:
-                    return self.fail(409, str(e))
+                with STARTING:
+                    if busy := next((j for j in JOBS if j.state in ("queued", "running")), None):
+                        return self.fail(409, f"Wait for “{busy.label}” to finish, then run the setup.")
+                    try:
+                        engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
+                    except RuntimeError as e:
+                        return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
                 return self.send_json(engine.SETUP.public())
@@ -434,10 +489,14 @@ class Handler(BaseHTTPRequestHandler):
                 engine.reveal(entry_path(m[1]))
                 return self.send_json({"ok": True})
             self.fail(404, "not found")
+        except json.JSONDecodeError:                          # before ValueError, its parent
+            self.fail(400, "bad JSON")
+        except RuntimeError as e:                             # enqueue: the setup is running
+            self.fail(409, str(e))
         except (ValueError, FileNotFoundError) as e:
             self.fail(404, str(e))
-        except json.JSONDecodeError:
-            self.fail(400, "bad JSON")
+        except OSError as e:                                  # a name the system refuses, a folder it can't write
+            self.fail(400, str(e))
 
     def anki_request(self, path, data):
         try:
@@ -507,7 +566,10 @@ def keep_up_to_date() -> None:
     while True:
         UPDATE["app"] = updates.check_app(VERSION)
         if engine.STATE["engine"] and updates.ytdlp_due() and not any(j.kind == "update" and j.state in ("queued", "running") for j in JOBS):
-            downloader_job()
+            try:
+                downloader_job()
+            except RuntimeError:                              # the setup is running: next round
+                pass
         time.sleep(6 * 3600)
 
 

@@ -161,3 +161,157 @@ def test_mac_library_names_with_colons_remain_accessible(tmp_path, monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_job_log_keeps_lines_whole_across_chunks(tmp_path):
+    # a transcript line and a UTF-8 character cut across reads must stay one line, so redaction still drops it
+    job = server.Job("t", [], str(tmp_path))
+    data = "[00:00:03.000 --> 00:00:06.000]   私人会议内容\nRuntimeError: translation failed\n".encode()
+    cut = data.index("私".encode()) + 1                         # inside the first character's three bytes
+    for part in (data[:10], data[10:cut], data[cut:]):
+        job.feed(part)
+    job.feed(b"", final=True)
+    assert job.log == ["[00:00:03.000 --> 00:00:06.000]   私人会议内容", "RuntimeError: translation failed"]
+    assert server.report.redact("\n".join(job.log)) == "RuntimeError: translation failed"
+    job.feed(b"no newline at the end")
+    job.feed(b"", final=True)
+    assert job.log[-1] == "no newline at the end"
+
+
+def test_host_header_and_cross_origin_status(tmp_path, monkeypatch):
+    # DNS rebinding: only this server's own Host is served; other sites see that the app runs, not the library path
+    import http.client
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_port
+
+    def get(path, method="GET", **headers):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.putrequest(method, path, skip_host=True)
+        for k, v in headers.items():
+            c.putheader(k.replace("_", "-"), v)
+        c.endheaders()
+        r = c.getresponse()
+        return r.status, r.headers, r.read()
+
+    try:
+        for host in ("rebind.attacker.example:%d" % port, "127.0.0.1", "127.0.0.1:1", "evil.localhost:%d" % port):
+            assert get("/api/videos", Host=host)[0] == 403, host
+        assert get("/api/videos", "POST", Host="rebind.example:%d" % port, X_Kit="1", Content_Length="0")[0] == 403
+        assert get("/api/videos")[0] == 403                     # no Host at all
+        for host in (f"127.0.0.1:{port}", f"LOCALHOST:{port}"):
+            assert get("/api/videos", Host=host)[0] == 200, host
+        full = json.loads(get("/api/status", Host=f"127.0.0.1:{port}")[2])
+        assert full["library"] == str(tmp_path)
+        same = get("/api/status", Host=f"localhost:{port}", Origin=f"http://localhost:{port}")
+        assert json.loads(same[2])["library"] == str(tmp_path) and "Access-Control-Allow-Origin" not in same[1]
+        for origin in ("https://pianpian.app", "null"):
+            status, headers, body = get("/api/status", Host=f"127.0.0.1:{port}", Origin=origin)
+            assert status == 200 and headers["Access-Control-Allow-Origin"] == "*"
+            assert json.loads(body) == {"ok": True, "version": server.VERSION}, origin
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_links_in_the_library_do_not_lead_out_of_it(tmp_path, monkeypatch):
+    lib, outside = tmp_path / "lib", tmp_path / "outside"
+    (lib / "vid").mkdir(parents=True)
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+    (lib / "vid" / "zh.srt").write_text("1\n")
+    (lib / "vid" / "link.srt").symlink_to(outside / "secret.txt")
+    (lib / "vid" / "thumb.jpg").symlink_to(outside / "secret.txt")
+    (lib / "vid" / "poster.jpg").symlink_to(outside / "new.jpg")       # dangling: ffmpeg must not write through it
+    (lib / "linkdir").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setitem(server.CFG, "library", lib)
+    monkeypatch.setattr(server.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("ffmpeg ran")))
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        assert urllib.request.urlopen(base + "/library/vid/zh.srt").read() == b"1\n"
+        for path in ("/library/vid/link.srt", "/library/vid/thumb.jpg", "/library/vid/poster.jpg",
+                     "/library/linkdir/secret.txt", "/api/videos/linkdir"):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(base + path)
+            assert error.value.code == 404, path
+        assert [v["id"] for v in json.load(urllib.request.urlopen(base + "/api/videos"))] == ["vid"]
+        assert not (outside / "new.jpg").exists()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+@pytest.mark.parametrize("name", ["CON", "nul.mp4", "Com1.srt", "lpt9", "AUX .txt", "CONIN$", "x.mp4.", "zh.srt "])
+def test_windows_device_names_are_not_safe(monkeypatch, name):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    assert not server.safe_name(name)
+    monkeypatch.setattr(server.engine, "WINDOWS", False)
+    assert server.safe_name(name) == (not name.startswith(".")), "macOS keeps every one of these names"
+
+
+def test_windows_names_that_only_look_like_devices_are_safe(monkeypatch):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    for name in ("CONSOLE.mp4", "COM10.srt", "nullable", "lpt.txt", "zh.srt", "con_study"):
+        assert server.safe_name(name), name
+
+
+def test_an_os_error_on_a_path_answers_instead_of_dropping_the_connection(tmp_path, monkeypatch):
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+
+    def refused(vid_id):
+        raise OSError(22, "Invalid argument", vid_id)
+    monkeypatch.setattr(server, "entry_path", refused)
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        for req, code in ((base + "/api/videos/x", 404), (base + "/library/x/zh.srt", 404),
+                          (urllib.request.Request(base + "/api/videos/x/rebuild", data=b"{}", headers={"X-Kit": "1"}), 400),
+                          (urllib.request.Request(base + "/api/add", data=b"{bad", headers={"X-Kit": "1"}), 400)):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req)
+            assert error.value.code == code
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_setup_and_jobs_never_overlap(tmp_path, monkeypatch):
+    (tmp_path / "vid").mkdir()
+    (tmp_path / "vid" / "source.mp4").write_bytes(b"video")
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "QUEUE", server.queue.Queue())         # no worker: queued jobs stay queued
+    started = []
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *a, **kw: started.append(a))
+    srv = server.LocalServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+
+    def call(path, data=b"{}", method="POST"):
+        req = urllib.request.Request(base + path, data=data, method=method, headers={"X-Kit": "1"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    try:
+        assert call("/api/videos/vid/rebuild")[0] == 200
+        code, body = call("/api/setup")
+        assert code == 409 and "Rebuild" in body["error"] and not started
+        server.JOBS[0].state = "done"
+        monkeypatch.setattr(server.engine.SETUP, "state", "running")
+        assert call("/api/setup")[0] == 200 and started
+        server.CFG["library"] = tmp_path                                 # the fake setup saved no config to re-read
+        for path in ("/api/videos/vid/rebuild", "/api/videos/vid/translate", "/api/update-downloader"):
+            code, body = call(path)
+            assert code == 409 and body["error"] == server.SETUP_RUNS, path
+        assert call("/api/import?name=new.mp4", b"video", "PUT")[0] == 409
+        assert not (tmp_path / "new.mp4").exists() and len(server.JOBS) == 1
+    finally:
+        srv.shutdown()
+        srv.server_close()
