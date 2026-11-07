@@ -1,14 +1,19 @@
 """The first-run setup's decisions: what counts as missing, and when the engine needs an update."""
 import importlib
+import os
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def fresh(monkeypatch, tmp_path):
     monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))
-    monkeypatch.delenv("PIANPIAN_MODELS", raising=False)
+    for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME"):
+        monkeypatch.delenv(key, raising=False)
     import engine
     return importlib.reload(engine)
 
@@ -57,6 +62,75 @@ def test_settings_default_and_persist(monkeypatch, tmp_path):
     e.save_config(library=str(tmp_path / "videos"))
     assert e.config()["library"] == str(tmp_path / "videos")
     assert e.models_dir() == tmp_path / "models"
+
+
+@pytest.mark.parametrize("windows", [False, True])
+@pytest.mark.parametrize("overrides", [False, True])
+def test_setup_relocates_app_paths_before_starting_downloads(monkeypatch, tmp_path, windows, overrides):
+    e = fresh(monkeypatch, tmp_path)
+    folders = {"PIANPIAN_MODELS": "models", "PIANPIAN_CACHE": "cache", "PIANPIAN_RUNTIME": "runtime"}
+    if overrides:
+        for key, folder in folders.items():
+            monkeypatch.setenv(key, str(tmp_path / "explicit" / folder))
+        importlib.reload(e)
+    monkeypatch.setattr(e, "WINDOWS", windows)
+    e.STATE.update(engine=True, current=True)
+    seen = []
+    monkeypatch.setattr(e.models, "status", lambda: seen.append(e.models.cache()) or [])
+    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    workers = []
+    monkeypatch.setattr(e.Setup, "_run", lambda self: workers.append(dict(os.environ)))
+    os.environ.update(e.pipeline_env())                       # same as server.start()
+    e.SETUP.plan()                                            # same as opening the setup page
+    dest = tmp_path / "another-disk"
+    e.SETUP.start(None, str(dest), [])
+    e.SETUP.thread.join(timeout=5)
+    assert not e.SETUP.thread.is_alive() and len(workers) == 1
+    expected_root = tmp_path / "explicit" if overrides else dest
+    assert seen[-1] == expected_root / "models"               # catalog was checked after relocation
+    for key, folder in folders.items():
+        if key == "PIANPIAN_RUNTIME" and not windows:
+            continue
+        assert workers[0][key] == str(expected_root / folder)
+    assert e.engine_dir() == dest / "engine"
+
+
+@pytest.mark.parametrize("windows", [False, True])
+@pytest.mark.parametrize("working", [False, True])
+def test_relocation_installs_and_checks_the_destination_engine(monkeypatch, tmp_path, windows, working):
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.delenv("PIANPIAN_PYTHON", raising=False)
+    monkeypatch.setattr(e, "WINDOWS", windows)
+    monkeypatch.setattr(e, "FROZEN", True)                     # no fallback to the checkout's interpreter
+    old_py = e.engine_python(e.engine_dir())
+    old_py.parent.mkdir(parents=True)
+    old_py.touch()
+    e.STATE.update(engine=True, current=True)
+    os.environ.update(e.pipeline_env())
+    monkeypatch.setattr(e.models, "status", lambda: [])
+    monkeypatch.setattr(e.runtimes, "status", lambda: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e, "mirror_env", lambda: {})
+    monkeypatch.setattr(e, "uv", lambda: "uv")
+    calls = []
+
+    def install(self, cmd, env, sid):
+        calls.append(cmd)
+        if cmd[1] == "venv":
+            py = e.engine_python(Path(cmd[-1]))
+            py.parent.mkdir(parents=True)
+            py.touch()
+
+    monkeypatch.setattr(e.Setup, "_exec", install)
+    monkeypatch.setattr(e.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0 if working and Path(cmd[0]).is_file() else 1))
+    dest = tmp_path / "another-disk"
+    e.SETUP.start(None, str(dest), [])
+    e.SETUP.thread.join(timeout=5)
+    assert not e.SETUP.thread.is_alive()
+    assert calls[0] == ["uv", "venv", "--python", "3.12", str(dest / "engine")]
+    assert str(e.engine_python(dest / "engine")) in calls[1] and str(old_py) not in calls[1]
+    assert e.SETUP.state == ("done" if working else "failed")
+    if not working:
+        assert "could not start after setup" in e.SETUP.error
 
 
 def test_the_packaged_app_never_writes_bytecode_into_itself(monkeypatch, tmp_path):

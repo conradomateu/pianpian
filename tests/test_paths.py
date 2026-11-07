@@ -27,6 +27,7 @@ def test_the_app_tells_the_pipeline_where_its_data_is(monkeypatch, tmp_path):
     monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))
     monkeypatch.delenv("PIANPIAN_MODELS", raising=False)
     monkeypatch.delenv("PIANPIAN_CACHE", raising=False)
+    monkeypatch.delenv("PIANPIAN_RUNTIME", raising=False)
     import importlib
     import engine
     importlib.reload(engine)

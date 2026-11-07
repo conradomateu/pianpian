@@ -1,7 +1,10 @@
 """Problem reports: the hints match real failures, and nothing personal survives redaction."""
+import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import report  # noqa: E402
@@ -52,6 +55,39 @@ def test_redact_covers_a_windows_library_path():
     lib = Path(r"C:\Users\someone\Videos\Pianpian")         # a PosixPath keeps the backslashes literal
     out = report.redact(rf"folder: {lib}\BV1xx\zh.srt failed", lib)
     assert "<library>/<video>" in out and "someone" not in out and "BV1xx" not in out
+
+
+@pytest.mark.parametrize("timestamp", ["00:01.840", "00:00:01.840"])
+def test_transcripts_do_not_reach_the_report_url(timestamp):
+    details = report.redact(f"[{timestamp} --> 00:00:19.880] 私人会议内容\nRuntimeError: translation failed")
+    url = report.issue_url("owner/repo", "Problem", "JOB-FAILED", details, "test")
+    shared = parse_qs(urlparse(url).query)["details"][0]
+    assert shared == "RuntimeError: translation failed"
+
+
+@pytest.mark.parametrize("home", [PureWindowsPath("C:/Users/report user"), PurePosixPath("/Users/report user")])
+@pytest.mark.parametrize("title", ["private lesson", "teacher's private lesson", 'a "private" lesson', '''teacher's "private" lesson'''])
+def test_known_paths_are_redacted_in_errors_commands_and_report_urls(monkeypatch, home, title):
+    monkeypatch.setattr(report.Path, "home", lambda: home)
+    monkeypatch.setattr(report.getpass, "getuser", lambda: "report user")
+    lib = home / "Videos" / "Study library"
+    video = lib / title / "private recording.srt"
+    text = "\n".join([
+        f"folder: {video.parent}",
+        f"{video}: failed",
+        str(FileNotFoundError(2, "No such file or directory", str(video))),
+        str(subprocess.CalledProcessError(1, [str(home / "engine" / "python"), str(video)])),
+        "RuntimeError: translation failed",
+    ])
+    details = report.redact(text, lib)
+    url = report.issue_url("owner/repo", "Problem", "JOB-FAILED", details, "test")
+    shared = parse_qs(urlparse(url).query)["details"][0]
+    assert shared == details
+    for private in ("report user", "Study library", "teacher", "private", "lesson", "recording.srt"):
+        assert private not in shared
+    assert shared.count("<library>/<video>") == 4
+    assert "~/engine/python" in shared.replace("\\\\", "/").replace("\\", "/")
+    assert "No such file or directory" in shared and "RuntimeError: translation failed" in shared
 
 
 def test_issue_url_fills_the_bug_form_and_stays_short():

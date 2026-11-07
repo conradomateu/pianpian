@@ -42,12 +42,15 @@ the server to make subtitles.
   pick. Each source is timed against its mirror in mainland China and the faster one is used. The engine
   remembers which requirements it was installed from, so a release that changes them sends you back to
   the setup page, which then says "An update for Pianpian" and only fetches what changed (`uv pip sync`).
+  Explicit model/cache/runtime environment overrides are captured at app startup; app-derived paths
+  follow the chosen data folder before setup checks the catalog or starts downloads.
 - `updates.py` asks GitHub for the latest release at most once a day and shows a card in the library
-  when there is a newer one. yt-dlp is updated on its own at most once a week, and from the job card
+  when there is a newer one. Windows links to source-update instructions; macOS offers its DMG.
+  yt-dlp is updated on its own at most once a week, and from the job card
   when a download fails because the site changed.
 - `report.py` turns a failed job's log into a short code and a hint, and builds the Report link: GitHub's
   bug form filled in with redacted details (no home folder, file names, link paths, cookies or
-  transcript). Nothing is sent until the person presses Submit on GitHub. Logs live in
+  transcript). Opening the link sends those details to GitHub; Submit publishes the issue. Logs live in
   `~/Library/Logs/Pianpian` on macOS and `<data>\logs` on Windows.
 
 ## Packaging and releases
@@ -67,7 +70,12 @@ break the signature after the first run.
 
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
-`Pianpian-macOS.zip`, which the website's Download button and the in-app update card point at.
+`Pianpian-macOS.dmg` and `Pianpian-macOS.zip`; the website and Mac update card prefer the DMG.
+Windows runs from source; its installer and release assets are separate work.
+
+Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,
+never in `app.html`, so the app itself sends nothing to it. Real download totals come from the release files' own counters
+(`gh api repos/conradomateu/pianpian/releases`). Not tested: how many mainland China visitors the script reaches.
 
 ## Models
 
@@ -149,3 +157,43 @@ without a shell.
 `app.html` is the only screen: library on the left (B), video and its menus in the middle, transcript
 on the right (T). `assets/player.js` is the player, `assets/kit.css` the design tokens and
 `assets/kit.js` small shared helpers. There is no framework and no build step.
+
+### Playback state and loading
+
+The shared player owns loading, buffering and retry feedback. The app owns library selection:
+new selections cancel older requests. The video starts loading alongside the subtitles, dictionary
+and alignment data; late study data is attached without restarting playback. A subtitle failure
+offers a separate retry while the video remains playable. The player uses a separate 1280px-wide
+`poster.jpg`; the library keeps its 480px-wide `thumb.jpg`. The local server generates either image
+on demand from the video and caches it in the video folder. Buffering keeps the current frame visible.
+
+Playback uses the browser's progressive MP4 support, with HTTP byte ranges on both GitHub Pages
+and the local server. `preload="metadata"` hints at a small initial download; the browser decides
+how much to buffer. The self-made demo has its MP4 index first (`faststart`) and ships both images.
+New links still download through yt-dlp before processing; this does not stream an unfinished download.
+
+Library playback positions and the last opened video are saved in browser local storage. Reopening
+restores the last available video, paused; an explicit `#v=…&t=…` link takes precedence. The website
+demo starts fresh. Dropped files are not reopened automatically because browser file access does
+not survive a restart. If storage is unavailable, playback still works without memory.
+`launcher.py` disables pywebview's private mode and supplies `engine.data_dir() / "webview"` for
+persistent browser storage. Storage is origin-specific: the launcher's fallback port has separate
+state. These changes use browser APIs and pywebview's cross-platform options; Windows native
+behavior has not been tested.
+
+Verified on 1 Nov 2026: Chrome browser regressions use the self-made demo and real clicks for
+playback, word definitions, video selection and retry; they also check resume, timestamp links,
+missing videos, blocked storage and overlapping selections. A separate macOS pywebview/WebKit
+check saved 13.2 seconds, closed the window process, then restored 13.2 seconds paused in a new
+process. Those browser regressions exercise buffer feedback with simulated media events.
+
+Verified on 7 Nov 2026 with Chrome and the self-made demo: both the published site and the local
+server answered head and tail byte ranges with 206. At 32 KB/s and 150 ms simulated latency,
+playback started with roughly 4–5 of 44.8 seconds buffered. Throttling the local player to 1 byte/s
+produced a real media stall, showed buffering feedback, and recovered when the limit was lifted.
+
+On narrow screens the website measures its same-origin demo's content height, including open
+menus, so the host page scrolls normally and only the transcript has a bounded scroll area.
+The decorative window bar has its own class, separate from the shared sticky navigation style.
+Verified on 1 Nov 2026 with Chrome at 320, 390 and 768 CSS pixels, including an actual dropdown
+click and navigation stacking. Physical iPhone/Android browsers have not been tested.

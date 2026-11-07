@@ -45,6 +45,8 @@ def _support() -> Path:
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
 SUPPORT = _support()
 CONFIG = SUPPORT / "config.json"
+# Capture user overrides before the app publishes its own paths into the worker environment.
+PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME")}
 REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
 RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
@@ -110,17 +112,17 @@ def data_dir() -> Path:
 
 
 def models_dir() -> Path:
-    return Path(os.environ.get("PIANPIAN_MODELS") or data_dir() / "models")
+    return Path(PATH_OVERRIDES["PIANPIAN_MODELS"] or data_dir() / "models")
 
 
 def cache_dir() -> Path:
     """The dictionary and other small downloads."""
-    return Path(os.environ.get("PIANPIAN_CACHE") or data_dir() / "cache")
+    return Path(PATH_OVERRIDES["PIANPIAN_CACHE"] or data_dir() / "cache")
 
 
 def runtime_dir() -> Path:
     """The pinned whisper.cpp / llama.cpp builds (Windows)."""
-    return Path(os.environ.get("PIANPIAN_RUNTIME") or data_dir() / "runtime")
+    return Path(PATH_OVERRIDES["PIANPIAN_RUNTIME"] or data_dir() / "runtime")
 
 
 def pipeline_env() -> dict:
@@ -227,12 +229,11 @@ class Setup:
     def plan(self) -> dict:
         """What the setup would do, for the page to show before anything is downloaded."""
         cfg, st = config(), (STATE if STATE["engine"] is not None else check())
-        os.environ.setdefault("PIANPIAN_MODELS", str(models_dir()))
+        os.environ.update(pipeline_env())
         catalog = models.status()
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
         runtime = runtimes.status() if WINDOWS else None
-        os.environ["PIANPIAN_MODELS"] = str(models_dir())
         return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
                 "runtime": runtime, "free": free_bytes(Path(cfg["data"])),
                 "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
@@ -241,7 +242,11 @@ class Setup:
         with self.lock:
             if self.state == "running":
                 raise RuntimeError("the setup is already running")
+            previous_python = python()
             save_config(library=library, data=data, models=want)
+            os.environ.update(pipeline_env())
+            if python() != previous_python:
+                STATE.update(engine=False, current=False)
             self.state, self.error = "running", ""
             self.steps = [{"id": "engine", "label": "Engine: Python and the pipeline's tools", "state": "waiting", "done": 0, "total": 0}]
             if WINDOWS:
@@ -307,7 +312,9 @@ class Setup:
                 self._exec([str(py), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",
                             str(HERE / "pipeline")], {"PYTHONWARNINGS": "ignore::SyntaxWarning", **pipeline_env()}, "engine")
             self._say("checking the engine (the first start prepares its packages: about a minute)")
-            check()
+            checked = check()
+            if not (checked["engine"] and checked["current"]):
+                raise RuntimeError("engine is not installed or could not start after setup")
             self._step("engine", state="done")
             if WINDOWS:                                     # whisper.cpp and llama.cpp for this GPU
                 r = runtimes.status()
@@ -319,7 +326,6 @@ class Setup:
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])
             if getattr(self, "cleanup", False):
-                os.environ["PIANPIAN_MODELS"] = str(models_dir())
                 self._say(f"deleted old models: {models.remove_unused() / 1e9:.1f} GB freed")
             with self.lock:
                 self.state = "done"

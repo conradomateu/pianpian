@@ -1,9 +1,9 @@
 """Problem reports: what went wrong in plain words, a short code, and details that are safe to share.
 
 A failed job's log is matched against the failures we know (explain), and the page shows the hint.
-Report opens GitHub's bug form (.github/ISSUE_TEMPLATE/bug.yml) filled in with the details below;
-nothing is sent until the person reads it there and presses Submit. Before that, redact() takes
-out the home folder, the user name, the library's folder names, e-mail addresses, the path and
+Report opens GitHub's bug form (.github/ISSUE_TEMPLATE/bug.yml), sending the prefilled details to
+GitHub when the link opens; publishing the issue requires Submit. Before building the link, redact()
+takes out the home folder, the user name, the library's folder names, e-mail addresses, the path and
 query of every link (they can carry a session or say what you watch) and the transcript lines
 (the video's words). Standard library only.
 """
@@ -54,7 +54,7 @@ KNOWN = [
     ("VIDEO-FILE", r"moov atom not found|Invalid data found when processing input|Error opening input",
      "The video file couldn't be read: it may be damaged, or in a format ffmpeg can't open."),
 ]
-TRANSCRIPT = re.compile(r"^\s*\[\d\d:\d\d[.:]\d\d\d? --> ")                 # Whisper prints what it hears
+TRANSCRIPT = re.compile(r"^\s*\[(?:\d+:)?\d\d:\d\d[.:]\d\d\d? --> ")      # MLX and whisper.cpp timestamps
 URL = re.compile(r"https?://[^\s'\"<>]+")
 # first path words that only say what kind of page it is (never a person or a title)
 KIND = {"video", "bangumi", "watch", "shorts", "live", "play", "embed", "playlist", "list", "cheese", "medialist", "s", "e"}
@@ -85,9 +85,12 @@ def redact(text: str, library: Path | None = None) -> str:
     lines = [ln for ln in text.splitlines() if not TRANSCRIPT.match(ln)]
     text = "\n".join(ln for ln in lines if not re.search(r"cookie|SESSDATA|Authorization", ln, re.I) or "cookies from browser" in ln)
     if library:
-        text = re.sub(re.escape(str(library)) + r"[\\/][^\\/\s'\"]+", "<library>/<video>", text)
-        text = text.replace(str(library), "<library>")
-    text = text.replace(home, "~")
+        # Spaces/quotes make the path's end ambiguous: hide the rest of its line, including later diagnostics.
+        # Exceptions and command lists escape Windows backslashes.
+        for prefix in (str(library).replace("\\", "\\\\"), str(library)):
+            text = re.sub(re.escape(prefix) + r"[\\/]+[^\r\n]*", "<library>/<video>", text)
+            text = text.replace(prefix, "<library>")
+    text = text.replace(home.replace("\\", "\\\\"), "~").replace(home, "~")
     text = re.sub(rf"\b{re.escape(user)}\b", "<user>", text) if len(user) > 2 else text
     text = URL.sub(_shape, text)
     return EMAIL.sub("<email>", text)

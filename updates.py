@@ -66,7 +66,7 @@ def check_app(current: str, force: bool = False) -> dict | None:
                 rel = json.load(urlopen(req, timeout=10))
                 # the DMG is what a person opens and drags to Applications; older releases only have the zip
                 files = {a["name"].rsplit(".", 1)[-1]: a["browser_download_url"] for a in rel.get("assets", []) if "-macOS." in a["name"]}
-                asset = files.get("dmg") or files.get("zip")
+                asset = None if engine.WINDOWS else files.get("dmg") or files.get("zip")
                 state["app"] = {"version": clean_version(rel["tag_name"]), "url": rel["html_url"], "download": asset,
                                 "notes": "\n".join((rel.get("body") or "").splitlines()[:12])}
             except (OSError, ValueError, KeyError):
@@ -74,6 +74,8 @@ def check_app(current: str, force: bool = False) -> dict | None:
             state["appChecked"] = time.time()
             _save(state)
         app = state.get("app")
+        if app and engine.WINDOWS:
+            app = {**app, "download": None}                   # also discard Mac assets cached by earlier Windows builds
     return app if app and newer(app["version"], current) else None
 
 

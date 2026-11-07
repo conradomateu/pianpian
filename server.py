@@ -36,7 +36,7 @@ HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("pianpian")
 SCRIPT = HERE / "pipeline" / "study.py"
 VIDEO_EXT = (".mp4", ".m4v", ".mkv", ".webm", ".mov")
-SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name inside the library: no slashes
+SAFE_ID = re.compile(r"^[^/\\\x00]+$")                  # one name: no separators or NUL
 TRACK_FILES = {"zh": "zh.srt", "pinyin": "zh.pinyin.srt", "en": "zh.en.srt", "mkv": "study.mkv"}
 mimetypes.add_type("text/plain; charset=utf-8", ".srt")
 mimetypes.add_type("text/vtt; charset=utf-8", ".vtt")
@@ -110,8 +110,12 @@ def library() -> list:
     return sorted((describe(p) for p in folders + files), key=lambda v: -v["mtime"])
 
 
+def safe_name(name: str) -> bool:
+    return bool(SAFE_ID.fullmatch(name)) and not name.startswith(".") and (not engine.WINDOWS or ":" not in name)
+
+
 def entry_path(vid_id: str) -> Path:
-    if not SAFE_ID.match(vid_id) or vid_id.startswith("."):
+    if not safe_name(vid_id):
         raise ValueError("bad id")
     p = CFG["library"] / vid_id
     if not p.exists():
@@ -286,10 +290,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(problem_report(parse_qs(urlparse(self.path).query)))
             if path == "/api/jobs":
                 return self.send_json([j.public() for j in reversed(JOBS)])
-            if m := re.fullmatch(r"/library/([^/]+)/thumb\.jpg", path):
-                return self.thumb(entry_path(m[1]))
+            if m := re.fullmatch(r"/library/([^/]+)/(thumb|poster)\.jpg", path):
+                return self.thumb(entry_path(m[1]), m[2])
             if m := re.fullmatch(r"/library/([^/]+)(?:/([^/]+))?", path):
                 p = entry_path(m[1])
+                if m[2] and not safe_name(m[2]):
+                    return self.fail(404, "bad filename")
                 f = p / m[2] if m[2] else p
                 if f.is_file() and not f.name.startswith(".") and f.parent in (p, CFG["library"]):
                     return self.send_file(f)
@@ -299,20 +305,21 @@ class Handler(BaseHTTPRequestHandler):
             rel = path.lstrip("/") or "app.html"
             parts = Path(rel).parts
             f = HERE.joinpath(*parts) if parts else HERE / "app.html"
-            if parts and not any(part in ("..", "") or part.startswith(".") or "\\" in part for part in parts) and f.is_file() \
+            if parts and all(safe_name(part) for part in parts) and f.is_file() \
                     and f.suffix in (".html", ".css", ".js", ".svg", ".png", ".md"):
                 return self.send_file(f)
             self.fail(404, "not found")
         except (ValueError, FileNotFoundError) as e:
             self.fail(404, str(e))
 
-    def thumb(self, p: Path):
+    def thumb(self, p: Path, name: str):
         if p.is_file():
             return self.fail(404, "no thumbnail for a loose file")
-        out = p / "thumb.jpg"
+        out = p / f"{name}.jpg"
+        width = 1280 if name == "poster" else 480
         if not out.exists() and (src := video_in(p)):
             subprocess.run([engine.ffmpeg() or "ffmpeg", "-loglevel", "error", "-y", "-ss", "4", "-i", str(src), "-frames:v", "1",
-                            "-vf", "scale=480:-2", str(out)], timeout=30, creationflags=engine.NO_WINDOW)
+                            "-vf", f"scale={width}:-2", str(out)], timeout=30, creationflags=engine.NO_WINDOW)
         return self.send_file(out) if out.exists() else self.fail(404, "no thumbnail")
 
     def do_OPTIONS(self):                                     # preflight for /api/status only
@@ -333,7 +340,7 @@ class Handler(BaseHTTPRequestHandler):
         q = dict(p.split("=", 1) for p in u.query.split("&") if "=" in p)
         name = Path(unquote(q.get("name", ""))).name.strip()
         size = int(self.headers.get("Content-Length") or 0)
-        if not name or name.startswith(".") or Path(name).suffix.lower() not in VIDEO_EXT:
+        if not safe_name(name) or Path(name).suffix.lower() not in VIDEO_EXT:
             return self.fail(400, "drop a video file (" + ", ".join(VIDEO_EXT) + ")")
         if not size:
             return self.fail(400, "empty file")
@@ -390,7 +397,6 @@ class Handler(BaseHTTPRequestHandler):
                     return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
-                os.environ.update(engine.pipeline_env())
                 return self.send_json(engine.SETUP.public())
             if path == "/api/update-downloader":           # sites change; yt-dlp follows them
                 job = downloader_job()

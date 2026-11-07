@@ -80,7 +80,8 @@ def main():
     url = serve()
     window = webview.create_window("Pianpian 片片", url="about:blank", width=1440, height=900, js_api=Api(),
                                    min_size=(900, 600), background_color="#14120F", hidden=True)
-    webview.start(ready, (window, url))
+    # Keep playback positions and player preferences across app launches.
+    webview.start(ready, (window, url), private_mode=False, storage_path=str(engine.data_dir() / "webview"))
     logging.info("window closed")
 
 

@@ -22,7 +22,7 @@
 .wrap { max-width:1180px; margin:0 auto; padding:0 16px; }
 header.top { position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px);
   -webkit-backdrop-filter:blur(10px); border-bottom:1px solid transparent; }
-header.top .in { display:flex; align-items:center; gap:6px; padding:12px 0; }
+header.top .in { padding-inline:16px; display:flex; align-items:center; gap:6px; padding-block:12px; }
 header.top .name { font:700 17px var(--display); letter-spacing:-.01em; margin-left:4px; }
 header.top .grow { flex:1; }
 header.top a.link { font-size:14px; color:var(--fg-2); text-decoration:none; padding:6px 10px; border-radius:8px; }
@@ -47,19 +47,14 @@ section { scroll-margin-top:70px; }
 .ghost svg { width:19px; height:19px; margin-top:-2px; transition:color .16s ease; }
 .ghost.star:hover svg { color:#E9A23B; }   /* GitHub's star turns gold on hover */
 .meta { margin-top:14px; font:12.5px var(--mono); color:var(--muted); }
-.compat { display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:7px 13px; border-radius:999px; font-size:13.5px;
-  background:var(--surface-2); color:var(--fg-2); border:1px solid var(--line); }
-.compat::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--muted); }
-.compat.yes { background:var(--jade-tint); color:var(--jade-fg); border-color:transparent; } .compat.yes::before { background:var(--jade); }
-.compat.no { background:var(--red-tint); color:var(--red-fg); border-color:transparent; } .compat.no::before { background:var(--red); }
+
 
 .frame { border-radius:16px; overflow:hidden; border:1px solid var(--line-2); box-shadow:0 30px 80px -40px rgba(23,19,15,.45); background:var(--surface); }
-.demo { margin:18px auto 0; }
-.demo .bar { display:flex; align-items:center; gap:7px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-2); }
-.demo .bar i { width:11px; height:11px; border-radius:50%; background:var(--line-2); }
-.demo .bar span { flex:1; text-align:center; font:12px var(--mono); color:var(--muted); margin-right:40px; }
-.demo iframe { display:block; width:100%; height:min(780px, 82vh); border:0; background:var(--bg); }
-.demo-note { text-align:center; font-size:13px; color:var(--muted); margin:12px auto 0; max-width:70ch; }
+.demo { position:relative; isolation:isolate; z-index:0; margin:18px auto 0; }
+.demo .window-bar { display:flex; align-items:center; gap:7px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-2); }
+.demo .window-bar i { width:11px; height:11px; border-radius:50%; background:var(--line-2); }
+.demo .window-bar span { flex:1; text-align:center; font:12px var(--mono); color:var(--muted); margin-right:40px; }
+.demo iframe { position:relative; display:block; width:100%; height:min(780px, 82vh); border:0; background:var(--bg); }
 
 
 .features { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:26px; }
@@ -70,10 +65,8 @@ section { scroll-margin-top:70px; }
 .f .ic svg { width:22px; height:22px; }
 .f b { display:block; font:700 17px var(--display); margin-bottom:6px; }
 .f p { margin:0; color:var(--fg-2); font-size:14.5px; }
-.f kbd { font:600 11px var(--mono); padding:1px 5px; border-radius:5px; color:var(--fg); background:var(--surface-2); border:1px solid var(--line-2); border-bottom-width:2px; }
 
 h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
-p.secsub { color:var(--fg-2); margin:0; font-size:16px; }
 .steps { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:26px; counter-reset:s; }
 .steps div { counter-increment:s; padding:22px; border-radius:14px; border:1px solid var(--line); }
 .steps div::before { content:counter(s); display:grid; place-items:center; width:30px; height:30px; border-radius:9px; margin-bottom:12px;
@@ -104,9 +97,20 @@ p.secsub { color:var(--fg-2); margin:0; font-size:16px; }
 footer.site { margin:60px 0 0; padding:26px 0 40px; border-top:1px solid var(--line); display:flex; flex-wrap:wrap; gap:16px; font-size:13.5px; color:var(--muted); }
 footer.site a { color:var(--fg-2); }
 footer.site .grow { flex:1; }
-@media (max-width:700px) { .demo iframe { height:86vh; } .demo .bar span { margin-right:0; } header.top a.link.hide-s { display:none; } }
+@media (max-width:700px) {
+  header.top a.link.hide-s { display:none; }
+  header.top .name { font-size:15px; white-space:nowrap; }
+  header.top .dl.small { padding:9px 12px; font-size:13px; }
+  .hero { padding:36px 0 24px; }
+  .demo .window-bar { padding:9px 12px; }
+  .demo .window-bar span { margin-right:0; font-size:11px; }
+  h2.sec { margin-top:64px; }
+  .final { margin-top:64px; padding:36px 16px; }
+}
+@media (max-width:900px) { .demo iframe { height:640px; } }
 @media (prefers-reduced-motion:reduce) { .dl, .faq summary::after { transition:none; } }
 </style>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
 </head>
 <body>
 <header class="top"><div class="wrap in">
@@ -117,56 +121,52 @@ footer.site .grow { flex:1; }
   <a class="link hide-s" href="#features">Features</a>
   <a class="link hide-s" href="#faq">FAQ</a>
   <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
-  <a class="dl small" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
+  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download</a>
 </div></header>
 
 <div class="wrap">
   <div class="hero">
     <h1>Learn Mandarin from the videos you <em>actually</em> watch</h1>
-    <p class="lede">Paste a Bilibili or YouTube link. Pianpian makes Chinese, pinyin and English subtitles on your Mac, then lets you hover any word and practise line by line.</p>
+    <p class="lede">Turn videos into Chinese, pinyin and English subtitles. Look up words and practise line by line, on your Mac.</p>
     <div class="cta">
-      <a class="dl" id="download" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
+      <a class="dl" id="download" data-umami-event="download" data-umami-event-where="hero" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
         Download for Mac
       </a>
       <a class="ghost" href="#demo">Try it here</a>
     </div>
     <div class="meta">v{{VERSION}} · free and open source · no account</div>
-    <div class="compat" id="compat">Checking your device…</div>
   </div>
 
   <section id="demo">
     <div class="frame demo">
-      <div class="bar"><i></i><i></i><i></i><span>Pianpian 片片 · demo</span></div>
+      <div class="window-bar"><i></i><i></i><i></i><span>Pianpian 片片 · demo</span></div>
       <iframe src="app.html?demo#v=pianpian-day" title="Pianpian demo" loading="lazy" allow="fullscreen" allowfullscreen></iframe>
     </div>
-    <p class="demo-note">This is the real app. Play the video, hover a word, open the menus. You can also drop a video of your own on it: it plays from your disk and nothing is uploaded.</p>
   </section>
 
   <section id="features">
     <h2 class="sec">What it does</h2>
-    <p class="secsub">Everything below works in the demo above.</p>
     <div class="features">
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 10h6"/><path d="M12 12l7 3-3 1-1 3z" fill="currentColor"/></svg></span><span class="k">Every word</span><b>Hover a word, see what it means</b><p>Its pinyin, a dictionary meaning, its HSK level and its measure words. The same word lights up in the pinyin and in the English.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></span><span class="k">Practice</span><b>Practise line by line</b><p><kbd>←</kbd> <kbd>→</kbd> jump between lines, <kbd>R</kbd> replay, <kbd>L</kbd> loop, <kbd>P</kbd> pause after each line to say it yourself, and slow it down to half speed.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="5" height="8" rx="1.5"/><rect x="10" y="8" width="5" height="8" rx="1.5" fill="currentColor"/><rect x="17" y="8" width="4" height="8" rx="1.5"/></svg></span><span class="k">Grammar</span><b>See how a sentence is built</b><p>A cheat sheet for word order, each part in its own colour, and optional marks under 了, 过, 在 and 要 that say past, now or later.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg></span><span class="k">Any video</span><b>Bilibili, YouTube, or your own files</b><p>Uses the platform's subtitles when there are some; otherwise Whisper hears the Chinese. Burned-in subtitles are read with macOS's own text recognition.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h11M4 17h14"/></svg></span><span class="k">Three lines</span><b>中文, pinyin and English</b><p>Show any mix. Pinyin is coloured by tone, and it can sit right above each word instead of on its own line.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></span><span class="k">Listening</span><b>Follow the voice</b><p>The word being said lights up as it is spoken, so your eyes and ears stay on the same word.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V14M10 20V9M16 20V4"/><path d="M3 20h18"/></svg></span><span class="k">Your level</span><b>An HSK level for every video</b><p>Each video in your library shows the HSK level that covers 90% of its words, so you know what to watch next.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></svg></span><span class="k">Private</span><b>Runs on your Mac</b><p>Speech recognition and translation are local models. No account, no API key, no upload. Videos stay in a folder you choose.</p></div>
-      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg></span><span class="k">Yours to keep</span><b>A file for any player</b><p>Every video is also saved as one MKV with all the subtitle tracks, for IINA, VLC or mpv, on any device.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 10h6"/><path d="M12 12l7 3-3 1-1 3z" fill="currentColor"/></svg></span><b>Look up any word</b><p>Tap or hover for pinyin, meanings and HSK levels. Matching words light up across subtitles.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></span><b>Practise line by line</b><p>Replay, loop or slow down a line. Pause after each sentence to say it yourself.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="5" height="8" rx="1.5"/><rect x="10" y="8" width="5" height="8" rx="1.5" fill="currentColor"/><rect x="17" y="8" width="4" height="8" rx="1.5"/></svg></span><b>See how a sentence is built</b><p>A cheat sheet for word order, each part in its own colour, and optional marks under 了, 过, 在 and 要 that say past, now or later.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg></span><b>Bilibili, YouTube, or your own files</b><p>Use existing subtitles, transcribe the audio or read subtitles embedded in the picture.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h11M4 17h14"/></svg></span><b>中文, pinyin and English</b><p>Show any mix. Pinyin is coloured by tone, and it can sit right above each word instead of on its own line.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></span><b>Follow the voice</b><p>The word being said lights up as it is spoken, so your eyes and ears stay on the same word.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V14M10 20V9M16 20V4"/><path d="M3 20h18"/></svg></span><b>An HSK level for every video</b><p>Each video in your library shows the HSK level that covers 90% of its words, so you know what to watch next.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></svg></span><b>Runs on your Mac</b><p>Speech recognition and translation are local models. No account, no API key, no upload. Videos stay in a folder you choose.</p></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg></span><b>A file for any player</b><p>Every video is also saved as one MKV with all the subtitle tracks, for IINA, VLC or mpv, on any device.</p></div>
     </div>
   </section>
 
   <section id="how">
     <h2 class="sec">How it works</h2>
-    <p class="secsub">From a link to a video you can study, in about a minute for every ten minutes of video.</p>
     <div class="steps">
       <div><b>Paste a link</b><p>From Bilibili or YouTube, or drop a video file on the window.</p></div>
-      <div><b>It makes the subtitles</b><p>Chinese from the platform or from Whisper, pinyin with jieba and pypinyin, English from Tencent's Hy-MT2 model.</p></div>
-      <div><b>Watch, hover and practise</b><p>Click any line to jump to it, hover any word, loop what you want to say yourself.</p></div>
+      <div><b>It makes the subtitles</b><p>Chinese, pinyin and English, generated locally on your Mac.</p></div>
+      <div><b>Watch and practise</b><p>Choose a line, look up a word and replay what you want to learn.</p></div>
     </div>
   </section>
 
@@ -175,12 +175,12 @@ footer.site .grow { flex:1; }
     <h2 class="sec">Questions</h2>
     <div class="faq">
       <details><summary>Is it free?</summary><p>Yes. Pianpian is free and open source (MIT licence). There is no account and nothing to subscribe to.</p></details>
-      <details><summary>Which Macs can run it?</summary><p>Macs with Apple Silicon (M1 or newer) on macOS 14 Sonoma or newer. It needs about 4 GB of disk, mostly for the two models. The check at the top of this page tells you if yours can.</p></details>
+      <details><summary>Which Macs can run it?</summary><p>Macs with Apple Silicon (M1 or newer) on macOS 14 Sonoma or newer. It needs about 4 GB of disk, mostly for the two models.</p></details>
       <details><summary>What does the first start do?</summary><p>It asks where to keep your videos and its tools, shows what it will download (its engine, about 0.65 GB, and the speech and translation models, 1.6 GB and 1 GB), and installs them once, with progress. From mainland China it picks the faster mirrors by itself.</p></details>
       <details><summary>Is anything uploaded?</summary><p>No. Videos are downloaded to your Mac and processed there. The app only goes online to download videos you ask for, its tools on the first start, and updates.</p></details>
       <details><summary>Which videos can I use?</summary><p>Bilibili, YouTube and most video sites, plus any video file you already have. Use it for videos you are allowed to watch, and don't re-upload them.</p></details>
       <details><summary>macOS says it can't check the app. Is it safe?</summary><p>Pianpian isn't signed with a paid Apple developer certificate yet, so the first time macOS asks. Open it once, then go to System Settings → Privacy &amp; Security and choose Open Anyway. The source code is public on GitHub.</p></details>
-      <details><summary>Windows or iPhone?</summary><p>Not yet. The app relies on Apple Silicon for its models today; a Windows version is planned.</p></details>
+      <details><summary>Windows or iPhone?</summary><p>Windows x64 runs <a href="https://github.com/{{REPO}}#windows-from-source">from source</a>; its installer is separate work. There is no iPhone app.</p></details>
     </div>
   </section>
 
@@ -189,7 +189,7 @@ footer.site .grow { flex:1; }
     <h2>Your next video, in 中文, pinyin and English</h2>
     <p>Free for Mac. One piece at a time: 一天一片.</p>
     <div class="cta">
-      <a class="dl" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
+      <a class="dl" data-umami-event="download" data-umami-event-where="bottom" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
         Download for Mac
       </a>
@@ -206,33 +206,26 @@ footer.site .grow { flex:1; }
   </footer>
 </div>
 <script>
-/* Can this device run it? Apple Silicon Macs only. Chrome and Edge say so directly (User-Agent Client Hints);
-   other browsers are read from the graphics chip's name, and when that is hidden we say how to check. */
-(async () => {
-  const el = document.getElementById('compat');
-  const say = (cls, text) => { el.className = 'compat ' + cls; el.textContent = text; };
-  const ua = navigator.userAgent;
-  if (/iPhone|iPad|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1))
-    return say('', 'Pianpian runs on Macs. Try the demo here, then open this page on your Mac.');
-  if (!/Macintosh|Mac OS X/.test(ua)) return say('no', 'Pianpian runs on Macs with Apple Silicon. You can still try the demo below.');
-  try {
-    const h = navigator.userAgentData && await navigator.userAgentData.getHighEntropyValues(['architecture', 'platformVersion']);
-    if (h && h.architecture) {
-      if (h.architecture !== 'arm') return say('no', 'This Mac has an Intel chip. Pianpian needs Apple Silicon (M1 or newer).');
-      const major = parseInt(h.platformVersion, 10);
-      return major && major < 14 ? say('no', 'Your Mac has Apple Silicon, but Pianpian needs macOS 14 or newer.')
-                                 : say('yes', 'Your Mac can run Pianpian');
-    }
-  } catch {}
-  try {
-    const gl = document.createElement('canvas').getContext('webgl');
-    const info = gl && gl.getExtension('WEBGL_debug_renderer_info');
-    const gpu = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
-    if (/Apple M\d/.test(gpu)) return say('yes', 'Your Mac can run Pianpian');
-    if (/Intel|AMD|Radeon|NVIDIA/i.test(gpu)) return say('no', 'This Mac has an Intel chip. Pianpian needs Apple Silicon (M1 or newer).');
-  } catch {}
-  say('', 'Needs a Mac with Apple Silicon. Check in  → About This Mac: the chip should say Apple M1 or newer.');
-})();
+/* On small screens the demo participates in the page flow; only its transcript scrolls. */
+const demoFrame = document.querySelector('.demo iframe');
+function fitDemo() {
+  if (!matchMedia('(max-width:900px)').matches) { demoFrame.style.height = ''; return; }
+  const doc = demoFrame.contentDocument, shell = doc && doc.querySelector('.shell');
+  if (!shell) return;
+  let height = shell.getBoundingClientRect().height;
+  doc.querySelectorAll('details.dd[open] > .ddp').forEach(panel => {
+    height = Math.max(height, panel.getBoundingClientRect().bottom + 12);
+  });
+  demoFrame.style.height = Math.ceil(height) + 'px';
+}
+demoFrame.addEventListener('load', () => {
+  const doc = demoFrame.contentDocument, shell = doc && doc.querySelector('.shell');
+  if (!shell) return;
+  new ResizeObserver(fitDemo).observe(shell);
+  doc.addEventListener('toggle', () => requestAnimationFrame(fitDemo), true);
+  fitDemo();
+});
+addEventListener('resize', fitDemo);
 /* the header gets a hairline once the page scrolls */
 const head = document.querySelector('header.top');
 addEventListener('scroll', () => { head.style.borderBottomColor = scrollY > 8 ? 'var(--line)' : 'transparent'; }, { passive: true });

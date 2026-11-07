@@ -11,7 +11,11 @@ import json
 import runpy
 import subprocess
 import sys
+import threading
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 
@@ -235,7 +239,7 @@ def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tm
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
     monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "llama-server.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
-    monkeypatch.setattr(backend_win, "urlopen", _fake_http(posts))
+    monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http(posts))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
         assert generate("你好", 0.3, 52) == "Hello"
     cmd = procs[0].cmd
@@ -256,7 +260,7 @@ def test_win_translator_falls_back_to_cpu(monkeypatch, tmp_path):
     monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
     ready = iter([False, True])                                           # the Vulkan build never answers /health
     monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: next(ready))
-    monkeypatch.setattr(backend_win, "urlopen", _fake_http(posts))
+    monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http(posts))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
         assert generate("你好", 0.0, 10) == "Hello"
     assert procs[0].cmd[procs[0].cmd.index("-ngl") + 1] == "999"
@@ -278,7 +282,7 @@ def test_win_translator_retries_a_gpu_launch_error(monkeypatch, tmp_path):
     monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
     monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
-    monkeypatch.setattr(backend_win, "urlopen", _fake_http([]))
+    monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http([]))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
         assert generate("你好", 0.0, 10) == "Hello"
     assert [cmd[0] for cmd in calls] == ["gpu.exe", "cpu.exe"]
@@ -318,11 +322,73 @@ def test_win_translator_retains_the_offloaded_layer_count(monkeypatch, tmp_path,
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
     monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
-    monkeypatch.setattr(backend_win, "urlopen", _fake_http([]))
+    monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http([]))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
         pass
     assert "offloaded 33/33 layers to GPU" in capsys.readouterr().out
     assert not list(tmp_path.glob("*.log"))
+
+
+@pytest.mark.parametrize("redirect", [False, True])
+def test_win_translator_keeps_http_local_with_a_proxy_configured(monkeypatch, tmp_path, redirect):
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(("GET", self.path, None))
+            self.send_response(200 if self.path == "/health" else 502)
+            self.end_headers()
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append(("POST", self.path, body))
+            self.send_response(302 if redirect else 200)
+            if redirect:
+                self.send_header("Location", f"http://127.0.0.1:{self.server.server_port}/escaped")
+            self.end_headers()
+            self.wfile.write(b'{"choices":[{"message":{"content":"Hello"}}]}')
+
+        def log_message(self, *args):
+            pass
+
+    # The same server acts as a rejecting proxy: proxied requests use absolute URLs.
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base = f"http://127.0.0.1:{server.server_port}"
+            for name in ("http_proxy", "HTTP_PROXY"):
+                monkeypatch.setenv(name, base)
+            for name in ("no_proxy", "NO_PROXY"):
+                monkeypatch.setenv(name, "example.invalid")
+            monkeypatch.setattr(urllib.request, "_opener", None)
+            importlib.reload(backend_win)                  # construct its client with the proxy already configured
+            proc = _Proc([])
+            monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+            monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cpu")
+            monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "unused.exe")
+            monkeypatch.setattr(backend_win, "_free_port", lambda: server.server_port)
+            monkeypatch.setattr(backend_win, "_start_server", lambda *args: proc)
+            monkeypatch.setattr(backend_win.time, "sleep", lambda _: pytest.fail("healthy local server was not reached directly"))
+            with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+                if redirect:
+                    with pytest.raises(HTTPError) as error:
+                        generate("你好", 0.3, 52)
+                    assert error.value.code == 302
+                else:
+                    assert generate("你好", 0.3, 52) == "Hello"
+            assert proc.terminated and not list(tmp_path.glob("*.log"))
+            assert [(method, path) for method, path, _ in seen] == [("GET", "/health"), ("POST", "/v1/chat/completions")]
+            assert seen[1][2]["messages"] == [{"role": "user", "content": "你好"}]
+            # The model downloader still uses the configured proxy, not the local-only client.
+            with pytest.raises(HTTPError) as error:
+                models.urlopen(base + "/download", timeout=2)
+            assert error.value.code == 502 and seen[-1][:2] == ("GET", base + "/download")
+        finally:
+            server.shutdown()
+            thread.join()
+            monkeypatch.undo()
+            importlib.reload(backend_win)
 
 
 def test_win_ocr_reads_frames_with_rapidocr(monkeypatch, tmp_path):

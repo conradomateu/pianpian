@@ -22,13 +22,22 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 import runtimes
 import srt_tool
 
 WHISPER_MODEL = "ggml-large-v3-turbo.bin"
 LLAMA_MODEL = "Hy-MT2-1.8B-Q4_K_M.gguf"
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# Local inference must bypass system proxies and cannot follow redirects off-machine.
+LOCAL_HTTP = build_opener(ProxyHandler({}), _NoRedirect())
 
 
 def _segments(data: dict) -> list[dict]:
@@ -126,7 +135,7 @@ def _wait_ready(proc: subprocess.Popen, port: int) -> bool:
         if proc.poll() is not None:
             return False
         try:
-            with urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+            with LOCAL_HTTP.open(f"http://127.0.0.1:{port}/health", timeout=2) as r:
                 if r.status == 200:
                     return True
         except OSError:
@@ -187,7 +196,7 @@ def translator(model_dir: str):
                                "stream": False}).encode()
             req = Request(f"http://127.0.0.1:{port}/v1/chat/completions", data=body,
                           headers={"Content-Type": "application/json"})
-            with urlopen(req, timeout=300) as r:
+            with LOCAL_HTTP.open(req, timeout=300) as r:
                 return json.load(r)["choices"][0]["message"]["content"]
 
         yield generate

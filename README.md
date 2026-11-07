@@ -78,7 +78,7 @@ hf-mirror.com; runtime binaries come from GitHub, with `PIANPIAN_GITHUB_MIRROR` 
 see [PR #11](https://github.com/conradomateu/pianpian/pull/11) for benchmarks and acceptance checks.
 
 **Acceptance runs on 7 Nov 2026** (Windows 11 25H2 build 26200, Ryzen 9 7940HS, RTX 4060 Laptop,
-driver 591.74, commit `8db674f` plus two fixes): the source app installed and opened from a clean
+driver 591.74, commit `8db674f` plus fixes `c7fe9d4`, `30548ce` and `92fc4f1`): the source app installed and opened from a clean
 checkout, a job with a Chinese file name completed through the native window, a forced GPU launch
 failure retried once on the CPU builds (whisper and translation) with no leftover processes, no
 console windows flashed during jobs, a YouTube download merged with the bundled engine ffmpeg
@@ -87,6 +87,17 @@ default context (punctuation was absent in both). RapidOCR, Windows 10, mainland
 downloads and AMD/Intel Vulkan inference remain untested.
 Windows ARM64 is unsupported. Model-based English↔Chinese alignment remains MLX-only;
 Windows word links use the dictionary.
+
+To update a source checkout, close Pianpian, then run these commands in its folder:
+
+```powershell
+git pull --ff-only
+python dev.py engine
+python dev.py app
+```
+
+The Windows update notice links here; the downloadable DMG and ZIP are for macOS.
+The full first-run setup console watch was still pending in the 7 Nov 2026 acceptance report.
 
 Updates: the app tells you when a new version is out, and keeps its video downloader fresh on its own.
 
@@ -98,7 +109,7 @@ Updates: the app tells you when a new version is out, and keeps its video downlo
 
 Lines too long? **Video ▾ → Lines** cuts them again from Whisper's word timings. A wrong pinyin? Add the word to [`pipeline/pinyin_fixes.txt`](pipeline/pinyin_fixes.txt) and press **Video ▾ → Rebuild**.
 
-Something went wrong? The app says what in plain words; **Report** opens a GitHub issue already filled in with details that leave out your files and links. Nothing is sent until you press Submit.
+Something went wrong? The app says what in plain words; **Report** opens GitHub's issue form with redacted details. Opening it sends those details to GitHub; pressing Submit publishes the issue.
 
 ## How it works
 

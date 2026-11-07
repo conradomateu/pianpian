@@ -80,7 +80,7 @@ def main() -> None:
         stage = tmp / "stage"
         shutil.copytree(ROOT / "pipeline", stage / "pipeline", ignore=PIPELINE_SKIP)
         (stage / "pipeline" / "bin").mkdir()
-        run("swiftc", "-O", ROOT / "pipeline" / "ocr_frames.swift", "-o", stage / "pipeline" / "bin" / "ocr_frames")
+        run("swiftc", "-O", "-target", "arm64-apple-macosx14.0", ROOT / "pipeline" / "ocr_frames.swift", "-o", stage / "pipeline" / "bin" / "ocr_frames")
         (stage / "VERSION").write_text(ver + "\n")
         datas = [("app.html", "."), ("setup.html", "."), ("assets", "assets"), (str(ICON), "design/icons"),
                  (str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), ".")]
