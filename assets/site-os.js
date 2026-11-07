@@ -59,10 +59,13 @@
     note.dataset.fits = seen.fits;
     note.hidden = false;
     for (const el of document.querySelectorAll('[data-umami-event="download"]')) el.dataset.umamiEventDetected = seen.os;
-    if (seen.os === 'other') return;
+    if (seen.os === 'other' || seen.fits === false) return;   // unknown or unsupported: Mac stays primary, Windows secondary
     for (const pair of document.querySelectorAll('.cta')) {
       const mine = pair.querySelector(`[data-os="${seen.os}"]`);
-      if (mine) pair.prepend(mine);
+      if (!mine) continue;
+      pair.querySelectorAll('[data-os]').forEach(a => a.classList.replace('dl', 'ghost'));
+      mine.classList.replace('ghost', 'dl');
+      pair.prepend(mine);
     }
     // the header button downloads directly only when this computer is one Pianpian supports or might support
     const button = cta.querySelector(`a[data-os="${seen.os}"]`), head = document.querySelector('header.top .dl');

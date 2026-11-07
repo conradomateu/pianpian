@@ -61,10 +61,10 @@ WINDOWS_FILE = "Pianpian-Windows-Setup.exe"
 
 
 def windows_cta(names: list[str] | None, where: str) -> str:
-    """The Windows button, only when the latest release has the installer (unknown counts as no); else a line
-    pointing at the releases page."""
+    """The Windows button (secondary until site-os.js sees a Windows PC), only when the latest release has the
+    installer (unknown counts as no); else a line pointing at the releases page."""
     if names and WINDOWS_FILE in names:
-        return (f'<a class="dl" data-os="windows" data-umami-event="download" data-umami-event-where="{where}" '
+        return (f'<a class="ghost" data-os="windows" data-umami-event="download" data-umami-event-where="{where}" '
                 f'data-umami-event-os="windows" href="https://github.com/{REPO}/releases/latest/download/{WINDOWS_FILE}">'
                 f'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{WINDOWS}"/></svg>Download for Windows</a>')
     return f'<a class="soon" href="https://github.com/{REPO}/releases">Windows: coming with the next release</a>'
