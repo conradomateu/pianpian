@@ -24,6 +24,7 @@ DIST, BUILD = ROOT / "dist", ROOT / "build"
 APP = DIST / "Pianpian.app"
 ICON = ROOT / "design" / "icons" / "20-pianpian-watermelon.svg"
 PIPELINE_SKIP = shutil.ignore_patterns("__pycache__", "*.pyc", "*.sh", "bin")
+PYINSTALLER, PYWEBVIEW = "pyinstaller==6.22.3", "pywebview==6.2.1"   # the Windows build imports these: one pair for both apps
 EXCLUDE = ["tkinter", "unittest", "pydoc_data", "lib2to3", "test", "idlelib", "ensurepip", "distutils"]
 
 
@@ -91,8 +92,9 @@ def main() -> None:
         args += ["--add-binary", f"{uv}:."]
         for mod in EXCLUDE:
             args += ["--exclude-module", mod]
-        # a clean, throwaway environment with just what the window needs (the same pywebview as tools/make_app.sh)
-        run("uv", "run", "--isolated", "--no-project", "--python", "3.12", "--with", "pyinstaller>=6.10", "--with", "pywebview>=6.2",
+        # a clean, throwaway environment with just what the window needs, pinned as in tools/build_app_windows.py
+        # (PyInstaller 6.22.3 is in the log of the 0.1.4 release build, 7 Nov 2026; pywebview's version is not printed there)
+        run("uv", "run", "--isolated", "--no-project", "--python", "3.12", "--with", PYINSTALLER, "--with", PYWEBVIEW,
             "pyinstaller", *args, ROOT / "launcher.py", cwd=ROOT)
     shutil.rmtree(DIST / "Pianpian", ignore_errors=True)            # the onedir copy next to the .app
     plist = APP / "Contents" / "Info.plist"

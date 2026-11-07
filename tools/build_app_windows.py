@@ -23,16 +23,15 @@ import time
 import zipfile
 from pathlib import Path
 
-from build_app import ICON as LOGO, PIPELINE_SKIP, ROOT, run, version
+from build_app import ICON as LOGO, PIPELINE_SKIP, PYINSTALLER, PYWEBVIEW, ROOT, run, version
 
 DIST, BUILD = ROOT / "dist", ROOT / "build"
 STAGE = BUILD / "windows"
 ICON = ROOT / "design" / "icons" / "Pianpian.ico"   # built into Pianpian.exe and Setup.exe; pywebview takes the window icon from the exe
 ISS = ROOT / "tools" / "windows" / "pianpian.iss"
 SETUP = DIST / "Pianpian-Windows-Setup.exe"
-# the versions of the green windows.yml run of 7 Nov 2026 (PyInstaller 6.22.3, hooks-contrib 2026.9 in its log;
-# pywebview's version is not printed there: 6.2.1 is what the same resolution gives on 7 Nov 2026)
-PYINSTALLER, PYWEBVIEW = "pyinstaller==6.22.3", "pywebview==6.2.1"
+# PYINSTALLER, PYWEBVIEW (tools/build_app.py): the green windows.yml run of 7 Nov 2026 logged PyInstaller 6.22.3 and
+# hooks-contrib 2026.9; pywebview's version is not printed there: 6.2.1 is what the same resolution gives on 7 Nov 2026
 DATAS = [("app.html", "."), ("setup.html", "."), ("assets", "assets"), (str(LOGO), "design/icons"), ("LICENSE", ".")]
 
 
