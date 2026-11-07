@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mlx-lm>=0.28; sys_platform == 'darwin'", "jieba>=0.42"]
+# dependencies = ["mlx-lm>=0.28; sys_platform == 'darwin'", "jieba>=0.42", "pypinyin>=0.51"]
 # ///
 """Link each English word to the Chinese word it translates, using the translation model itself.
 
@@ -21,8 +21,6 @@ import re
 import sys
 from pathlib import Path
 
-import jieba
-
 try:
     import mlx.core as mx
     from mlx_lm import load
@@ -32,8 +30,8 @@ except ImportError as e:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from translate_srt import MODEL, ensure_model, read_lines   # same model, same download
+from srt_tool import segment_words
 
-jieba.setLogLevel(60)
 LAYER = 10
 HAN = re.compile(r"[一-鿿]")
 GRAMMAR_ZH = set("的了着过呢吗吧啊呀啦嘛哦咯里有是在就都也")      # unreliable targets for vector links
@@ -71,13 +69,13 @@ def main() -> None:
                 h = layer(h, mask, None)
             H = h[0]
             z0, e0 = len(pre_ids), len(ids) - len(e_ids)
-            # Chinese words (jieba) and English words, each as the tokens it covers
+            # Chinese study words and English words, each as the tokens it covers
             zc, ec = char_ends(tok, z_ids), char_ends(tok, e_ids)
             def tokens(ends, a, b):
                 starts = [0] + ends[:-1]
                 return [k for k, (x, y) in enumerate(zip(starts, ends)) if x < b and y > a]
             zw, pos = [], 0
-            for w in jieba.cut(zh):
+            for w in segment_words(zh):
                 if HAN.search(w) and w not in GRAMMAR_ZH and (t := tokens(zc, pos, pos + len(w))):
                     zw.append((pos, pos + len(w), t))
                 pos += len(w)
