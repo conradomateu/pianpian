@@ -1,4 +1,7 @@
 # Every push and pull request: the same checks as `python3 dev.py check` on your Mac.
+# Ubuntu: `uv run --group dev` resolves the dev tools afresh (pipeline/requirements.txt is pinned for Apple
+# Silicon and can't install here). Windows: the engine users get, from pipeline/requirements-windows.txt with
+# its hashes, plus pytest and ruff; UV_NO_SYNC stops `uv run` from re-resolving it (there is no uv.lock in git).
 name: ci
 on:
   push:
@@ -12,6 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.7"          # the uv inside the app (windows.yml): same version everywhere
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -21,9 +26,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v7
-      - run: uv sync --group runtime --group dev
+        with:
+          version: "0.13.7"
+      - run: uv venv --python 3.12
+      - run: uv pip sync --require-hashes pipeline/requirements-windows.txt
+      - run: uv pip install pytest ruff
       - run: python dev.py check
+        env:
+          UV_NO_SYNC: "1"

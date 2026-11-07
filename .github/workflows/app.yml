@@ -22,6 +22,8 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
       - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.7"          # this uv ships inside the app and installs every user's engine: keep it exact
       - run: python3 tools/build_app.py
       - name: Attach to the release
         if: inputs.tag
