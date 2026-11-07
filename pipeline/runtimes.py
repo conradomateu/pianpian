@@ -8,12 +8,14 @@ Windows only (x64; the engine Python and the models lock are x86_64 too), but im
 nothing here runs at import time. The archives come from the official ggml-org releases and every one
 is checked against the SHA-256 written here; the running app never trusts the network. The download
 itself goes through models.download(). Backends:
-  cuda    NVIDIA GPU (the CUDA 12.4 builds, tested with driver 591.74)
+  cuda    NVIDIA GPU (the CUDA 12.4 builds; tested on 27 Oct 2026 with an RTX 4060 Laptop, driver 591.74)
   vulkan  any Vulkan GPU (AMD, Intel, or NVIDIA when CUDA is not chosen)
   cpu     no usable GPU, or PIANPIAN_ACCEL=cpu (also: vulkan / cuda to force one)
 whisper.cpp has no Vulkan Windows asset in its official release yet, so a Vulkan-only machine uses
 the CPU build for speech and the Vulkan build for translation. That gap is deliberate and visible in
 `status`; a Vulkan whisper.cpp build can be added here once one is pinned.
+Each tool lives in <runtime>/<tool>-<backend>, whose .complete names the release and the archives' SHA-256:
+a folder from another pin is not "ready", and the new build is unpacked beside it and swapped in whole.
 
 GitHub release downloads are the weak link from mainland China. PIANPIAN_GITHUB_MIRROR is an opt-in
 prefix (e.g. a proxy you trust: https://example.com/https://github.com/…); there is no default,
@@ -118,16 +120,29 @@ def folder(tool: str, backend: str) -> Path:
     return cache() / f"{tool}-{backend}"
 
 
-def exe(tool: str, backend: str | None = None) -> Path | None:
-    backend = backend or backend_for(tool)
-    d = folder(tool, backend)
-    if not (d / ".complete").exists():
-        return None
+def stamp(tool: str, backend: str) -> dict:
+    """What .complete says about a folder unpacked from today's pins."""
+    return {"tool": tool, "backend": backend, "release": RELEASES[tool], "sha256": [a["sha256"] for a in assets(tool, backend)]}
+
+
+def _find(d: Path, tool: str) -> Path | None:
     for name in EXES[tool]:
         hits = sorted(d.rglob(name), key=lambda p: len(p.parts))
         if hits:
             return hits[0]
     return None
+
+
+def exe(tool: str, backend: str | None = None) -> Path | None:
+    """The installed executable, only if its folder was unpacked from today's pins."""
+    backend = backend or backend_for(tool)
+    d = folder(tool, backend)
+    try:
+        if json.loads((d / ".complete").read_text(encoding="utf-8")) != stamp(tool, backend):
+            return None
+    except (OSError, ValueError):
+        return None
+    return _find(d, tool)
 
 
 def status() -> dict:
@@ -157,35 +172,44 @@ def extract(archive: Path, dest: Path) -> None:
 
 def _install(tool: str, backend: str) -> str:
     dest = folder(tool, backend)
-    dest.mkdir(parents=True, exist_ok=True)
+    # the archives (resumable) and the unpacked files wait here until the whole build is in, so two releases'
+    # DLLs never mix in one folder and a failed update leaves the old build where it was
+    work = cache() / f"{dest.name}-{RELEASES[tool]}.part"
+    for stale in cache().glob(f"{dest.name}-*.part"):        # a download for an older pin, never finished
+        if stale != work:
+            shutil.rmtree(stale, ignore_errors=True)
+    new = work / "files"
+    shutil.rmtree(new, ignore_errors=True)
+    work.mkdir(parents=True, exist_ok=True)
+    mirror = os.environ.get("PIANPIAN_GITHUB_MIRROR", "").rstrip("/")
     for a in assets(tool, backend):
-        target = dest / a["name"]
-        mirror = os.environ.get("PIANPIAN_GITHUB_MIRROR", "").rstrip("/")
         urls = [a["url"], *([f"{mirror}/{a['url']}"] if mirror else [])]
         try:
-            models.download(urls, target, a["size"], a["sha256"], tool)
+            models.download(urls, work / a["name"], a["size"], a["sha256"], tool)
         except OSError as e:
             raise OSError(f"could not download the GPU runtime ({a['name']}): {e}; it resumes, try again") from e
-        extract(target, dest)
-        target.unlink(missing_ok=True)
-    (dest / ".complete").write_text(json.dumps({"tool": tool, "backend": backend}) + "\n", encoding="utf-8")
-    found = exe(tool, backend)
-    if not found:
+    for a in assets(tool, backend):
+        extract(work / a["name"], new)
+        (work / a["name"]).unlink()
+    if not _find(new, tool):
         raise RuntimeError(f"{tool} ({backend}) was unpacked but {EXES[tool][0]} is missing")
-    return str(found)
+    (new / ".complete").write_text(json.dumps(stamp(tool, backend)) + "\n", encoding="utf-8")
+    if dest.exists():                                       # the build of an older pin (or a broken one)
+        try:
+            shutil.rmtree(dest)
+        except OSError as e:                                # Windows: a running llama-server holds its DLLs
+            raise OSError(f"could not replace {dest} (is a job still running?): {e}") from e
+    new.replace(dest)
+    shutil.rmtree(work, ignore_errors=True)
+    return str(exe(tool, backend))
 
 
-def ensure(tool: str) -> str:
-    """Download and unpack one tool and return its executable; backend_for() picks the build."""
-    backend = backend_for(tool)
+def ensure(tool: str, backend: str | None = None) -> str:
+    """Download and unpack one tool and return its executable: backend_for() picks the build, or pass
+    backend="cpu" for the fallback when a GPU build won't start (backend_win.py)."""
+    backend = backend or backend_for(tool)
     have = exe(tool, backend)
     return have and str(have) or _install(tool, backend)
-
-
-def ensure_cpu(tool: str) -> str:
-    """The CPU build: the fallback when a GPU build won't start (backend_win.py)."""
-    have = exe(tool, "cpu")
-    return have and str(have) or _install(tool, "cpu")
 
 
 def main() -> None:

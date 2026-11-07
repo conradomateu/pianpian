@@ -86,7 +86,7 @@ def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None
         if backend == "cpu":
             raise
         print(f"the {backend} whisper build failed ({e}); trying the CPU build", flush=True)
-        _run_whisper(runtimes.ensure_cpu("whisper"), model, audio, base, "cpu")
+        _run_whisper(runtimes.ensure("whisper", "cpu"), model, audio, base, "cpu")
     produced = Path(str(base) + ".json")
     if not produced.exists():
         sys.exit(f"whisper.cpp wrote no {produced.name}")
@@ -178,7 +178,7 @@ def translator(model_dir: str):
                 backend = "cpu"
                 log.seek(0)
                 log.truncate()
-                proc = _start_server(runtimes.ensure_cpu("llama"), model, port, backend, log)
+                proc = _start_server(runtimes.ensure("llama", "cpu"), model, port, backend, log)
                 if not _wait_ready(proc, port):
                     tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
                     sys.exit(f"llama-server did not start:\n{tail}")

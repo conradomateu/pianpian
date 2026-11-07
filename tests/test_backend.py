@@ -161,7 +161,7 @@ def test_win_transcribe_writes_what_srt_tool_reads(monkeypatch, tmp_path):
         _cpp_json(Path(cmd[cmd.index("-of") + 1]))
 
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "whisper-cli.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "whisper-cli.exe")
     monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
     srt, words = _out(tmp_path)
     backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
@@ -183,8 +183,7 @@ def test_win_transcribe_retries_on_cpu_when_the_gpu_build_fails(monkeypatch, tmp
         _cpp_json(Path(cmd[cmd.index("-of") + 1]))
 
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu/whisper-cli.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu/whisper-cli.exe" if backend == "cpu" else "gpu/whisper-cli.exe")
     monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
     srt, words = _out(tmp_path)
     backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
@@ -237,7 +236,7 @@ def _fake_http(posts):
 def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tmp_path):
     posts, procs = [], []
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "llama-server.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "llama-server.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
     monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http(posts))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
@@ -255,8 +254,7 @@ def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tm
 def test_win_translator_falls_back_to_cpu(monkeypatch, tmp_path):
     posts, procs = [], []
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "vulkan")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu/llama-server.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu/llama-server.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu/llama-server.exe" if backend == "cpu" else "gpu/llama-server.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
     ready = iter([False, True])                                           # the Vulkan build never answers /health
     monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: next(ready))
@@ -279,8 +277,7 @@ def test_win_translator_retries_a_gpu_launch_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu.exe" if backend == "cpu" else "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
     monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http([]))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
@@ -301,8 +298,7 @@ def test_win_translator_cleans_up_when_cpu_retry_fails(monkeypatch, tmp_path, fa
 
     monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu.exe" if backend == "cpu" else "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
     monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: False)
     with pytest.raises(OSError if failure == "launch" else SystemExit):
@@ -320,7 +316,7 @@ def test_win_translator_retains_the_offloaded_layer_count(monkeypatch, tmp_path,
 
     monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
     monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http([]))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
@@ -366,7 +362,7 @@ def test_win_translator_keeps_http_local_with_a_proxy_configured(monkeypatch, tm
             proc = _Proc([])
             monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
             monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cpu")
-            monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "unused.exe")
+            monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "unused.exe")
             monkeypatch.setattr(backend_win, "_free_port", lambda: server.server_port)
             monkeypatch.setattr(backend_win, "_start_server", lambda *args: proc)
             monkeypatch.setattr(backend_win.time, "sleep", lambda _: pytest.fail("healthy local server was not reached directly"))
