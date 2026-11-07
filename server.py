@@ -10,6 +10,7 @@ Everything it knows about a video lives in that video's folder (see PLAN.md), so
 the command line always agree. Listens on 127.0.0.1 only.
 """
 import argparse
+import codecs
 import json
 import logging
 import mimetypes
@@ -134,6 +135,14 @@ class Job:
         self.state, self.log, self.started, self.ended, self.code = "queued", [], None, None, None
         self.kind = "rebuild"
         self.on_done = None                                   # called after a successful run
+        # Output arrives in chunks that can cut a line or a UTF-8 character in two. A cut transcript line would lose its
+        # [00:..-->] prefix and slip past report.TRANSCRIPT, so only whole lines reach the log.
+        self._tail, self._utf8 = "", codecs.getincrementaldecoder("utf-8")("replace")
+
+    def feed(self, chunk: bytes, final=False):
+        lines = re.split(r"[\r\n]+", self._tail + self._utf8.decode(chunk, final))
+        self._tail = "" if final else lines.pop()[:64 * 1024]   # a line that never ends: bounded, still one line
+        self.add("\n".join(lines))
 
     def add(self, text):
         for part in re.split(r"[\r\n]+", text):
@@ -168,7 +177,8 @@ def worker():
             p = subprocess.Popen(job.cmd, cwd=job.cwd, env={**os.environ, **job.env, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=engine.NO_WINDOW)
             while chunk := p.stdout.read1(4096):
-                job.add(chunk.decode("utf-8", "replace"))
+                job.feed(chunk)
+            job.feed(b"", final=True)
             job.code = p.wait()
             job.state = "done" if job.code == 0 else "failed"
         except Exception as e:                                # missing tool, permissions…

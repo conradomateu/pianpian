@@ -161,3 +161,18 @@ def test_mac_library_names_with_colons_remain_accessible(tmp_path, monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_job_log_keeps_lines_whole_across_chunks(tmp_path):
+    # a transcript line and a UTF-8 character cut across reads must stay one line, so redaction still drops it
+    job = server.Job("t", [], str(tmp_path))
+    data = "[00:00:03.000 --> 00:00:06.000]   私人会议内容\nRuntimeError: translation failed\n".encode()
+    cut = data.index("私".encode()) + 1                         # inside the first character's three bytes
+    for part in (data[:10], data[10:cut], data[cut:]):
+        job.feed(part)
+    job.feed(b"", final=True)
+    assert job.log == ["[00:00:03.000 --> 00:00:06.000]   私人会议内容", "RuntimeError: translation failed"]
+    assert server.report.redact("\n".join(job.log)) == "RuntimeError: translation failed"
+    job.feed(b"no newline at the end")
+    job.feed(b"", final=True)
+    assert job.log[-1] == "no newline at the end"
