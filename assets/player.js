@@ -548,7 +548,7 @@
       if (!ov.querySelector(':scope > .gl')) ov.innerHTML = '<div class="gl"></div>';
       ov.querySelectorAll(':scope > .ln').forEach(el => el.remove());
       ov.insertAdjacentHTML('beforeend', shown.map(([tr, c]) =>
-        `<div class="ln"><span class="${tr.blur && !v.paused ? 'blur' : ''}" style="color:${tr.colour};font-size:calc(var(--size) * ${tr.scale} * 1cqh)">` +
+        `<div class="ln"><span class="${tr.role}${tr.blur && !v.paused ? ' blur' : ''}" style="color:${tr.colour};font-size:calc(var(--size) * ${tr.scale} * 1cqh)">` +
         `${lineHTML(tr, c)}</span></div>`).join(''));
       if (pin && pin.startsWith('rule:')) { const el = ov.querySelector(`.g[data-g="${pin.slice(5)}"]`); if (el) showRule(el); else setGloss(ov, ''); }
       else if (pin) highlight(ov, pin);
