@@ -156,7 +156,10 @@
                 <button class="btn" data-retry hidden>Retry</button></div>
             </div>
           </div>
+          <div class="wsheet" role="region" aria-label="Word" aria-live="polite" hidden><div data-sheet-body></div>
+            <button class="btn" type="button" data-sheet-close aria-label="Close the word card" title="Close">×</button></div>
           <div class="pbar">
+            <div class="quick" data-quick role="group" aria-label="Subtitle lines"></div>
             <details class="dd" data-dd><summary>Subtitles</summary><div class="ddp wide">
               <div class="row" data-presets></div>
               <h5>Tracks · top to bottom · size · colour · blur while playing</h5>
@@ -242,6 +245,7 @@
       </div>`;
     const q = s => root.querySelector(s);
     const stage = q('.stage'), v = q('video'), ov = q('.ov'), list = opts.list || q('[data-list]');
+    const sheet = q('.wsheet'), sheetBody = q('[data-sheet-body]');
     let tracks = [], delay = 0, loopLine = false, autoPause = false, pausedFor = -1, shownKey = '', lowLift = 7;
     let words = null, align = null, ruby = false, pin = null, pinCue = -1, videoKey = '';
     let anki = null, ankiAnchor = null, ankiVisible = false;
@@ -470,15 +474,17 @@
         let at = 0;
         return line.map(([zh, p, g], k) => {
           const han = /[一-鿿]/.test(zh), key = `${L}-${k}`, start = at;
+          const cls = line[k + 1] && !/[一-鿿]/.test(line[k + 1][0]) ? 'w end' : 'w';   // punctuation next: no gap before it
           at += zh.length;
-          if (tr.role === 'pinyin') return han ? `<i class="w" data-w="${key}">${py(p, zh)}</i>` : esc(p);
+          if (tr.role === 'pinyin') return han ? `<i class="${cls}" data-w="${key}">${py(p, zh)}</i>` : esc(p);
           if (!han) return esc(zh);
           const chars = [...zh].map((ch, n) => { const t = marks.get(start + n);
             return t ? `<b class="g ${t.split(':')[0]}" data-g="${t}">${esc(ch)}</b>` : esc(ch); }).join('');
           const tip = inList && g ? ` title="${esc(p)} — ${esc(g)}"` : '';
-          return ruby && !inList ? `<ruby class="w" data-w="${key}">${chars}<rt style="color:${pyColour}">${py(p, zh)}</rt></ruby>`
-                                 : `<i class="w" data-w="${key}"${tip}>${chars}</i>`;
-        }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1');
+          return ruby && !inList ? `<ruby class="${cls}" data-w="${key}">${chars}<rt style="color:${pyColour}">${py(p, zh)}</rt></ruby>`
+                                 : `<i class="${cls}" data-w="${key}"${tip}>${chars}</i>`;
+        }).join(tr.role === 'pinyin' ? ' ' : '').replace(/ ([,.!?:;)\]»"])/g, '$1')
+          .replace(/<\/i> (?=<i class="w[ "])/g, '</i><i class="sp"> </i>');   // between two pinyin words: the word gap, not a space (kept for copying)
       }).join(inList ? ' ' : '<br>'), w);
     }
     function canOpenAnkiWord() {
@@ -493,6 +499,8 @@
     function setGloss(box, html) {
       const gl = box.querySelector(':scope > .gl');
       if (gl && gl.glossHTML !== html) { gl.innerHTML = html; gl.glossHTML = html; }
+      // the same card, outside the clipped stage: kit.css hides it; app.html shows it as a sheet in the phone demo
+      if (box === ov && sheet.glossHTML !== html) { sheetBody.innerHTML = html; sheet.glossHTML = html; sheet.hidden = !html; }
     }
     function highlight(box, key) {
       box.querySelectorAll('.w.hl').forEach(e => e.classList.remove('hl'));
@@ -548,7 +556,7 @@
       if (!ov.querySelector(':scope > .gl')) ov.innerHTML = '<div class="gl"></div>';
       ov.querySelectorAll(':scope > .ln').forEach(el => el.remove());
       ov.insertAdjacentHTML('beforeend', shown.map(([tr, c]) =>
-        `<div class="ln"><span class="${tr.blur && !v.paused ? 'blur' : ''}" style="color:${tr.colour};font-size:calc(var(--size) * ${tr.scale} * 1cqh)">` +
+        `<div class="ln"><span class="${tr.role}${tr.blur && !v.paused ? ' blur' : ''}" style="color:${tr.colour};font-size:calc(var(--size) * ${tr.scale} * 1cqh)">` +
         `${lineHTML(tr, c)}</span></div>`).join(''));
       if (pin && pin.startsWith('rule:')) { const el = ov.querySelector(`.g[data-g="${pin.slice(5)}"]`); if (el) showRule(el); else setGloss(ov, ''); }
       else if (pin) highlight(ov, pin);
@@ -598,7 +606,19 @@
       box.innerHTML = P.map(([n], i) => `<button class="btn" data-p="${i}">${n}</button>`).join('');
       box.onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return;
         tracks.forEach(t => t.on = t.role !== 'stacked' && P[+b.dataset.p][1](t.role)); changed(); };
+      // one switch per kind of line, the same on/off as the track checkboxes (kit.css hides them; the phone demo shows them)
+      q('[data-quick]').innerHTML = ['zh', 'pinyin', 'en'].filter(r => roles.has(r)).map(r => {
+        const on = tracks.some(t => t.role === r && t.on);
+        return `<button class="btn${on ? ' on' : ''}" type="button" data-quick-role="${r}" aria-pressed="${on}">${LABEL[r]}</button>`;
+      }).join('');
     }
+    q('[data-quick]').addEventListener('click', e => {
+      const b = e.target.closest('[data-quick-role]'); if (!b) return;
+      const role = b.dataset.quickRole, on = b.getAttribute('aria-pressed') !== 'true', focused = document.activeElement === b;
+      tracks.forEach(t => { if (t.role === role) t.on = on; });
+      changed();
+      if (focused) q(`[data-quick-role="${role}"]`).focus();   // the row is redrawn: keep the keyboard where it was
+    });
     function changed(keepList) { save(); renderTracks(); if (!keepList) renderList(); tick(true); }
     const tbox = q('[data-tracks]');
     tbox.addEventListener('click', e => {
@@ -728,16 +748,29 @@
       panel.style.maxHeight = Math.max(160, up ? above : below) + 'px';
     }, true);
     document.addEventListener('click', e => { if (!e.target.closest('details.dd')) dds().forEach(d => d.open = false); });
-    document.addEventListener('click', e => {
-      if (!root.isConnected || (!pin && !ankiVisible) || e.target.closest('.anki')) return;
-      const word = e.target.closest('.w, .g, .gl');
-      if (word && (ov.contains(word) || list.contains(word))) return;
+    function unpin() {
       pin = null; pinCue = -1; ankiVisible = false; ankiAnchor = null;
       highlight(ov, null);
       list.querySelectorAll('.cue').forEach(cue => highlight(cue, null));
       paintAnkiSelection(); // Keep draft timing metadata so subtitle-delay changes can still update it.
+    }
+    document.addEventListener('click', e => {
+      if (!root.isConnected || (!pin && !ankiVisible) || e.target.closest('.anki')) return;
+      const word = e.target.closest('.w, .g, .gl, .wsheet');
+      if (word && (ov.contains(word) || list.contains(word) || word === sheet)) return;   // the sheet's × unpins itself
+      unpin();
     });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') dds().forEach(d => d.open = false); });
+    const sheetShown = () => !sheet.hidden && sheet.getClientRects().length > 0;
+    q('[data-sheet-close]').addEventListener('click', () => {
+      const back = (pin && ov.querySelector(`.w[data-w="${pin}"][tabindex]`)) || null;
+      unpin();
+      back?.focus({ preventScroll: true });           // the keyboard goes back to the word it came from
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      dds().forEach(d => d.open = false);
+      if (sheetShown()) unpin();                     // only the visible sheet: the card on the video keeps its pin
+    });
     q('[data-vfull]').onclick = fullscreen;
     const playPause = () => v.paused ? v.play() : v.pause();
     q('[data-play]').onclick = playPause;

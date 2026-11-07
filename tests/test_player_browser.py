@@ -119,6 +119,14 @@ def wait(c, condition):
     })""".replace("CONDITION", condition)), (condition, c.js("({url:location.href,time:document.querySelector('video')?.currentTime, state:document.querySelector('video')?.readyState, text:document.querySelector('[data-load-text]')?.textContent})"))
 
 
+def tap_in_frame(c, expr):
+    """A real touch tap on an element inside the demo iframe (expr runs in the iframe's document)."""
+    point = c.js(f"""(() => {{ const f = document.querySelector('iframe'), d = f.contentDocument, r = f.getBoundingClientRect();
+      const b = ({expr}).getBoundingClientRect(); return [r.x+b.x+b.width/2, r.y+b.y+b.height/2]; }})()""")
+    c.call("Input.dispatchTouchEvent", type="touchStart", touchPoints=[{"x": point[0], "y": point[1]}])
+    c.call("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
+
+
 def click(c, selector):
     point = c.js(f"(() => {{ const r = document.querySelector({json.dumps(selector)}).getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2]; }})()")
     assert point
@@ -219,10 +227,10 @@ def test_resume_retry_and_player_feedback(browser):
     c.js("player.begin(); localStorage.setItem('pp-last-video', 'missing')")
     navigate(c, url + "/app.html")
     wait(c, "document.querySelector('.drop').textContent.includes('Choose a video') && document.querySelector('.load-state').hidden")
-    # The website always starts its demo at the beginning, independent of app memory.
+    # The website always starts its demo on its first line (subtitles visible), independent of app memory.
     navigate(c, url + "/app.html?demo#v=pianpian-day")
-    wait(c, "document.querySelector('video').readyState >= 3 && document.querySelector('.load-state').hidden")
-    assert c.js("player.video.currentTime") == 0
+    wait(c, "player.tracks.length && !player.video.seeking && document.querySelector('.load-state').hidden && document.querySelector('.ov .zh .w')")
+    assert c.js("player.video.currentTime") == pytest.approx(1.51, abs=.01)
 
 
 def test_switching_during_loading_and_website(browser):
@@ -364,15 +372,72 @@ def test_mobile_demo_layout(browser):
         wait(c, "document.documentElement.scrollWidth <= innerWidth")
         assert c.js("(() => { const w = document.querySelector('iframe').contentWindow; return w.document.documentElement.scrollWidth <= w.innerWidth; })()")
     c.call('Emulation.setDeviceMetricsOverride', width=390, height=844, deviceScaleFactor=1, mobile=True)
+    c.call('Emulation.setTouchEmulationEnabled', enabled=True, maxTouchPoints=1)
     c.js("scrollTo(0, document.querySelector('#demo').offsetTop - 70)")
     c.js("new Promise(r => setTimeout(r, 400))")
-    # Dispatch an actual click into the embedded player's Playback menu.
-    point = c.js("""(() => { const f = document.querySelector('iframe'), r = f.getBoundingClientRect();
-      const s = [...f.contentDocument.querySelectorAll('summary')].find(e => e.textContent === 'Playback');
-      const b = s.getBoundingClientRect(); return [r.x+b.x+b.width/2, r.y+b.y+b.height/2]; })()""")
-    for event in ('mousePressed', 'mouseReleased'):
-        c.call('Input.dispatchMouseEvent', type=event, x=point[0], y=point[1], button='left', clickCount=1)
-    wait(c, "document.querySelector('iframe').contentDocument.querySelector('details.dd[open]')")
-    assert c.js("""(() => { const f = document.querySelector('iframe'), p = f.contentDocument.querySelector('details.dd[open] .ddp').getBoundingClientRect();
-      return p.left >= 0 && p.right <= f.clientWidth && p.bottom <= f.clientHeight; })()""")
+    f = "document.querySelector('iframe').contentDocument"
+    # On a phone the demo is the video, three line switches and the transcript: no window bar, panel toggles or menus.
+    assert c.js("getComputedStyle(document.querySelector('.window-bar')).display") == 'none'
+    assert c.js(f"[...{f}.querySelectorAll('.ptoggle, .panel.left, .pbar > :not(.quick)')].every(e => !e.getClientRects().length)")
+    assert c.js(f"[...{f}.querySelectorAll('[data-quick-role]')].map(b => b.dataset.quickRole + ':' + b.getAttribute('aria-pressed'))") == \
+        ['zh:true', 'pinyin:true', 'en:true']
+    assert c.js(f"{f}.querySelector('.panel.right').getBoundingClientRect().top >= {f}.querySelector('.pbar').getBoundingClientRect().bottom")
+    # It opens on its first line, so the subtitles are there before play.
+    wait(c, f"{f}.querySelector('video').currentTime > 1.5 && {f}.querySelectorAll('.ov .ln').length === 3")
+    # A tap on a subtitle word while it plays pauses and opens the word as a sheet (not the card on the video).
+    tap_in_frame(c, "d.querySelector('[data-play]')")
+    wait(c, f"{f}.querySelector('video').currentTime > 7 && {f}.querySelector('.ov .zh .w')")
+    word = c.js(f"{f}.querySelector('.ov .zh .w').textContent")
+    tap_in_frame(c, "d.querySelector('.ov .zh .w')")
+    wait(c, f"{f}.querySelector('video').paused && !{f}.querySelector('.wsheet').hidden")
+    assert c.js(f"{f}.querySelector('[data-sheet-body]').textContent").startswith(word)
+    assert c.js(f"""(() => {{ const fr = document.querySelector('iframe'), s = {f}.querySelector('.wsheet').getBoundingClientRect();
+      return s.left >= 0 && s.right <= fr.clientWidth && s.bottom <= fr.clientHeight && !{f}.querySelector('.ov > .gl').getClientRects().length; }})()""")
     (ROOT / 'scratch' / 'mobile-demo.png').write_bytes(base64.b64decode(c.call('Page.captureScreenshot', format='png')['data']))
+    # A switch is the track's own on/off; tapping it is also a tap outside the sheet.
+    tap_in_frame(c, "d.querySelector('[data-quick-role=pinyin]')")
+    wait(c, f"{f}.querySelector('.wsheet').hidden && !{f}.querySelector('.ov .pinyin') && !{f}.querySelector('.cue .l.pinyin')")
+    assert c.js(f"[...{f}.querySelectorAll('[data-on]')].map(e => e.checked)") == [True, False, True]
+    # The × closes it too; a tap on the page around the demo as well.
+    tap_in_frame(c, "d.querySelector('.cue .l.zh .w')")
+    wait(c, f"!{f}.querySelector('.wsheet').hidden")
+    tap_in_frame(c, "d.querySelector('[data-sheet-close]')")
+    wait(c, f"{f}.querySelector('.wsheet').hidden")
+    tap_in_frame(c, "d.querySelector('.cue .l.zh .w')")
+    wait(c, f"!{f}.querySelector('.wsheet').hidden")
+    click(c, 'h2')
+    wait(c, f"{f}.querySelector('.wsheet').hidden")
+
+
+def test_words_keep_a_gap(browser):
+    """Neighbouring words, Chinese and pinyin, on the video and in the transcript, never touch: 0.3em apart."""
+    c, url, _ = browser
+    c.call('Emulation.setDeviceMetricsOverride', width=1280, height=800, deviceScaleFactor=1, mobile=False)
+    navigate(c, url + '/app.html#v=pianpian-day&t=7.5')
+    wait(c, "!player.video.seeking && document.querySelector('.ov .pinyin .w') && document.querySelector('.cue .l.pinyin .w')")
+    gaps = c.js("""(() => {
+      const glyphs = el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect(); };
+      const out = [];
+      for (const line of document.querySelectorAll('.ov .zh, .ov .pinyin, .cue .l.zh, .cue .l.pinyin')) {
+        const words = [...line.querySelectorAll('.w')], em = parseFloat(getComputedStyle(words[0] || line).fontSize);
+        for (let i = 1; i < words.length; i++) {
+          if (words[i - 1].nextSibling !== words[i] && !words[i - 1].nextSibling?.matches?.('.sp')) continue;   // punctuation between
+          const a = glyphs(words[i - 1]), b = glyphs(words[i]);
+          if (Math.abs(a.top - b.top) < 2) out.push([line.className, words[i - 1].textContent, words[i].textContent, (b.left - a.right) / em]);
+        }
+      }
+      return out;
+    })()""")
+    kinds = {k for k, *_ in gaps}
+    assert {'zh', 'pinyin', 'l zh', 'l pinyin'} <= kinds, kinds
+    assert all(g == pytest.approx(.3, abs=.02) for *_, g in gaps), [x for x in gaps if abs(x[3] - .3) > .02]
+    # punctuation sits right after its word: no word gap before a comma or a full stop
+    tight = c.js("""(() => [...document.querySelectorAll('.ov .pinyin .w.end, .cue .l.pinyin .w.end, .ov .zh .w.end, .cue .l.zh .w.end')].map(w => {
+      const r = document.createRange(); r.selectNodeContents(w); const a = r.getBoundingClientRect();
+      const t = w.nextSibling; if (!t || t.nodeType !== 3) return null;
+      r.setStart(t, 0); r.setEnd(t, 1); const b = r.getBoundingClientRect();
+      return Math.abs(a.top - b.top) < 2 ? (b.left - a.right) / parseFloat(getComputedStyle(w).fontSize) : null;
+    }).filter(x => x !== null))()""")
+    assert tight and all(g < .12 for g in tight), tight
+    # the space between pinyin words is not drawn, but a copy still has it
+    assert c.js("(() => { const r = document.createRange(); r.selectNodeContents(document.querySelector('.cue .l.pinyin')); return r.toString(); })()").startswith('nǐhǎo wǒ jiào')
