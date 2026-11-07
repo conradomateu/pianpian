@@ -211,6 +211,19 @@ def translator(model_dir: str):
         log_path.unlink(missing_ok=True)
 
 
+def _reading_order(boxes: list[tuple]) -> list[str]:
+    """(top, bottom, left, text) boxes as text: lines top to bottom, boxes left to right in each line. A box
+    whose middle lies inside a line's height belongs to it, so a word a few pixels higher stays in place."""
+    rows: list[list] = []                                     # [top, bottom, [(left, text)]]
+    for top, bottom, left, text in sorted(boxes):
+        if rows and (top + bottom) / 2 <= rows[-1][1]:
+            rows[-1][1] = max(rows[-1][1], bottom)
+            rows[-1][2].append((left, text))
+        else:
+            rows.append([top, bottom, [(left, text)]])
+    return [text for _, _, row in rows for _, text in sorted(row)]
+
+
 def ocr(frames_dir: str) -> str:
     """RapidOCR (ONNX Runtime, Chinese models included) over every frame: one 'name<TAB>text' line each."""
     from rapidocr_onnxruntime import RapidOCR
@@ -218,11 +231,10 @@ def ocr(frames_dir: str) -> str:
     lines = []
     for path in sorted(Path(frames_dir).glob("*.png")):
         result, _ = engine(str(path))
-        found = []
+        boxes = []
         for box, text, score in result or []:
-            if score >= 0.5 and text.strip():
-                xs = [p[0] for p in box]
+            if score >= 0.5 and text.strip():                 # RapidOCR's score, not Vision's confidence: kept at 0.5
                 ys = [p[1] for p in box]
-                found.append((min(ys), min(xs), text.strip()))
-        lines.append(f"{path.name}\t{' '.join(t for _, _, t in sorted(found))}")
+                boxes.append((min(ys), max(ys), min(p[0] for p in box), text.strip()))
+        lines.append(f"{path.name}\t{' '.join(_reading_order(boxes))}")
     return "\n".join(lines)

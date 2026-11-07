@@ -420,6 +420,23 @@ def test_win_ocr_reads_frames_with_rapidocr(monkeypatch, tmp_path):
     assert out.splitlines()[0] == "00001.png\t第一行 第二行"              # reading order, and the unsure box dropped
 
 
+def test_win_ocr_keeps_one_visual_line_left_to_right(monkeypatch, tmp_path):
+    # the right-hand box sits 6 px higher than the left one (seen with real RapidOCR 1.4.4 on 7 Nov 2026,
+    # simulated on macOS): it is still the same line, so it comes second; the line below stays below
+    (tmp_path / "0000.png").write_bytes(b"png")
+    rocr = type(sys)("rapidocr_onnxruntime")
+
+    class FakeRapidOCR:
+        def __call__(self, path):
+            return [([[200, 4], [380, 4], [380, 34], [200, 34]], "学习中文", 0.9),
+                    ([[10, 10], [190, 10], [190, 40], [10, 40]], "我们今天", 0.9),
+                    ([[0, 60], [90, 60], [90, 90], [0, 90]], "下一行", 0.9)], 1.0
+
+    rocr.RapidOCR = FakeRapidOCR
+    monkeypatch.setitem(sys.modules, "rapidocr_onnxruntime", rocr)
+    assert backend_win.ocr(str(tmp_path)) == "0000.png\t我们今天 学习中文 下一行"
+
+
 def test_catalog_and_lock_follow_the_platform(monkeypatch, tmp_path):
     lockfile = tmp_path / "models.lock.json"
     lockfile.write_text(json.dumps({"platforms": {"darwin": {"a/mac": {"files": []}}, "win32": {"b/win": {"files": []}}}}))
