@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.2...pianpian-v0.1.3) (2026-11-07)
+
+
+### Bug Fixes
+
+* build Mac releases on a supported Apple Silicon runner ([#22](https://github.com/conradomateu/pianpian/issues/22)) ([67ffd49](https://github.com/conradomateu/pianpian/commit/67ffd49b637e34148698c9dc1cb150a34f377e0d))
+
 ## [0.1.2](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.1...pianpian-v0.1.2) (2026-11-07)
 
 
