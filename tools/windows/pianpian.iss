@@ -36,8 +36,13 @@ UninstallDisplayIcon={app}\Pianpian.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+; x64 Windows only: x64compatible would also install on Arm64 Windows 11 (emulation), which is not supported
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
+; Windows 10 is allowed but not tested (the 7 Nov 2026 runs were on Windows 11); Python 3.12 needs 8.1 or later
+MinVersion=10.0
+; launcher.py holds this mutex while the installed app runs: Setup and Uninstall ask to close it first
+AppMutex=PianpianApp
 CloseApplications=yes
 RestartApplications=no
 
@@ -46,6 +51,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+[InstallDelete]
+; an upgrade replaces the whole PyInstaller folder, so no stale module or pipeline script outlives its version
+; (the settings, engine and models live in %LOCALAPPDATA%\Pianpian, outside {app})
+Type: filesandordirs; Name: "{app}\_internal"
 
 [Files]
 Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

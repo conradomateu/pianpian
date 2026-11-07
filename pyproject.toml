@@ -13,8 +13,6 @@ dependencies = []
 dev = ["pytest>=8", "ruff>=0.6", "jieba>=0.42", "pypinyin>=0.51", "zhconv>=1.4"]
 # the window (launcher.py): pywebview brings WebView2 on Windows and WebKit on macOS
 desktop = ["pywebview>=6.2"]
-# building the Windows app (tools/build_app_windows.py): PyInstaller onedir, then tools/windows/pianpian.iss
-packaging = ["pyinstaller>=6.10"]
 # the engine the app installs on first run: everything the pipeline needs, in one environment.
 # macOS runs MLX; Windows runs the pinned whisper.cpp / llama.cpp binaries (pipeline/runtimes.py)
 # and RapidOCR for burned-in subtitles — neither MLX nor llama-cpp-python is installed there.

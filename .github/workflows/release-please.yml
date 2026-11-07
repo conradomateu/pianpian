@@ -1,7 +1,7 @@
 # On main: keeps a "release v0.x.y" pull request up to date (version + CHANGELOG from feat:/fix: commits).
-# Merging it tags the version and creates the GitHub release; then the apps are built on Apple Silicon and
-# windows-latest, their files are attached to that release, and the website is rebuilt so its Download button
-# points at them.
+# Merging it tags the version and creates the GitHub release; then the apps are built on Apple Silicon (app.yml)
+# and windows-latest (windows.yml), their files are attached to that release, and each of the two then rebuilds
+# the website (site.yml), whose download links are read from the latest release's files when it is built.
 # Needs: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
 name: release-please
 on:
@@ -41,5 +41,6 @@ jobs:
     uses: ./.github/workflows/windows.yml
     permissions:
       contents: write
+      actions: write
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}

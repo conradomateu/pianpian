@@ -4,8 +4,9 @@
     python tools/build_app_windows.py --no-installer
 
 The same files as the Mac build (tools/build_app.py, whose run() and version() this reuses): the
-window (launcher.py with pywebview), the server, the pages, the pipeline scripts, both locks, uv.exe
-and a VERSION file. The engine, the GPU runtimes and the models are NOT inside: the first run
+window (launcher.py with pywebview), the server, the pages, the logo, the pipeline scripts, both locks,
+uv.exe and a VERSION file. PyInstaller and pywebview run in a throwaway environment pinned below, as on
+macOS, so this needs only Python 3.12 and uv, not the repository's .venv. The engine, the GPU runtimes and the models are NOT inside: the first run
 installs them into %LOCALAPPDATA%\\Pianpian, exactly like the macOS build.
 
 The installer (tools/windows/pianpian.iss, Inno Setup 6) is per-user and needs no admin rights.
@@ -22,12 +23,16 @@ import time
 import zipfile
 from pathlib import Path
 
-from build_app import PIPELINE_SKIP, ROOT, run, version
+from build_app import ICON as LOGO, PIPELINE_SKIP, PYINSTALLER, PYWEBVIEW, ROOT, run, version
 
 DIST, BUILD = ROOT / "dist", ROOT / "build"
 STAGE = BUILD / "windows"
-ICON = ROOT / "design" / "icons" / "Pianpian.ico"
+ICON = ROOT / "design" / "icons" / "Pianpian.ico"   # built into Pianpian.exe and Setup.exe; pywebview takes the window icon from the exe
 ISS = ROOT / "tools" / "windows" / "pianpian.iss"
+SETUP = DIST / "Pianpian-Windows-Setup.exe"
+# PYINSTALLER, PYWEBVIEW (tools/build_app.py): the green windows.yml run of 7 Nov 2026 logged PyInstaller 6.22.3 and
+# hooks-contrib 2026.9; pywebview's version is not printed there: 6.2.1 is what the same resolution gives on 7 Nov 2026
+DATAS = [("app.html", "."), ("setup.html", "."), ("assets", "assets"), (str(LOGO), "design/icons"), ("LICENSE", ".")]
 
 
 def uv_exe() -> Path:
@@ -44,17 +49,19 @@ def pyinstaller(debug_console: bool) -> None:
     stage = STAGE / "stage"
     shutil.copytree(ROOT / "pipeline", stage / "pipeline", ignore=PIPELINE_SKIP)
     (stage / "VERSION").write_text(version() + "\n", encoding="utf-8")
-    datas = [("app.html", "."), ("setup.html", "."), ("assets", "assets"), ("design", "design"), ("LICENSE", "."),
-             (str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), ".")]
+    datas = DATAS + [(str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), ".")]
+    # pipeline/ (links, models, …) is not on PyInstaller's path: it ships as data, and engine.py puts it on sys.path
     args = ["--noconfirm", "--clean", "--onedir", "--name", "Pianpian", "--icon", ICON,
             "--distpath", DIST, "--workpath", BUILD / "pyi-win", "--specpath", BUILD,
-            "--hidden-import", "links", "--hidden-import", "webview.platforms.edgechromium"]
+            "--hidden-import", "webview.platforms.edgechromium"]
     if not debug_console:
         args.append("--windowed")
     for src, dest in datas:
         args += ["--add-data", f"{(ROOT / src) if not Path(src).is_absolute() else src};{dest}"]
-    args += ["--add-binary", f"{uv_exe()};."]
-    run(sys.executable, "-m", "PyInstaller", *args, ROOT / "launcher.py")
+    uv = uv_exe()
+    args += ["--add-binary", f"{uv};."]
+    run(uv, "run", "--isolated", "--no-project", "--python", "3.12", "--with", PYINSTALLER, "--with", PYWEBVIEW,
+        "pyinstaller", *args, ROOT / "launcher.py", cwd=ROOT)
 
 
 def zip_app() -> Path:
@@ -77,7 +84,7 @@ def installer() -> Path | None:
         return None
     run(iscc, f"/DMyAppVersion={version()}", f"/DMySourceDir={DIST / 'Pianpian'}", f"/DMyOutputDir={DIST}",
         f"/DMyIcon={ICON}", ISS)
-    return DIST / "Pianpian-Windows-Setup.exe"
+    return SETUP
 
 
 def main() -> None:
@@ -90,14 +97,13 @@ def main() -> None:
     t0 = time.time()
     DIST.mkdir(exist_ok=True)
     BUILD.mkdir(exist_ok=True)
+    SETUP.unlink(missing_ok=True)       # an older installer must not pass for this run's
     pyinstaller(a.debug_console)
-    zip_app()
+    built = [DIST / "Pianpian" / "Pianpian.exe", zip_app()]
     if not a.no_installer:
-        installer()
-    for name in ("Pianpian/Pianpian.exe", "Pianpian-Windows-Setup.exe", "Pianpian-Windows.zip"):
-        p = DIST / name
-        if p.exists():
-            print(f"built {p.relative_to(ROOT)} ({p.stat().st_size / 1e6:.1f} MB)", flush=True)
+        built.append(installer())
+    for p in filter(None, built):
+        print(f"built {p.relative_to(ROOT)} ({p.stat().st_size / 1e6:.1f} MB)", flush=True)
     print(f"done in {time.time() - t0:.0f} s", flush=True)
 
 
