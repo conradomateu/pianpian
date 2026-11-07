@@ -1,5 +1,6 @@
 # other people's decks and anything downloaded (see README)
 scratch/
+.playwright-mcp/
 
 
 # Python and macOS
