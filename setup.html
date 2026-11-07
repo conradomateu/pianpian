@@ -60,11 +60,11 @@ pre.log { max-height:240px; overflow:auto; font-size:11px; white-space:pre-wrap;
     <div class="sum"><span class="muted" id="sum"></span><button class="btn primary go" type="submit" id="go">Install</button></div>
   </form>
 
+  <div class="err" id="err" role="alert" hidden></div>
   <div class="card" id="run" hidden>
     <h4 id="runtitle">Installing</h4>
     <div id="steps"></div>
     <div class="last" id="last"></div>
-    <div class="err" id="err" hidden></div>
     <div class="row"><button class="mini" type="button" id="logbtn">log</button><span style="flex:1"></span>
       <button class="btn" type="button" id="report" hidden title="opens GitHub's form with redacted details; Submit publishes the issue">Report</button>
       <button class="btn" type="button" id="retry" hidden>Try again</button>
