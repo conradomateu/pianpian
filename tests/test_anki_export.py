@@ -130,6 +130,17 @@ def test_retime_ignores_a_whisper_file_linked_from_outside(media, tmp_path, monk
     monkeypatch.setattr(anki_export.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("retime ran")))
     assert anki_export.study_words(media) == json.loads((media / "zh.words.json").read_text())
 
+
+def test_retime_runs_once_per_change_of_the_files(media, monkeypatch):
+    # GET zh.words.json is reachable by any page (a plain <img> request): repeating it must not repeat the subprocess
+    (media / "zh.whisper.json").write_text("{}")
+    out = (media / "zh.words.json").read_text()
+    runs = []
+    monkeypatch.setattr(anki_export.subprocess, "run", lambda *a, **kw: runs.append(a) or subprocess.CompletedProcess(a, 0, out, ""))
+    for _ in range(5):
+        anki_export.study_words(media)
+    assert len(runs) == 1
+
 def test_edited_subtitles_cannot_reuse_stale_word_identity(media):
     selection = {**request_data()["selection"], "sentence": "你好，中文", "expression": "你好"}
     original = anki_export.selection_anchor(media, selection)
