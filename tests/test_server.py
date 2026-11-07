@@ -25,6 +25,16 @@ def test_server(tmp_path):
         videos = json.load(urllib.request.urlopen(base + "/api/videos"))
         assert [v["id"] for v in videos] == ["clip.mp4"] and videos[0]["kind"] == "file"
         assert urllib.request.urlopen(base + "/app.html").status == 200
+        # Playback and seeking read only the requested bytes, including a tail range.
+        for byte_range, expected, content_range in (("bytes=0-3", b"not ", "bytes 0-3/18"),
+                                                    ("bytes=-5", b"video", "bytes 13-17/18")):
+            req = urllib.request.Request(base + "/library/clip.mp4", headers={"Range": byte_range})
+            with urllib.request.urlopen(req) as response:
+                assert response.status == 206
+                assert response.headers["Accept-Ranges"] == "bytes"
+                assert response.headers["Content-Range"] == content_range
+                assert int(response.headers["Content-Length"]) == len(expected)
+                assert response.read() == expected
         # writes need the X-Kit header, so another web page can't trigger downloads
         req = urllib.request.Request(base + "/api/add", data=b"{}", method="POST")
         try:

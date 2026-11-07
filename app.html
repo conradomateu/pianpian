@@ -46,6 +46,31 @@ body { overflow:hidden; }
   .panel.right { grid-row:3; max-height:50vh; } .main { grid-column:1; overflow:visible; }
   .left-closed .panel.left, .right-closed .panel.right { display:none; } }
 
+@media (max-width:600px) {
+  .main { padding:64px 12px 16px; }
+  .ptoggle { width:44px; height:44px; top:10px; }
+  .ptoggle.left { left:12px; } .ptoggle.right { right:12px; }
+  .panel { padding-inline:12px; }
+  .panelhead { height:44px; }
+  .panel.left .panelhead { padding-left:52px; }
+  .panel.right { max-height:300px; }
+  .panel.right .transcript { margin-inline:-12px; }
+  .sidefoot { flex-wrap:wrap; }
+  .pbar { position:relative; }
+  .pbar .dd { position:static; }
+  .pbar .dd > summary, .pbar > .ib { min-height:44px; }
+  .pbar .dd .ddp, .pbar .dd.right .ddp { left:0; right:0; top:calc(100% + 6px); bottom:auto;
+    width:100%; min-width:0; max-width:100%; max-height:300px !important; }
+  .pbar .ddp .btn, .pbar .ddp .mini, .pbar .ddp select { min-height:44px; }
+  #vpanel { width:100%; }
+  .vc { gap:2px; padding:12px 6px 4px; }
+  .vc button { min-width:44px; min-height:44px; padding:4px; }
+  .vc [data-vprev], .vc [data-vnext] { display:none; }
+  .vc [data-time] { font-size:10px; padding:0 2px; }
+  .vc input[type=range] { min-width:24px; }
+}
+@media (min-width:601px) and (max-width:900px) { .panel.right { max-height:300px; } }
+
 .panel.left > .lib { flex-shrink:1; }
 .panelhead .logo { display:block; }
 .add { display:grid; gap:7px; }
@@ -177,15 +202,15 @@ Do not merge, split, drop or renumber lines. " / " marks a line break; keep it.
 If you think the Chinese contains a speech-recognition or OCR error, translate what was probably meant and add [?] at the end of that line.
 
 `;
-const api = async (path, body) => {
+const api = async (path, body, signal) => {
   if (DEMO) {
     if (body !== undefined) { demoNote(); throw new Error(''); }   // the note says it; no second message
     if (path === '/api/jobs') return [];
-    const r = await fetch('demo' + path + '.json');
+    const r = await fetch('demo' + path + '.json', { signal });
     if (!r.ok) throw new Error(r.statusText);
     return r.json();
   }
-  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kit': '1' }, body: JSON.stringify(body) });
+  const r = await fetch(path, body === undefined ? { signal } : { signal, method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kit': '1' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
@@ -197,8 +222,18 @@ const player = SubPlayer.mount($('player'), {
     : '<div><b>Pick a video on the left, paste a link, or drop files here</b>A video plus its <code>.srt</code> files (and <code>zh.words.json</code>) play straight from disk.</div>',
   keys: ' · <b>B</b> library · <b>T</b> transcript',
   list: $('transcript'),
+  onProgress(id, time) {
+    if (DEMO || !current || current.id !== id || !Number.isFinite(time)) return;
+    try {
+      localStorage.setItem('pp-last-video', id);
+      localStorage.setItem('pp-position:' + id, String(time));
+    } catch {}                                     // storage can be disabled; playback still works
+  },
 });
 let videos = [], current = null, lastJobs = [];
+let selection;
+const remembered = key => { try { return localStorage.getItem(key); } catch { return null; } };
+const thumbnail = v => v && v.kind === 'folder' && v.video ? LIB + encodeURIComponent(v.id) + '/thumb.jpg' : '';
 
 /* ---------- the two panels: same component, one function (left = library, right = transcript) ---------- */
 const isOpen = side => !document.documentElement.classList.contains(side + '-closed');
@@ -282,23 +317,47 @@ $('lib').onclick = e => { const b = e.target.closest('.item'); if (b) select(b.d
 
 /* ---------- one video ---------- */
 async function select(id, keepPlayer) {
-  let v;
-  try { v = await api('/api/videos/' + encodeURIComponent(id)); } catch { return; }
-  const changed = !current || current.id !== v.id;
-  current = v;
-  if (hashId() !== id) history.replaceState(null, '', location.search + '#v=' + encodeURIComponent(id));
-  document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === id));
-  document.title = v.title + ' · 片片';               // the title shows in the window and the library, not above the video
-  renderNotes(v); renderMenu(v);
-  if (changed || !keepPlayer) {
-    const base = LIB + encodeURIComponent(v.id) + '/';
-    const subs = await Promise.all((v.subs || []).map(async n => ({ name: n, text: await (await fetch(base + encodeURIComponent(n))).text() })));
-    const words = v.words ? await (await fetch(base + v.words)).json().catch(() => null) : null;
-    const align = v.align ? await (await fetch(base + v.align)).json().catch(() => null) : null;
-    player.load({ video: v.video ? (v.kind === 'file' ? LIB + encodeURIComponent(v.id) : base + encodeURIComponent(v.video)) : null,
-                  subs, words, align, id: v.id });
-    const t = +((location.hash.match(/[#&]t=([\d.]+)/) || [])[1] || 0);      // #v=…&t=12.5 opens at that moment
-    if (t) player.video.addEventListener('loadedmetadata', () => { player.video.currentTime = t; }, { once: true });
+  selection?.abort();
+  const request = selection = new AbortController(), signal = request.signal;
+  const updating = keepPlayer && current?.id === id;
+  if (!updating) player.begin({ poster: thumbnail(videos.find(v => v.id === id)), retry: () => select(id) });
+  try {
+    const v = await api('/api/videos/' + encodeURIComponent(id), undefined, signal);
+    if (signal.aborted) return;
+    current = v;
+    const explicit = hashId() === id && location.hash.match(/(?:[#&])t=([\d.]+)/);
+    if (hashId() !== id) history.replaceState(null, '', location.search + '#v=' + encodeURIComponent(id));
+    document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+    document.title = v.title + ' · 片片';
+    renderNotes(v); renderMenu(v);
+    if (!updating) {
+      const base = LIB + encodeURIComponent(v.id) + '/';
+      const start = explicit ? Number(explicit[1]) : DEMO ? 0 : Number(remembered('pp-position:' + id));
+      // Let the browser request video ranges while the study data arrives.
+      player.load({ video: v.video ? (v.kind === 'file' ? LIB + encodeURIComponent(v.id) : base + encodeURIComponent(v.video)) : null,
+                    id: v.id, start });
+      if (!v.video) player.feedback('This video is not available yet. Choose another video.', true);
+      const read = async (name, json = false) => {
+        const r = await fetch(base + encodeURIComponent(name), { signal });
+        if (!r.ok) throw new Error('Could not load subtitles.');
+        return json ? r.json() : r.text();
+      };
+      try {
+        const [subs, words, align] = await Promise.all([
+          Promise.all((v.subs || []).map(async name => ({ name, text: await read(name) }))),
+          v.words ? read(v.words, true).catch(() => null) : null,
+          v.align ? read(v.align, true).catch(() => null) : null,
+        ]);
+        if (signal.aborted) return;
+        player.load({ subs, words, align, append: true });
+      } catch {
+        if (signal.aborted) return;
+        $('notes').innerHTML = '<div class="note warn">Could not load subtitles. <button class="btn" data-retry-subs>Retry</button></div>';
+        $('notes').querySelector('[data-retry-subs]').onclick = () => select(id);
+      }
+    }
+  } catch (err) {
+    if (!signal.aborted) player.feedback('Could not load this video. Check your connection and try again.', true);
   }
 }
 // the demo answers buttons that need the engine with one line and the download
@@ -369,22 +428,30 @@ $('main').addEventListener('change', async e => {
 async function openFiles(files) {
   files = [...files];
   const video = files.find(f => /^(video|audio)\//.test(f.type) || /\.(mp4|m4v|webm|mov|mkv|mp3|m4a)$/i.test(f.name));
-  const subs = await Promise.all(files.filter(f => /\.(srt|vtt)$/i.test(f.name)).map(async f => ({ name: f.name, text: await f.text() })));
-  const json = async re => { const f = files.find(x => re.test(x.name)); return f ? JSON.parse(await f.text()) : undefined; };
-  const words = await json(/\.words\.json$/i), align = await json(/\.align\.json$/i);
-  if (files.some(f => /\.(ass|ssa)$/i.test(f.name))) alert('ASS/SSA files are not supported here; use the .srt files.');
-  if (video) {                                    // a new video from disk: it is not a library item
-    current = null;
-    history.replaceState(null, '', location.pathname + location.search);
-    document.querySelectorAll('.item.on').forEach(b => b.classList.remove('on'));
-    document.title = video.name + ' · 片片';
-    $('vmenu').hidden = true;
-    dropped = video;
-    $('notes').innerHTML = DEMO ? '<div class="note">Playing from your disk: nothing is uploaded. The app also makes the subtitles for it.</div>' : OFFLINE || !/\.(mp4|m4v|webm|mov|mkv)$/i.test(video.name) ? '' :
-      `<div class="note" id="importnote">Playing from disk, not in your library. ${subs.length ? '' : 'No subtitles came with it. '}
-        <button class="btn primary" data-import type="button">Add to library &amp; make subtitles</button></div>`;
+  selection?.abort();
+  const request = selection = new AbortController();
+  if (video) player.begin({ retry: () => openFiles(files) });
+  try {
+    const subs = await Promise.all(files.filter(f => /\.(srt|vtt)$/i.test(f.name)).map(async f => ({ name: f.name, text: await f.text() })));
+    const json = async re => { const f = files.find(x => re.test(x.name)); return f ? JSON.parse(await f.text()) : undefined; };
+    const words = await json(/\.words\.json$/i), align = await json(/\.align\.json$/i);
+    if (request.signal.aborted) return;
+    if (files.some(f => /\.(ass|ssa)$/i.test(f.name))) alert('ASS/SSA files are not supported here; use the .srt files.');
+    if (video) {                                    // a new video from disk: it is not a library item
+      current = null;
+      history.replaceState(null, '', location.pathname + location.search);
+      document.querySelectorAll('.item.on').forEach(b => b.classList.remove('on'));
+      document.title = video.name + ' · 片片';
+      $('vmenu').hidden = true;
+      dropped = video;
+      $('notes').innerHTML = DEMO ? '<div class="note">Playing from your disk: nothing is uploaded. The app also makes the subtitles for it.</div>' : OFFLINE || !/\.(mp4|m4v|webm|mov|mkv)$/i.test(video.name) ? '' :
+        `<div class="note" id="importnote">Playing from disk, not in your library. ${subs.length ? '' : 'No subtitles came with it. '}
+          <button class="btn primary" data-import type="button">Add to library &amp; make subtitles</button></div>`;
+    }
+    player.load({ video, subs, words, align, append: !video, ...(video ? { id: video.name + ':' + video.size } : {}) });
+  } catch {
+    if (!request.signal.aborted) player.feedback('Could not read these files. Check the subtitle files and try again.', true);
   }
-  player.load({ video, subs, words, align, append: !video, ...(video ? { id: video.name + ':' + video.size } : {}) });
 }
 // a video that came from anywhere (not downloaded here) gets the same pipeline: it is copied into the
 // library, then transcribed, given pinyin and English, like a link
@@ -482,19 +549,32 @@ if (OFFLINE) {
   $('lib').innerHTML = '<p class="note warn" style="margin:0">The server is off, so there is no library. You can still <b>Open files…</b> or drop a video and its <code>.srt</code> files on the window.<br><br>Open the Pianpian app, or run <code>python3 server.py</code> in its folder.</p>';
   $('status').className = 'dot off'; $('status').textContent = 'offline';
 } else {
-  window.addEventListener('hashchange', () => { const id = hashId(); if (id && (!current || current.id !== id)) select(id); });
-  (async () => {
-    if (!DEMO) {                                      // first run, or an engine update: the setup page asks first
-      try { const p = await api('/api/setup'); if (p.needed && p.progress.state !== 'done') { location.href = 'setup.html'; return; } } catch {}
+  window.addEventListener('hashchange', () => { const id = hashId(); if (id) select(id); });
+  async function start() {
+    player.begin({ message: DEMO ? 'Loading demo…' : 'Loading library…',
+      poster: DEMO ? LIB + 'pianpian-day/thumb.jpg' : '', retry: start });
+    $('lib').textContent = 'Loading library…';
+    try {
+      if (!DEMO) {                                      // first run, or an engine update: the setup page asks first
+        try { const p = await api('/api/setup'); if (p.needed && p.progress.state !== 'done') { location.href = 'setup.html'; return; } } catch {}
+      }
+      await Promise.all([status(), loadLibrary(), api('/api/jobs').then(jobs => { lastJobs = jobs; }).catch(() => {})]);
+      const id = hashId() || (!DEMO && remembered('pp-last-video'));
+      if (id && videos.some(v => v.id === id)) await select(id);
+      else if (DEMO && videos.length) await select(videos[0].id);
+      else {
+        player.feedback();
+        setPanel('left', true, false);
+        player.stage.querySelector('.drop').textContent = videos.length
+          ? 'Choose a video from the library, or drop one here.' : 'Drop a video or paste a link to get started.';
+      }
+      poll();
+    } catch {
+      $('lib').textContent = 'Could not load the library.';
+      player.feedback('Could not load the library. Check your connection and try again.', true);
     }
-    await status();
-    try { lastJobs = await api('/api/jobs'); } catch {}
-    await loadLibrary();
-    const id = hashId();
-    if (id && videos.some(v => v.id === id)) await select(id);
-    else if (DEMO && videos.length) await select(videos[0].id);
-    poll();
-  })();
+  }
+  start();
 }
 </script>
 </body>
