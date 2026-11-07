@@ -120,3 +120,42 @@ def test_system_line_uses_the_engine_platform_check(monkeypatch):
     monkeypatch.setattr(report.engine, "WINDOWS", True)
     monkeypatch.setattr(report.platform, "platform", lambda: "Windows-11-10.0.26200-SP0")
     assert report.system().startswith("Windows-11")
+
+
+def test_redact_hides_the_user_name_without_its_space(monkeypatch):
+    monkeypatch.setattr(report.getpass, "getuser", lambda: "Wang Wei")
+    out = report.redact("login WangWei failed for Wang Wei and Wang%20Wei")
+    assert "Wang" not in out and out.count("<user>") == 3
+
+
+def test_redact_hides_library_names_written_on_their_own(tmp_path):
+    lib = tmp_path / "lib"
+    (lib / "BV1secret_study").mkdir(parents=True)
+    (lib / "BV1secret_study" / "title.txt").write_text("王老师的私人课\n", encoding="utf-8")
+    (lib / "lesson with teacher.mp4").write_bytes(b"")
+    text = "\n".join(["using the platform's subtitles: 王老师的私人课.zh.srt",
+                      "lesson with teacher.mp4: Invalid data found when processing input",
+                      "skipping lesson with teacher (already done) and BV1secret",
+                      "https://www.bilibili.com/video/BV1secret?p=1"])
+    out = report.redact(text, lib)
+    for private in ("王老师", "lesson", "teacher", "BV1secret"):
+        assert private not in out, out
+    assert "<video>.zh.srt" in out and "Invalid data found when processing input" in out
+    assert "https://www.bilibili.com/video/…?p=…" in out
+
+
+def test_redact_drops_timestamped_lines_in_every_form_and_keeps_errors():
+    log = "\n".join([
+        "[00:01.840 --> 00:19.880] 私人一",                          # MLX
+        "[00:00:01.840 --> 00:00:19.880]   私人二",                  # whisper.cpp
+        "  00:00:01.000 --> 00:00:02.000  私人三",                   # the same without the bracket
+        "1", "00:00:01,000 --> 00:00:02,000", "私人四", "sī rén", "private four",   # an echoed study track
+        "2", "00:00:02,000 --> 00:00:03,000", "私人五",
+        "RuntimeError: translation failed",
+        "  File \"translate_srt.py\", line 78, in main",
+        "ERROR: [BiliBili] BV1xx: HTTP Error 412: Precondition Failed",
+    ])
+    out = report.redact(log)
+    assert "私人" not in out and "sī rén" not in out and "private" not in out, out
+    assert out.splitlines() == ["1", "2", "RuntimeError: translation failed", "  File \"translate_srt.py\", line 78, in main",
+                                "ERROR: [BiliBili] BV1xx: HTTP Error 412: Precondition Failed"]

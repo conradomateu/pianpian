@@ -56,7 +56,13 @@ KNOWN = [
     ("VIDEO-FILE", r"moov atom not found|Invalid data found when processing input|Error opening input",
      "The video file couldn't be read: it may be damaged, or in a format ffmpeg can't open."),
 ]
-TRANSCRIPT = re.compile(r"^\s*\[(?:\d+:)?\d\d:\d\d[.:]\d\d\d? --> ")      # MLX and whisper.cpp timestamps
+# MLX ([00:01.840 --> …] text) and whisper.cpp ([00:00:01.840 --> …] text) print a cue per line; the same without the
+# bracket, or an SRT timing (00:00:01,840 --> …), is never an error line either
+TRANSCRIPT = re.compile(r"^\s*\[?(?:\d+:)?\d\d:\d\d[.:,]\d\d\d? --> ")
+SRT_TIMING = re.compile(r"^\s*\d\d:\d\d:\d\d[,.]\d{3} --> \d\d:\d\d:\d\d[,.]\d{3}\s*$")   # an echoed .srt: text on the next lines
+# what ends such a cue's text early: a log line (ERROR: …, RuntimeError: …, a traceback, [tool] …, $ command).
+# shortcut: an English subtitle shaped like one ("Note: …") stays in the report; nothing echoes a .srt today
+LOG_LINE = re.compile(r"^\s*(?:\[|\$ |Traceback|File \")|^\S+: |(?:Error|Exception|Warning)\b")
 URL = re.compile(r"https?://[^\s'\"<>]+")
 # first path words that only say what kind of page it is (never a person or a title)
 KIND = {"video", "bangumi", "watch", "shorts", "live", "play", "embed", "playlist", "list", "cheese", "medialist", "s", "e"}
@@ -98,12 +104,36 @@ def _short(name: str) -> str | None:
     return base[:6] if base.isascii() and (len(name) > 8 or " " in name) else None
 
 
+def _entries(library) -> list[str]:
+    """The names a log can use for the library's videos: folder and file names, file names without the extension,
+    and the titles in title.txt. Longest first, so a name inside a longer one doesn't leave the rest behind."""
+    names = set()
+    try:
+        for p in Path(library).iterdir() if library else ():
+            names |= {p.name, p.stem if p.is_file() else p.name.removesuffix("_study")}
+            try:
+                names.add((p / "title.txt").read_text(encoding="utf-8").strip())
+            except OSError:
+                pass
+    except OSError:                                           # no library (yet), or one we can't read
+        pass
+    return sorted((n for n in names if len(n) >= 2 and not n.startswith(".")), key=len, reverse=True)
+
+
 def redact(text: str, library: Path | None = None) -> str:
     home, user = str(Path.home()), getpass.getuser()
     flags = re.I if engine.WINDOWS else 0                     # Windows paths ignore case: C:\Users = c:\users
     if engine.WINDOWS and len(user) > 2 and (short := _short(user)):
         text = re.sub(rf"\b{re.escape(short)}~\d+", user.replace("\\", "\\\\"), text, flags=re.I)   # then the long forms below match
-    lines = [ln for ln in text.splitlines() if not TRANSCRIPT.match(ln)]
+    lines, cue = [], 0
+    for ln in text.splitlines():
+        if TRANSCRIPT.match(ln):
+            cue = 3 if SRT_TIMING.match(ln) else 0            # a study track has at most 3 lines (zh, pinyin, en)
+        elif cue and not re.fullmatch(r"\s*\d+\s*", ln) and not LOG_LINE.search(ln):   # up to the next cue or log line
+            cue -= 1
+        else:
+            cue = 0
+            lines.append(ln)
     text = "\n".join(ln for ln in lines if not re.search(r"cookie|SESSDATA|Authorization", ln, re.I) or "cookies from browser" in ln)
     if library:
         # Spaces/quotes make the path's end ambiguous: hide the rest of its line, including later diagnostics.
@@ -113,9 +143,11 @@ def redact(text: str, library: Path | None = None) -> str:
     for form in _forms(home):
         text = re.sub(re.escape(form), "~", text, flags=flags)
     if len(user) > 2:
-        for form in dict.fromkeys([user, quote(user)]):
+        for form in dict.fromkeys([user, quote(user), re.sub(r"[ ._-]", "", user)]):   # Wang Wei, Wang%20Wei, WangWei
             text = re.sub(rf"\b{re.escape(form)}\b", "<user>", text, flags=flags)
-    text = URL.sub(_shape, text)
+    text = URL.sub(_shape, text)                              # first: a folder named by its video id would break the shape
+    if names := _entries(library):                            # a video named on its own, without the library in front
+        text = re.sub(r"(?<!<)(?:" + "|".join(map(re.escape, names)) + r")(?!>)", "<video>", text, flags=flags)
     return EMAIL.sub("<email>", text)
 
 
