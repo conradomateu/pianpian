@@ -359,6 +359,9 @@ async function select(id, keepPlayer) {
         ]);
         if (signal.aborted) return;
         player.load({ subs, words, align, append: true });
+        // the demo opens on its first line, so the subtitles show before anyone presses play
+        const first = DEMO && !explicit && player.tracks.find(t => t.role === 'zh')?.cues[0];
+        if (first && player.video.paused && player.video.currentTime < first.s) player.video.currentTime = first.s + 0.01;
       } catch {
         if (signal.aborted) return;
         $('notes').innerHTML = '<div class="note warn">Could not load subtitles. <button class="btn" data-retry-subs>Retry</button></div>';

@@ -219,10 +219,10 @@ def test_resume_retry_and_player_feedback(browser):
     c.js("player.begin(); localStorage.setItem('pp-last-video', 'missing')")
     navigate(c, url + "/app.html")
     wait(c, "document.querySelector('.drop').textContent.includes('Choose a video') && document.querySelector('.load-state').hidden")
-    # The website always starts its demo at the beginning, independent of app memory.
+    # The website always starts its demo on its first line (subtitles visible), independent of app memory.
     navigate(c, url + "/app.html?demo#v=pianpian-day")
-    wait(c, "document.querySelector('video').readyState >= 3 && document.querySelector('.load-state').hidden")
-    assert c.js("player.video.currentTime") == 0
+    wait(c, "player.tracks.length && !player.video.seeking && document.querySelector('.load-state').hidden && document.querySelector('.ov .zh .w')")
+    assert c.js("player.video.currentTime") == pytest.approx(1.51, abs=.01)
 
 
 def test_switching_during_loading_and_website(browser):
