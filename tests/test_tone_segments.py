@@ -36,7 +36,7 @@ def test_tone_segments(pinyin, expression, expected_pinyin, expected_expression)
     root = Path(__file__).resolve().parents[1]
     script = 'global.window = {};\n' + (root / 'assets/player.js').read_text(encoding='utf-8')
     script += f'\nconsole.log(JSON.stringify(window.SubPlayer.toneSegments({json.dumps(pinyin)}, {json.dumps(expression)})));'
-    result = subprocess.run([node], input=script, check=True, capture_output=True, text=True, timeout=5)
+    result = subprocess.run([node], input=script, check=True, capture_output=True, text=True, encoding='utf-8', timeout=5)
     segments = json.loads(result.stdout)
     assert segments == {'pinyin': expected_pinyin, 'expression': expected_expression}
     for key, text in [('pinyin', pinyin), ('expression', expression)]:
