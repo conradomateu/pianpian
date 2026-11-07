@@ -115,7 +115,7 @@
       <div class="pl${opts.list ? ' nolist' : ''}">
         <div class="pmain">
           <div class="stage" style="--size:5.2;--lift:6">
-            <video playsinline></video><div class="cover" hidden></div><div class="ov bg"></div>
+            <video playsinline preload="metadata"></video><div class="cover" hidden></div><div class="ov bg"></div>
             <div class="vc">
               <button data-play title="play / pause (Space)">▶</button>
               <button data-vprev title="previous line (←)">⏮</button><button data-vnext title="next line (→)">⏭</button>
@@ -125,6 +125,11 @@
               <button data-vfull title="fullscreen (F, or double-click the video)">⛶</button>
             </div>
             <div class="drop">${opts.hint || ''}</div>
+            <div class="load-state" hidden>
+              <img data-poster alt="" hidden>
+              <div class="load-message"><span class="spinner" aria-hidden="true"></span><span data-load-text role="status" aria-live="polite"></span>
+                <button class="btn" data-retry hidden>Retry</button></div>
+            </div>
           </div>
           <div class="pbar">
             <details class="dd" data-dd><summary>Subtitles</summary><div class="ddp wide">
@@ -215,6 +220,66 @@
     let karaoke = true, sayKey = null;             // light up each word as it is spoken (on)
     const COVERS = 'zh-player-cover-v1';             // { videoKey: { on, b, h } }: the band differs per video
     const SHOWN = 'zh-player-shown-v1';              // { videoKey: { zh: true, pinyin: false, … } }
+
+    // Media feedback belongs here so the website, app and loose files behave alike.
+    const feedback = q('.load-state'), poster = q('[data-poster]'), retryButton = q('[data-retry]');
+    let bufferTimer, slowTimer, retryLoad, resumeAt = 0, objectURL, savedAt = 0;
+    let opening = false;
+    function progress() {
+      if (!opening && v.readyState >= 1 && videoKey && opts.onProgress)
+        opts.onProgress(videoKey, v.ended ? 0 : v.currentTime);
+      savedAt = Date.now();
+    }
+    function feedbackState(message = '', retry = false) {
+      clearTimeout(bufferTimer); clearTimeout(slowTimer);
+      feedback.hidden = !message;
+      stage.setAttribute('aria-busy', String(!!message && !retry));
+      stage.classList.toggle('loading', !!message && opening);
+      q('[data-load-text]').textContent = message;
+      retryButton.hidden = !retry || !retryLoad;
+      feedback.classList.toggle('failed', retry);
+      if (message && !retry) slowTimer = setTimeout(() => feedbackState('Still loading. You can retry.', true), 15000);
+    }
+    retryButton.onclick = () => retryLoad && retryLoad();
+    poster.onerror = () => { poster.hidden = true; };
+    function begin({ poster: image = '', message = 'Loading video…', retry } = {}) {
+      progress();
+      opening = true;
+      v.pause();
+      v.removeAttribute('src'); v.load();
+      if (objectURL) { URL.revokeObjectURL(objectURL); objectURL = null; }
+      resumeAt = 0;
+      retryLoad = retry;
+      poster.hidden = !image;
+      if (image) poster.src = image; else poster.removeAttribute('src');
+      stage.classList.remove('loaded');
+      tracks = []; words = null; align = null; pin = null;
+      renderTracks(); renderList(); ov.innerHTML = ''; shownKey = '';
+      feedbackState(message);
+    }
+    function ready() {
+      if (!v.getAttribute('src') || v.readyState < (opening ? 2 : 3) || v.seeking) return;
+      opening = false; poster.hidden = true;
+      feedbackState(); progress();
+    }
+    v.addEventListener('loadedmetadata', () => {
+      if (resumeAt > 0 && Number.isFinite(v.duration)) v.currentTime = Math.min(resumeAt, Math.max(0, v.duration - 0.1));
+      resumeAt = 0;
+    });
+    ['loadeddata', 'canplay', 'playing', 'seeked'].forEach(event => v.addEventListener(event, ready));
+    ['waiting', 'seeking'].forEach(event => v.addEventListener(event, () => {
+      if (opening || v.ended) return;
+      clearTimeout(bufferTimer);
+      bufferTimer = setTimeout(() => feedbackState('Buffering…'), 300);
+    }));
+    v.addEventListener('pause', () => { if (!opening) feedbackState(); progress(); });
+    v.addEventListener('error', () => {
+      if (v.getAttribute('src')) feedbackState('Could not play this video. Try again or open another file.', true);
+    });
+    v.addEventListener('timeupdate', () => { if (Date.now() - savedAt > 5000) progress(); });
+    ['seeked', 'ended'].forEach(event => v.addEventListener(event, progress));
+    window.addEventListener('pagehide', progress);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) progress(); });
 
     /* ---- word ↔ pinyin links ---- */
     function wordsAt(c) {                         // the zh.words.json entry for this cue's time, if any
@@ -506,7 +571,8 @@
     ['timeupdate', 'play', 'pause', 'loadedmetadata', 'ratechange', 'seeked'].forEach(ev => v.addEventListener(ev, paintBar));
     let idle;                                    // hide the bar while playing and the mouse is still
     const wake = () => { stage.classList.add('awake'); clearTimeout(idle); idle = setTimeout(() => { if (!v.paused) stage.classList.remove('awake'); }, 2500); };
-    stage.addEventListener('mousemove', wake); v.addEventListener('pause', wake); v.addEventListener('play', wake);
+    stage.addEventListener('mousemove', wake);
+    ['pause', 'play', 'canplay'].forEach(event => v.addEventListener(event, wake));
     let clickTimer;                              // single click = play/pause, double click = fullscreen
     v.onclick = () => { clearTimeout(clickTimer); clickTimer = setTimeout(playPause, 220); };
     v.ondblclick = () => { clearTimeout(clickTimer); fullscreen(); };
@@ -556,7 +622,8 @@
     }
 
     /* ---- public ---- */
-    function load({ video, subs = [], words: w, align: al, append = false, id, cover: coverDefault = false }) {
+    function load({ video, subs = [], words: w, align: al, append = false, id, cover: coverDefault = false, start = 0 }) {
+      if (video && !opening) begin({ retry: () => { opening = false; load({ video, subs, words: w, align: al, id, start }); } });
       if (al !== undefined || !append) align = al && Array.isArray(al.cues) ? al.cues : null;
       if (id !== undefined) {
         videoKey = String(id);
@@ -566,7 +633,8 @@
       }
       if (w !== undefined || !append) { words = w && Array.isArray(w.cues) ? w.cues : null; pin = null; }
       if (video) {
-        v.src = typeof video === 'string' ? video : URL.createObjectURL(video);
+        resumeAt = Number.isFinite(start) && start > 0 ? start : 0;
+        v.src = typeof video === 'string' ? video : (objectURL = URL.createObjectURL(video));
         stage.classList.add('loaded');
         v.playbackRate = +q('[data-speed]').value;
       }
@@ -576,7 +644,7 @@
       tracks = (append ? tracks.concat(added) : added).sort((a, b) => ORDER[a.role] - ORDER[b.role]);
       restore(); renderTracks(); renderList(); tick(true);
     }
-    return { load, stage, video: v, extra: q('[data-extra]'), get tracks() { return tracks; } };
+    return { load, begin, feedback: feedbackState, stage, video: v, extra: q('[data-extra]'), get tracks() { return tracks; } };
   }
 
   window.SubPlayer = { mount, parse, roleOf };
