@@ -197,6 +197,45 @@ def test_setup_leaves_a_folder_that_is_not_its_engine(monkeypatch, tmp_path):
     assert (eng / "notes.txt").read_text() == "mine"
 
 
+@pytest.mark.parametrize("windows", [False, True])
+def test_a_new_data_folder_takes_the_downloads_along(monkeypatch, tmp_path, windows):
+    # [simulated] the models, runtime and dictionary move with the data folder (no 4 GB download again);
+    # the old engine and Python can't move (absolute paths): they stay, offered for the opt-in cleanup only
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", windows)
+    old = e.data_dir()
+    for f in ("models/org__model/.complete", "runtime/whisper-cpu/.complete", "cache/cedict.txt",
+              "engine/.pianpian-requirements", "python/cpython-3.12/bin/python"):
+        (old / f).parent.mkdir(parents=True, exist_ok=True)
+        (old / f).write_text("x")
+    fake_setup(monkeypatch, e)
+    new = tmp_path / "another-disk"
+    (new / "models").mkdir(parents=True)                      # an empty folder is no reason to download again
+    run_setup(e, None, str(new), [])
+    assert e.SETUP.state == "done", e.SETUP.error
+    for f in ("models/org__model/.complete", "runtime/whisper-cpu/.complete", "cache/cedict.txt"):
+        assert (new / f).exists() and not (old / f).exists()
+    assert (old / "engine" / ".pianpian-requirements").exists() and (new / "engine").is_dir()
+    os.environ.update(e.pipeline_env())
+    left = {o["name"]: o["path"] for o in e.SETUP.plan()["old"] if " in " in o["name"]}
+    assert left == {f"engine in {old}": str(old / "engine"), f"python in {old}": str(old / "python")}
+    run_setup(e, None, None, [])                              # no cleanup asked for: nothing deleted
+    assert (old / "engine").exists() and (old / "python").exists()
+    run_setup(e, None, None, [], cleanup=True)
+    assert not (old / "engine").exists() and not (old / "python").exists()
+    assert e.config()["moved_from"] == [] and (old / "config.json").exists()
+
+
+def test_moving_back_never_offers_the_engine_in_use(monkeypatch, tmp_path):
+    e = fresh(monkeypatch, tmp_path)
+    fake_setup(monkeypatch, e)
+    old, new = e.data_dir(), tmp_path / "b"
+    run_setup(e, None, str(new), [])
+    run_setup(e, None, str(old), [])
+    assert e.config()["moved_from"] == [str(new)]
+    assert all(not o["path"].startswith(str(old / "engine")) for o in e.SETUP.plan()["old"])
+
+
 def test_the_packaged_app_never_writes_bytecode_into_itself(monkeypatch, tmp_path):
     """Writing .pyc files into Pianpian.app breaks its code signature, so inside the app Python must not."""
     monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))

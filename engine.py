@@ -234,7 +234,7 @@ class Setup:
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
         runtime = runtimes.status() if WINDOWS else None
-        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
+        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused() + old_engines(),
                 "runtime": runtime, "free": free_bytes(Path(cfg["data"])),
                 "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
 
@@ -242,9 +242,16 @@ class Setup:
         with self.lock:
             if self.state == "running":
                 raise RuntimeError("the setup is already running")
-            previous_python = python()
+            previous_python, before = python(), _moveable()
+            old_data = data_dir()
             save_config(library=library, data=data, models=want)
+            if data_dir() != old_data:                      # the old engine can't move (absolute paths): offered for cleanup
+                save_config(moved_from=sorted(d for d in {*config().get("moved_from", []), str(old_data)} if Path(d) != data_dir()))
             os.environ.update(pipeline_env())
+            # the models, runtime and dictionary follow the data folder instead of being downloaded again
+            self.moves = [(src, dst) for src, dst in zip(before, _moveable())
+                          if src != dst and src.is_dir() and not dst.is_relative_to(src)
+                          and not (dst.exists() and any(dst.iterdir()))]
             if python() != previous_python:
                 STATE.update(engine=False, current=False)
             self.state, self.error = "running", ""
@@ -290,6 +297,12 @@ class Setup:
 
     def _run(self) -> None:
         try:
+            for src, dst in getattr(self, "moves", []):
+                self._say(f"moving {src} to {dst}")
+                if dst.is_dir():
+                    dst.rmdir()                             # empty (checked in start)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(dst))             # a rename on one disk, a copy then delete across disks
             self._say("checking which download sources are fastest from here")
             net = mirror_env()
             for k, v in net.items():
@@ -335,7 +348,12 @@ class Setup:
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])
             if getattr(self, "cleanup", False):
-                self._say(f"deleted old models: {models.remove_unused() / 1e9:.1f} GB freed")
+                freed = models.remove_unused()
+                for o in old_engines():
+                    shutil.rmtree(o["path"])
+                    freed += o["bytes"]
+                save_config(moved_from=[])
+                self._say(f"deleted old files: {freed / 1e9:.1f} GB freed")
             with self.lock:
                 self.state = "done"
         except Exception as e:                                # shown on the page, with the log
@@ -344,6 +362,23 @@ class Setup:
                 for s in self.steps:
                     if s["state"] == "running":
                         s["state"] = "failed"
+
+
+def _moveable() -> list[Path]:
+    """The downloads that can follow the data folder: models, runtime, dictionary (unless set by hand)."""
+    return [models_dir(), runtime_dir(), cache_dir()]
+
+
+def old_engines() -> list[dict]:
+    """The engine and Python left in data folders the setup moved away from (plan()["old"], the cleanup)."""
+    out = []
+    for d in config().get("moved_from", []):
+        for sub, ours in (("engine", ".pianpian-requirements"), ("python", "cpython-*")):
+            p = Path(d) / sub
+            if p.is_dir() and Path(d) != data_dir() and any(p.glob(ours)):   # only what the setup made there
+                out.append({"name": f"{sub} in {d}", "path": str(p),
+                            "bytes": sum(f.stat().st_size for f in p.rglob("*") if f.is_file() and not f.is_symlink())})
+    return out
 
 
 def speed(url: str, size: int = 400_000, seconds: float = 5.0) -> float:
