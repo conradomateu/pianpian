@@ -1,7 +1,11 @@
 """The Windows runtime: pinned binaries, the backend choice, and the first-run plan's GPU step."""
 import importlib
+import json
 import sys
+import zipfile
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "pipeline")]
@@ -18,20 +22,72 @@ def test_every_windows_binary_is_pinned():
             assert a["size"] > 0 and len(a["sha256"]) == 64, a
 
 
+def fake_downloads(monkeypatch, tmp_path, files=("whisper-cli.exe", "llama-server.exe", "ggml.dll"), fail=None):
+    """[simulated on macOS] every archive is a small zip with these files; `fail` names one that won't download."""
+    monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path / "runtime"))
+    seen = []
+
+    def download(urls, target, size, sha256, label):
+        seen.append(list(urls))
+        if target.name == fail:
+            raise OSError("timed out")
+        with zipfile.ZipFile(target, "w") as z:
+            for f in files:
+                z.writestr(f"bin/{f}", f"{target.name}:{f}")
+    monkeypatch.setattr(runtimes.models, "download", download)
+    return seen
+
+
 def test_the_github_mirror_is_opt_in(monkeypatch, tmp_path):
     # no default proxy: a third-party mirror would see every download that fails on GitHub
-    monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
-    seen = []
-    monkeypatch.setattr(runtimes.models, "download",
-                        lambda urls, target, size, sha256, label: seen.append(list(urls)) or target.write_bytes(b"x"))
-    monkeypatch.setattr(runtimes, "extract", lambda archive, dest: None)
-    monkeypatch.setattr(runtimes, "exe", lambda tool, backend=None: Path("whisper-cli.exe"))
+    seen = fake_downloads(monkeypatch, tmp_path)
     monkeypatch.delenv("PIANPIAN_GITHUB_MIRROR", raising=False)
     runtimes._install("whisper", "cpu")
     assert seen[0] == [runtimes.ASSETS[("whisper", "cpu")][0]["url"]]
     monkeypatch.setenv("PIANPIAN_GITHUB_MIRROR", "https://mirror.example")
     runtimes._install("whisper", "cpu")
     assert seen[1] == [seen[0][0], "https://mirror.example/" + seen[0][0]]
+
+
+def test_a_new_pin_replaces_the_old_build_whole(monkeypatch, tmp_path):
+    # [simulated on macOS] bumping RELEASES must make the old folder "not ready" and swap the new build in,
+    # with no file of the old release left beside the new one
+    fake_downloads(monkeypatch, tmp_path)
+    exe = Path(runtimes.ensure("llama", "cuda"))
+    d = runtimes.folder("llama", "cuda")
+    assert exe == d / "bin" / "llama-server.exe" and runtimes.exe("llama", "cuda") == exe
+    done = json.loads((d / ".complete").read_text(encoding="utf-8"))
+    assert done["release"] == runtimes.RELEASES["llama"] and len(done["sha256"]) == 2   # the server and cudart zips
+    (d / "bin" / "old-only.dll").write_bytes(b"from the old release")
+    monkeypatch.setitem(runtimes.RELEASES, "llama", "b99999")
+    assert runtimes.exe("llama", "cuda") is None
+    monkeypatch.setenv("PIANPIAN_ACCEL", "cuda")
+    assert not runtimes.status()["tools"]["llama"]["ready"]
+    assert Path(runtimes.ensure("llama", "cuda")) == exe
+    assert not (d / "bin" / "old-only.dll").exists()
+    assert json.loads((d / ".complete").read_text(encoding="utf-8"))["release"] == "b99999"
+    assert sorted(p.name for p in runtimes.cache().iterdir()) == ["llama-cuda"]   # no work folder left
+
+
+def test_a_failed_download_leaves_the_working_build(monkeypatch, tmp_path):
+    fake_downloads(monkeypatch, tmp_path)
+    exe = runtimes.ensure("llama", "cuda")
+    monkeypatch.setitem(runtimes.RELEASES, "llama", "b99999")
+    fake_downloads(monkeypatch, tmp_path, fail="cudart-llama-bin-win-cuda-12.4-x64.zip")
+    with pytest.raises(OSError, match="it resumes"):
+        runtimes.ensure("llama", "cuda")
+    assert Path(exe).is_file()                                 # the old build is still there, only not "ready"
+    monkeypatch.setitem(runtimes.RELEASES, "llama", "b100000")       # pinned again before that one finished
+    fake_downloads(monkeypatch, tmp_path)
+    runtimes.ensure("llama", "cuda")
+    assert sorted(p.name for p in runtimes.cache().iterdir()) == ["llama-cuda"]
+
+
+def test_an_archive_without_the_program_is_not_installed(monkeypatch, tmp_path):
+    fake_downloads(monkeypatch, tmp_path, files=("readme.txt",))
+    with pytest.raises(RuntimeError, match="whisper-cli.exe is missing"):
+        runtimes.ensure("whisper", "cpu")
+    assert runtimes.exe("whisper", "cpu") is None and not runtimes.folder("whisper", "cpu").exists()
 
 
 def test_vulkan_needs_a_device_listing(monkeypatch, tmp_path):

@@ -45,8 +45,8 @@ def _support() -> Path:
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
 SUPPORT = _support()
 CONFIG = SUPPORT / "config.json"
-# Capture user overrides before the app publishes its own paths into the worker environment.
-PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME")}
+# Capture user overrides before the app publishes its own paths (and GPU choice) into the worker environment.
+PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME", "PIANPIAN_ACCEL")}
 REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
 RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
@@ -92,7 +92,13 @@ def config() -> dict:
 def save_config(**changes) -> dict:
     cfg = {**config(), **{k: v for k, v in changes.items() if v is not None}}
     SUPPORT.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
+    # owner-only (it holds the AnkiConnect key): a new file made 0600, then swapped in whole. On Windows the mode
+    # only sets read-only or not; the user profile's own permissions keep it private there
+    tmp = CONFIG.with_name(CONFIG.name + ".tmp")
+    tmp.unlink(missing_ok=True)
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
+        f.write(json.dumps(cfg, indent=1))
+    os.replace(tmp, CONFIG)
     return cfg
 
 
@@ -126,11 +132,14 @@ def runtime_dir() -> Path:
 
 
 def pipeline_env() -> dict:
-    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime: set for every
-    job and setup step."""
+    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime, and which GPU build
+    it runs (PIANPIAN_ACCEL: yours, else the one the setup picked): set for every job and setup step."""
     env = {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
     if WINDOWS:
         env["PIANPIAN_RUNTIME"] = str(runtime_dir())
+        # the GPU probes can take 35 s and a job that saw another GPU would download another 1.35 GB build
+        if accel := PATH_OVERRIDES["PIANPIAN_ACCEL"] or config().get("accel"):
+            env["PIANPIAN_ACCEL"] = accel
     return env
 
 
@@ -204,6 +213,20 @@ def check() -> dict:
     return dict(STATE)
 
 
+def venv_starts(root: Path) -> bool:
+    """Is root a venv whose Python starts? A slow first start (Windows Defender scanning a fresh engine's
+    DLLs) counts as yes: only a missing file or a Python that exits with an error is a broken venv."""
+    py = engine_python(root)
+    if not (py.exists() and (root / "pyvenv.cfg").exists()):
+        return False
+    try:
+        return subprocess.run([str(py), "-c", "pass"], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
+    except subprocess.TimeoutExpired:
+        return True
+    except OSError:
+        return False
+
+
 def free_bytes(path: Path) -> int:
     p = Path(path).expanduser()
     while not p.exists() and p != p.parent:
@@ -234,7 +257,7 @@ class Setup:
         chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
         runtime = runtimes.status() if WINDOWS else None
-        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
+        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused() + old_engines(),
                 "runtime": runtime, "free": free_bytes(Path(cfg["data"])),
                 "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
 
@@ -242,9 +265,21 @@ class Setup:
         with self.lock:
             if self.state == "running":
                 raise RuntimeError("the setup is already running")
-            previous_python = python()
+            previous_python, before = python(), _moveable()
+            old_data = data_dir()
             save_config(library=library, data=data, models=want)
+            if data_dir() != old_data:                      # the old engine can't move (absolute paths): offered for cleanup
+                save_config(moved_from=sorted(d for d in {*config().get("moved_from", []), str(old_data)} if Path(d) != data_dir()))
             os.environ.update(pipeline_env())
+            # the models, runtime and dictionary follow the data folder instead of being downloaded again
+            self.moves = [(src, dst) for src, dst in zip(before, _moveable())
+                          if src != dst and src.is_dir() and not dst.is_relative_to(src)
+                          and not (dst.exists() and any(dst.iterdir()))]
+            if WINDOWS and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
+                # decided from this machine's GPU (probed once per app start), not the last saved choice; kept for the jobs
+                os.environ.pop("PIANPIAN_ACCEL", None)
+                save_config(accel=runtimes.backend_for("llama"))
+                os.environ.update(pipeline_env())
             if python() != previous_python:
                 STATE.update(engine=False, current=False)
             self.state, self.error = "running", ""
@@ -290,6 +325,12 @@ class Setup:
 
     def _run(self) -> None:
         try:
+            for src, dst in getattr(self, "moves", []):
+                self._say(f"moving {src} to {dst}")
+                if dst.is_dir():
+                    dst.rmdir()                             # empty (checked in start)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(dst))             # a rename on one disk, a copy then delete across disks
             self._say("checking which download sources are fastest from here")
             net = mirror_env()
             for k, v in net.items():
@@ -303,7 +344,15 @@ class Setup:
                 self._step("engine", state="running")
                 eng = engine_dir()
                 py = engine_python(eng)
-                if not py.exists():
+                if not venv_starts(eng):
+                    # missing, or a venv whose Python can't start: made again (`uv venv --clear` refuses a folder
+                    # without pyvenv.cfg, uv 0.13.7). engine/ holds only the venv and its stamp, so nothing else is
+                    # lost. Failing imports are not a reason: the sync below repairs the packages
+                    if eng.exists():
+                        if not ((eng / "pyvenv.cfg").exists() or (eng / ".pianpian-requirements").exists() or not any(eng.iterdir())):
+                            raise RuntimeError(f"{eng} is not Pianpian's engine: move it away, or choose another data folder")
+                        self._say(f"the engine in {eng} can't start: making it again")
+                        shutil.rmtree(eng)
                     self._exec([exe, "venv", "--python", "3.12", str(eng)], env, "engine")
                 # sync, not install: the engine ends up exactly as pinned, packages no longer listed are removed
                 self._exec([exe, "pip", "sync", "--python", str(py), str(REQS)], env, "engine")
@@ -326,7 +375,12 @@ class Setup:
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])
             if getattr(self, "cleanup", False):
-                self._say(f"deleted old models: {models.remove_unused() / 1e9:.1f} GB freed")
+                freed = models.remove_unused()
+                for o in old_engines():
+                    shutil.rmtree(o["path"])
+                    freed += o["bytes"]
+                save_config(moved_from=[])
+                self._say(f"deleted old files: {freed / 1e9:.1f} GB freed")
             with self.lock:
                 self.state = "done"
         except Exception as e:                                # shown on the page, with the log
@@ -335,6 +389,23 @@ class Setup:
                 for s in self.steps:
                     if s["state"] == "running":
                         s["state"] = "failed"
+
+
+def _moveable() -> list[Path]:
+    """The downloads that can follow the data folder: models, runtime, dictionary (unless set by hand)."""
+    return [models_dir(), runtime_dir(), cache_dir()]
+
+
+def old_engines() -> list[dict]:
+    """The engine and Python left in data folders the setup moved away from (plan()["old"], the cleanup)."""
+    out = []
+    for d in config().get("moved_from", []):
+        for sub, ours in (("engine", ".pianpian-requirements"), ("python", "cpython-*")):
+            p = Path(d) / sub
+            if p.is_dir() and Path(d) != data_dir() and any(p.glob(ours)):   # only what the setup made there
+                out.append({"name": f"{sub} in {d}", "path": str(p),
+                            "bytes": sum(f.stat().st_size for f in p.rglob("*") if f.is_file() and not f.is_symlink())})
+    return out
 
 
 def speed(url: str, size: int = 400_000, seconds: float = 5.0) -> float:

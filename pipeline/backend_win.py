@@ -2,7 +2,10 @@
 
 The contract is in backend.py. The pinned binaries come from runtimes.py (CUDA, Vulkan or CPU, picked
 per tool). Failed GPU transcription and translation-server startup are retried once with the CPU
-build. A translation server that fails after startup ends the job; inference is not retried.
+build, except when whisper.cpp exits with an error after writing a whole transcript: that one is kept
+(simulated on macOS only; whether b5454 ever does this is not known). A translation server that fails
+after startup ends the job, after printing its last log lines; inference is not retried. OCR lines are
+rebuilt from RapidOCR's boxes (top to bottom, then left to right).
 
 whisper.cpp's JSON offsets are milliseconds; its tokens become "words" here. For Chinese a token is
 usually one or two characters, and srt_tool.py spreads each token's time over its characters.
@@ -72,6 +75,15 @@ def _run_whisper(exe: str, model: Path, audio: Path, base: Path, backend: str) -
     subprocess.run(cmd, check=True)                   # not captured: its GPU line lands in the job log
 
 
+def _transcript(path: Path) -> dict | None:
+    """whisper.cpp's JSON, if it is there and whole."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None:
     """whisper.cpp on a 16 kHz mono wav: writes srt (one cue per segment) and words_json (segments with
     word times), and nothing else."""
@@ -79,18 +91,24 @@ def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None
     if not model.is_file():
         sys.exit(f"{model_dir}: no {WHISPER_MODEL} (the pinned model file)")
     base = words_json.with_name(words_json.stem + ".cpp")     # a temporary name: whisper.cpp must not overwrite our output
-    backend = runtimes.backend_for("whisper")
-    try:
-        _run_whisper(runtimes.ensure("whisper"), model, audio, base, backend)
-    except (subprocess.CalledProcessError, OSError) as e:
-        if backend == "cpu":
-            raise
-        print(f"the {backend} whisper build failed ({e}); trying the CPU build", flush=True)
-        _run_whisper(runtimes.ensure_cpu("whisper"), model, audio, base, "cpu")
     produced = Path(str(base) + ".json")
-    if not produced.exists():
-        sys.exit(f"whisper.cpp wrote no {produced.name}")
-    segments = _segments(json.loads(produced.read_text(encoding="utf-8")))
+    produced.unlink(missing_ok=True)                          # never read a transcript from an earlier run
+    backend = runtimes.backend_for("whisper")
+    for attempt in (backend, "cpu") if backend != "cpu" else ("cpu",):
+        try:
+            _run_whisper(runtimes.ensure("whisper", attempt), model, audio, base, attempt)
+            break
+        except (subprocess.CalledProcessError, OSError) as e:
+            if _transcript(produced) is not None:             # it failed after writing a whole transcript: keep it
+                print(f"whisper.cpp ({attempt}) stopped with an error ({e}) after writing its transcript; using it", flush=True)
+                break
+            if attempt == "cpu":
+                raise
+            print(f"the {attempt} whisper build failed ({e}); trying the CPU build", flush=True)
+    data = _transcript(produced)
+    if data is None:
+        sys.exit(f"whisper.cpp wrote no readable {produced.name}")
+    segments = _segments(data)
     produced.unlink()
     if not segments:
         sys.exit("whisper.cpp found no speech")
@@ -144,6 +162,10 @@ def _wait_ready(proc: subprocess.Popen, port: int) -> bool:
     return False
 
 
+def _tail(log_path: Path, n: int = 30) -> str:
+    return "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-n:])
+
+
 @contextmanager
 def translator(model_dir: str):
     """Hy-MT2 as a GGUF through llama-server, started once for the whole run; yields
@@ -172,16 +194,14 @@ def translator(model_dir: str):
                         proc.wait()
                     proc = None
                 if backend == "cpu":
-                    tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
-                    sys.exit(f"llama-server did not start:\n{tail}")
+                    sys.exit(f"llama-server did not start:\n{_tail(log_path)}")
                 print(f"the {backend} llama build did not start; trying the CPU build", flush=True)
                 backend = "cpu"
                 log.seek(0)
                 log.truncate()
-                proc = _start_server(runtimes.ensure_cpu("llama"), model, port, backend, log)
+                proc = _start_server(runtimes.ensure("llama", "cpu"), model, port, backend, log)
                 if not _wait_ready(proc, port):
-                    tail = "\n".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])
-                    sys.exit(f"llama-server did not start:\n{tail}")
+                    sys.exit(f"llama-server did not start:\n{_tail(log_path)}")
         lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
         notes = [x.strip() for x in lines if "offload" in x.lower()]
         if not notes:
@@ -196,8 +216,12 @@ def translator(model_dir: str):
                                "stream": False}).encode()
             req = Request(f"http://127.0.0.1:{port}/v1/chat/completions", data=body,
                           headers={"Content-Type": "application/json"})
-            with LOCAL_HTTP.open(req, timeout=300) as r:
-                return json.load(r)["choices"][0]["message"]["content"]
+            try:
+                with LOCAL_HTTP.open(req, timeout=300) as r:
+                    return json.load(r)["choices"][0]["message"]["content"]
+            except OSError:                               # the server died mid-run (a driver reset, out of memory…)
+                print(f"llama-server stopped answering (exit code {proc.poll()}); its last log lines:\n{_tail(log_path)}", flush=True)
+                raise
 
         yield generate
     finally:
@@ -211,6 +235,19 @@ def translator(model_dir: str):
         log_path.unlink(missing_ok=True)
 
 
+def _reading_order(boxes: list[tuple]) -> list[str]:
+    """(top, bottom, left, text) boxes as text: lines top to bottom, boxes left to right in each line. A box
+    whose middle lies inside a line's height belongs to it, so a word a few pixels higher stays in place."""
+    rows: list[list] = []                                     # [top, bottom, [(left, text)]]
+    for top, bottom, left, text in sorted(boxes):
+        if rows and (top + bottom) / 2 <= rows[-1][1]:
+            rows[-1][1] = max(rows[-1][1], bottom)
+            rows[-1][2].append((left, text))
+        else:
+            rows.append([top, bottom, [(left, text)]])
+    return [text for _, _, row in rows for _, text in sorted(row)]
+
+
 def ocr(frames_dir: str) -> str:
     """RapidOCR (ONNX Runtime, Chinese models included) over every frame: one 'name<TAB>text' line each."""
     from rapidocr_onnxruntime import RapidOCR
@@ -218,11 +255,10 @@ def ocr(frames_dir: str) -> str:
     lines = []
     for path in sorted(Path(frames_dir).glob("*.png")):
         result, _ = engine(str(path))
-        found = []
+        boxes = []
         for box, text, score in result or []:
-            if score >= 0.5 and text.strip():
-                xs = [p[0] for p in box]
+            if score >= 0.5 and text.strip():                 # RapidOCR's score, not Vision's confidence: kept at 0.5
                 ys = [p[1] for p in box]
-                found.append((min(ys), min(xs), text.strip()))
-        lines.append(f"{path.name}\t{' '.join(t for _, _, t in sorted(found))}")
+                boxes.append((min(ys), max(ys), min(p[0] for p in box), text.strip()))
+        lines.append(f"{path.name}\t{' '.join(_reading_order(boxes))}")
     return "\n".join(lines)

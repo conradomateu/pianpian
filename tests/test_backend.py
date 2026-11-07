@@ -53,6 +53,21 @@ def test_the_promised_signatures():
     assert params(impl.transcribe) == ["audio", "model_dir", "srt", "words_json"]
     assert params(impl.translator) == ["model_dir"]
     assert params(impl.ocr) == ["frames_dir"]
+    for mod in (backend_mac, backend_win):                 # align is optional: study.py skips the links without it
+        if hasattr(mod, "align"):
+            assert params(mod.align) == ["zh_srt", "en_srt"]
+
+
+def test_only_the_mlx_backend_aligns_words():
+    # align_srt.py needs MLX hidden states: backend_win has no align(), so no job runs it and fails there
+    assert hasattr(backend_mac, "align") and not hasattr(backend_win, "align")
+
+
+def test_mac_align_runs_align_srt(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(backend_mac.subprocess, "run", lambda cmd, check: calls.append(cmd))
+    backend_mac.align(tmp_path / "zh.srt", tmp_path / "zh.en.srt")
+    assert calls[0][1].endswith("align_srt.py") and calls[0][2:] == [str(tmp_path / "zh.srt"), str(tmp_path / "zh.en.srt")]
 
 
 def test_this_platform_has_the_three_functions():
@@ -161,7 +176,7 @@ def test_win_transcribe_writes_what_srt_tool_reads(monkeypatch, tmp_path):
         _cpp_json(Path(cmd[cmd.index("-of") + 1]))
 
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "whisper-cli.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "whisper-cli.exe")
     monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
     srt, words = _out(tmp_path)
     backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
@@ -183,13 +198,55 @@ def test_win_transcribe_retries_on_cpu_when_the_gpu_build_fails(monkeypatch, tmp
         _cpp_json(Path(cmd[cmd.index("-of") + 1]))
 
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu/whisper-cli.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu/whisper-cli.exe" if backend == "cpu" else "gpu/whisper-cli.exe")
     monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
     srt, words = _out(tmp_path)
     backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
     assert_transcribe_output(srt, words)
     assert len(runs) == 2 and "-ng" not in runs[0] and "-ng" in runs[1]   # GPU, then the CPU build
+
+
+def test_win_transcribe_keeps_a_whole_transcript_from_a_build_that_then_fails(monkeypatch, tmp_path, capsys):
+    # [simulated on macOS] the CUDA build writes its JSON, then exits non-zero: no second run on the CPU
+    runs = []
+
+    def fake_run(cmd, check):
+        runs.append(cmd)
+        _cpp_json(Path(cmd[cmd.index("-of") + 1]))
+        raise subprocess.CalledProcessError(5, cmd)
+
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: f"{backend}/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
+    srt, words = _out(tmp_path)
+    backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
+    assert_transcribe_output(srt, words)
+    assert [c[0] for c in runs] == ["cuda/whisper-cli.exe"]
+    assert "after writing its transcript; using it" in capsys.readouterr().out
+
+
+def test_win_transcribe_ignores_a_cut_transcript_and_a_stale_one(monkeypatch, tmp_path):
+    # a half-written JSON is not a transcript: the CPU build runs; and a JSON left by an older run is never read
+    runs = []
+    srt, words = _out(tmp_path)
+    stale = words.with_name(words.stem + ".cpp.json")
+    stale.write_text('{"transcription": []}', encoding="utf-8")
+
+    def fake_run(cmd, check):
+        runs.append(cmd)
+        base = Path(cmd[cmd.index("-of") + 1])
+        if len(runs) == 1:
+            assert not stale.exists()
+            Path(str(base) + ".json").write_text('{"transcription": [', encoding="utf-8")
+            raise subprocess.CalledProcessError(1, cmd)
+        _cpp_json(base)
+
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: f"{backend}/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
+    backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
+    assert_transcribe_output(srt, words)
+    assert [c[0] for c in runs] == ["cuda/whisper-cli.exe", "cpu/whisper-cli.exe"]
 
 
 class _Resp:
@@ -237,7 +294,7 @@ def _fake_http(posts):
 def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tmp_path):
     posts, procs = [], []
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "llama-server.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "llama-server.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
     monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http(posts))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
@@ -255,8 +312,7 @@ def test_win_translator_serves_the_chat_with_the_models_sampling(monkeypatch, tm
 def test_win_translator_falls_back_to_cpu(monkeypatch, tmp_path):
     posts, procs = [], []
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "vulkan")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu/llama-server.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu/llama-server.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu/llama-server.exe" if backend == "cpu" else "gpu/llama-server.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", lambda cmd, **kw: procs.append(_Proc(cmd)) or procs[-1])
     ready = iter([False, True])                                           # the Vulkan build never answers /health
     monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: next(ready))
@@ -279,8 +335,7 @@ def test_win_translator_retries_a_gpu_launch_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu.exe" if backend == "cpu" else "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
     monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http([]))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
@@ -301,14 +356,38 @@ def test_win_translator_cleans_up_when_cpu_retry_fails(monkeypatch, tmp_path, fa
 
     monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
-    monkeypatch.setattr(backend_win.runtimes, "ensure_cpu", lambda tool: "cpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "cpu.exe" if backend == "cpu" else "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
     monkeypatch.setattr(backend_win, "_wait_ready", lambda proc, port: False)
     with pytest.raises(OSError if failure == "launch" else SystemExit):
         with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
             pytest.fail("a failed server must not yield a translator")
     assert procs and all(p.terminated for p in procs)
+    assert not list(tmp_path.glob("*.log"))
+
+
+def test_win_translator_prints_the_server_log_when_it_dies_mid_run(monkeypatch, tmp_path, capsys):
+    # [simulated on macOS] the server answers /health, then drops the connection: its log tail reaches the job log
+    def start(cmd, stdout, **kw):
+        stdout.write("ggml_cuda: CUDA error: the launch timed out and was terminated\n")
+        stdout.flush()
+        return _Proc(cmd)
+
+    def dead(req, timeout=None):
+        if getattr(req, "full_url", req).endswith("/health"):
+            return _Resp(status=200)
+        raise ConnectionResetError("Remote end closed connection without response")
+
+    monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "gpu.exe")
+    monkeypatch.setattr(backend_win.subprocess, "Popen", start)
+    monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", dead)
+    with pytest.raises(OSError):
+        with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)) as generate:
+            generate("你好", 0.0, 10)
+    out = capsys.readouterr().out
+    assert "llama-server stopped answering" in out and "the launch timed out" in out
     assert not list(tmp_path.glob("*.log"))
 
 
@@ -320,7 +399,7 @@ def test_win_translator_retains_the_offloaded_layer_count(monkeypatch, tmp_path,
 
     monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
-    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "gpu.exe")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "gpu.exe")
     monkeypatch.setattr(backend_win.subprocess, "Popen", start)
     monkeypatch.setattr(backend_win.LOCAL_HTTP, "open", _fake_http([]))
     with backend_win.translator(_model_dir(tmp_path, backend_win.LLAMA_MODEL)):
@@ -366,7 +445,7 @@ def test_win_translator_keeps_http_local_with_a_proxy_configured(monkeypatch, tm
             proc = _Proc([])
             monkeypatch.setattr(backend_win.tempfile, "gettempdir", lambda: str(tmp_path))
             monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cpu")
-            monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool: "unused.exe")
+            monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: "unused.exe")
             monkeypatch.setattr(backend_win, "_free_port", lambda: server.server_port)
             monkeypatch.setattr(backend_win, "_start_server", lambda *args: proc)
             monkeypatch.setattr(backend_win.time, "sleep", lambda _: pytest.fail("healthy local server was not reached directly"))
@@ -407,6 +486,23 @@ def test_win_ocr_reads_frames_with_rapidocr(monkeypatch, tmp_path):
     out = backend_win.ocr(str(tmp_path))
     assert_ocr_lines(out)
     assert out.splitlines()[0] == "00001.png\t第一行 第二行"              # reading order, and the unsure box dropped
+
+
+def test_win_ocr_keeps_one_visual_line_left_to_right(monkeypatch, tmp_path):
+    # the right-hand box sits 6 px higher than the left one (seen with real RapidOCR 1.4.4 on 7 Nov 2026,
+    # simulated on macOS): it is still the same line, so it comes second; the line below stays below
+    (tmp_path / "0000.png").write_bytes(b"png")
+    rocr = type(sys)("rapidocr_onnxruntime")
+
+    class FakeRapidOCR:
+        def __call__(self, path):
+            return [([[200, 4], [380, 4], [380, 34], [200, 34]], "学习中文", 0.9),
+                    ([[10, 10], [190, 10], [190, 40], [10, 40]], "我们今天", 0.9),
+                    ([[0, 60], [90, 60], [90, 90], [0, 90]], "下一行", 0.9)], 1.0
+
+    rocr.RapidOCR = FakeRapidOCR
+    monkeypatch.setitem(sys.modules, "rapidocr_onnxruntime", rocr)
+    assert backend_win.ocr(str(tmp_path)) == "0000.png\t我们今天 学习中文 下一行"
 
 
 def test_catalog_and_lock_follow_the_platform(monkeypatch, tmp_path):

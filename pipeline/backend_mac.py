@@ -66,3 +66,8 @@ def ocr(frames_dir: str) -> str:
     built = HERE / "bin" / "ocr_frames"
     cmd = [str(built), frames_dir] if built.exists() else ["swift", str(HERE / "ocr_frames.swift"), frames_dir]
     return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+
+
+def align(zh_srt: Path, en_srt: Path) -> None:
+    """The model's English ↔ Chinese word links (align_srt.py reads MLX hidden states): zh.align.json."""
+    subprocess.run([sys.executable, str(HERE / "align_srt.py"), str(zh_srt), str(en_srt)], check=True)

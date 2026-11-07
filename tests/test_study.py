@@ -1,7 +1,9 @@
-"""The pipeline's retry rule: temporary failures are tried again, real ones are not."""
+"""The pipeline's retry rule (temporary failures are tried again, real ones are not), and which steps a job runs."""
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "pipeline")]
@@ -58,3 +60,24 @@ def test_streaming_retry_with_a_real_process(monkeypatch, tmp_path, capsys):
     study.ytdlp_stream([sys.executable, "-c", script, str(counter)])
     out = capsys.readouterr().out
     assert counter.read_text() == "3" and out.count("trying again") == 2 and out.rstrip().endswith("done")
+
+
+def test_word_links_run_only_where_the_backend_can_align(monkeypatch, tmp_path):
+    # align_srt.py needs MLX: on Windows (no align() in backend_win) a job must not start it, fail and log
+    # "No module named 'mlx'", which report.explain() would then blame for a later failure
+    import types
+    for name in ("source.mp4", "zh.srt", "zh.en.srt", "en.lines.txt"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(study, "get_video", lambda src, browser: tmp_path)
+    monkeypatch.setattr(study, "tool", lambda *a: None)
+    monkeypatch.setattr(study, "mux", lambda video, hardsubs: None)
+    monkeypatch.setattr(study, "run", lambda *cmd, **kw: pytest.fail(f"unexpected step {cmd}"))
+    monkeypatch.setattr(sys, "argv", ["study.py", str(tmp_path / "source.mp4")])
+    aligned = []
+    monkeypatch.setattr(study.backend, "impl", lambda: types.SimpleNamespace())          # like backend_win
+    study.main()
+    assert aligned == []
+    monkeypatch.setattr(study.backend, "impl", lambda: types.SimpleNamespace(align=lambda zh, en: aligned.append((zh, en))))
+    study.main()
+    assert aligned == [(Path("zh.srt"), Path("zh.en.srt"))]
