@@ -206,6 +206,49 @@ def test_win_transcribe_retries_on_cpu_when_the_gpu_build_fails(monkeypatch, tmp
     assert len(runs) == 2 and "-ng" not in runs[0] and "-ng" in runs[1]   # GPU, then the CPU build
 
 
+def test_win_transcribe_keeps_a_whole_transcript_from_a_build_that_then_fails(monkeypatch, tmp_path, capsys):
+    # [simulated on macOS] the CUDA build writes its JSON, then exits non-zero: no second run on the CPU
+    runs = []
+
+    def fake_run(cmd, check):
+        runs.append(cmd)
+        _cpp_json(Path(cmd[cmd.index("-of") + 1]))
+        raise subprocess.CalledProcessError(5, cmd)
+
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: f"{backend}/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
+    srt, words = _out(tmp_path)
+    backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
+    assert_transcribe_output(srt, words)
+    assert [c[0] for c in runs] == ["cuda/whisper-cli.exe"]
+    assert "after writing its transcript; using it" in capsys.readouterr().out
+
+
+def test_win_transcribe_ignores_a_cut_transcript_and_a_stale_one(monkeypatch, tmp_path):
+    # a half-written JSON is not a transcript: the CPU build runs; and a JSON left by an older run is never read
+    runs = []
+    srt, words = _out(tmp_path)
+    stale = words.with_name(words.stem + ".cpp.json")
+    stale.write_text('{"transcription": []}', encoding="utf-8")
+
+    def fake_run(cmd, check):
+        runs.append(cmd)
+        base = Path(cmd[cmd.index("-of") + 1])
+        if len(runs) == 1:
+            assert not stale.exists()
+            Path(str(base) + ".json").write_text('{"transcription": [', encoding="utf-8")
+            raise subprocess.CalledProcessError(1, cmd)
+        _cpp_json(base)
+
+    monkeypatch.setattr(backend_win.runtimes, "backend_for", lambda tool: "cuda")
+    monkeypatch.setattr(backend_win.runtimes, "ensure", lambda tool, backend=None: f"{backend}/whisper-cli.exe")
+    monkeypatch.setattr(backend_win.subprocess, "run", fake_run)
+    backend_win.transcribe(tmp_path / "audio.wav", _model_dir(tmp_path, backend_win.WHISPER_MODEL), srt, words)
+    assert_transcribe_output(srt, words)
+    assert [c[0] for c in runs] == ["cuda/whisper-cli.exe", "cpu/whisper-cli.exe"]
+
+
 class _Resp:
     def __init__(self, payload=None, status=200):
         self.status, self.payload = status, payload

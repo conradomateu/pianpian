@@ -72,6 +72,15 @@ def _run_whisper(exe: str, model: Path, audio: Path, base: Path, backend: str) -
     subprocess.run(cmd, check=True)                   # not captured: its GPU line lands in the job log
 
 
+def _transcript(path: Path) -> dict | None:
+    """whisper.cpp's JSON, if it is there and whole."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None:
     """whisper.cpp on a 16 kHz mono wav: writes srt (one cue per segment) and words_json (segments with
     word times), and nothing else."""
@@ -79,18 +88,24 @@ def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None
     if not model.is_file():
         sys.exit(f"{model_dir}: no {WHISPER_MODEL} (the pinned model file)")
     base = words_json.with_name(words_json.stem + ".cpp")     # a temporary name: whisper.cpp must not overwrite our output
-    backend = runtimes.backend_for("whisper")
-    try:
-        _run_whisper(runtimes.ensure("whisper"), model, audio, base, backend)
-    except (subprocess.CalledProcessError, OSError) as e:
-        if backend == "cpu":
-            raise
-        print(f"the {backend} whisper build failed ({e}); trying the CPU build", flush=True)
-        _run_whisper(runtimes.ensure("whisper", "cpu"), model, audio, base, "cpu")
     produced = Path(str(base) + ".json")
-    if not produced.exists():
-        sys.exit(f"whisper.cpp wrote no {produced.name}")
-    segments = _segments(json.loads(produced.read_text(encoding="utf-8")))
+    produced.unlink(missing_ok=True)                          # never read a transcript from an earlier run
+    backend = runtimes.backend_for("whisper")
+    for attempt in (backend, "cpu") if backend != "cpu" else ("cpu",):
+        try:
+            _run_whisper(runtimes.ensure("whisper", attempt), model, audio, base, attempt)
+            break
+        except (subprocess.CalledProcessError, OSError) as e:
+            if _transcript(produced) is not None:             # it failed after writing a whole transcript: keep it
+                print(f"whisper.cpp ({attempt}) stopped with an error ({e}) after writing its transcript; using it", flush=True)
+                break
+            if attempt == "cpu":
+                raise
+            print(f"the {attempt} whisper build failed ({e}); trying the CPU build", flush=True)
+    data = _transcript(produced)
+    if data is None:
+        sys.exit(f"whisper.cpp wrote no readable {produced.name}")
+    segments = _segments(data)
     produced.unlink()
     if not segments:
         sys.exit("whisper.cpp found no speech")
