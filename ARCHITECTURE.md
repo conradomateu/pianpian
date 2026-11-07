@@ -67,7 +67,12 @@ break the signature after the first run.
 
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
-`Pianpian-macOS.zip`, which the website's Download button and the in-app update card point at.
+`Pianpian-macOS.zip`, which the website's Download button and the in-app update card point at, and
+`.github/workflows/windows.yml` (`tools/build_app_windows.py`) does the same on windows-latest with
+`Pianpian-Windows-Setup.exe` and `Pianpian-Windows.zip`. The installer is per-user (Inno Setup, no
+admin) and does not bundle the WebView2 runtime — Windows 11 includes it, and the evergreen
+bootstrapper link always serves the newest build, so a pinned hash would go stale. The update card
+(`updates.py`) points Windows users at the installer.
 
 ## Models
 

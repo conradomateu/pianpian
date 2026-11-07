@@ -9,7 +9,7 @@
     python dev.py test        # pytest (tests/)
     python dev.py serve       # the app at http://127.0.0.1:8770
     python dev.py app         # a dev app that runs this checkout (macOS: ~/Applications; Windows: launcher.py)
-    python dev.py build       # the real Pianpian.app and Pianpian-macOS.zip in dist/ (what releases ship)
+    python dev.py build       # the release build in dist/: Pianpian.app + zip on macOS, installer + zip on Windows
     python dev.py site        # the website into _site/ (landing page + live demo)
     python dev.py preview     # build it and serve it at http://127.0.0.1:8765
     python dev.py shots       # README and website screenshots from the demo (needs Chrome or Brave)
@@ -68,6 +68,13 @@ def app() -> None:
         run("sh", "tools/make_app.sh")
 
 
+def build() -> None:
+    if WINDOWS:
+        run(UV, "run", "--group", "packaging", "--group", "desktop", "python", "tools/build_app_windows.py")
+    else:
+        run(sys.executable, "tools/build_app.py")
+
+
 TASKS = {
     "lint": lint,
     "test": test,
@@ -77,7 +84,7 @@ TASKS = {
     "version": lambda: run(sys.executable, "tools/next_version.py"),
     "serve": lambda: run(sys.executable, "server.py"),
     "app": app,
-    "build": lambda: run(sys.executable, "tools/build_app.py"),
+    "build": build,
     "site": lambda: run(sys.executable, "tools/build_site.py"),
     "preview": lambda: run(sys.executable, "tools/build_site.py", "--serve"),
     "shots": lambda: run(sys.executable, "tools/shots.py"),

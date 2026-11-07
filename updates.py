@@ -64,9 +64,10 @@ def check_app(current: str, force: bool = False) -> dict | None:
             try:
                 req = Request(f"https://api.github.com/repos/{report.REPO}/releases/latest", headers={"Accept": "application/vnd.github+json"})
                 rel = json.load(urlopen(req, timeout=10))
-                # the DMG is what a person opens and drags to Applications; older releases only have the zip
-                files = {a["name"].rsplit(".", 1)[-1]: a["browser_download_url"] for a in rel.get("assets", []) if "-macOS." in a["name"]}
-                asset = files.get("dmg") or files.get("zip")
+                # what a person opens: the DMG on macOS (older releases only have the zip), the installer on Windows
+                urls = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+                names = ("Pianpian-Windows-Setup.exe", "Pianpian-Windows.zip") if engine.WINDOWS else ("Pianpian-macOS.dmg", "Pianpian-macOS.zip")
+                asset = next((urls[n] for n in names if n in urls), None)
                 state["app"] = {"version": clean_version(rel["tag_name"]), "url": rel["html_url"], "download": asset,
                                 "notes": "\n".join((rel.get("body") or "").splitlines()[:12])}
             except (OSError, ValueError, KeyError):

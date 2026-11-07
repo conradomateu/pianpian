@@ -29,6 +29,7 @@ def test_versions():
 
 def test_github_is_asked_once_a_day(monkeypatch, tmp_path):
     u = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(u.engine, "WINDOWS", False)              # this release has only the macOS files
     calls = []
 
     def fake(req, timeout):
@@ -42,6 +43,20 @@ def test_github_is_asked_once_a_day(monkeypatch, tmp_path):
     assert first["version"] == "0.3.0" and first["download"].endswith("Pianpian-macOS.dmg")
     assert u.check_app("0.2.0") == first and len(calls) == 1     # the second time comes from updates.json
     assert u.check_app("0.3.0") is None                          # already on it
+
+
+def test_windows_gets_the_installer(monkeypatch, tmp_path):
+    u = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(u.engine, "WINDOWS", True)
+
+    def fake(req, timeout):
+        body = {"tag_name": "pianpian-v0.3.0", "html_url": "https://github.com/x/y/releases/tag/pianpian-v0.3.0", "body": "",
+                "assets": [{"name": "Pianpian-macOS.dmg", "browser_download_url": "https://example.com/Pianpian-macOS.dmg"},
+                           {"name": "Pianpian-Windows.zip", "browser_download_url": "https://example.com/Pianpian-Windows.zip"},
+                           {"name": "Pianpian-Windows-Setup.exe", "browser_download_url": "https://example.com/Pianpian-Windows-Setup.exe"}]}
+        return io.BytesIO(json.dumps(body).encode())
+    monkeypatch.setattr(u, "urlopen", fake)
+    assert u.check_app("0.2.0")["download"].endswith("Pianpian-Windows-Setup.exe")
 
 
 def test_outdated_models_are_found(monkeypatch, tmp_path):

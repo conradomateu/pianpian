@@ -1,0 +1,44 @@
+# Builds Pianpian for Windows (tools/build_app_windows.py, through dev.py build) on windows-latest:
+# the PyInstaller onedir app, the per-user Inno Setup installer (no admin) and a zip. Called by
+# release-please.yml for each release, which then gets Pianpian-Windows-Setup.exe (what people open)
+# and Pianpian-Windows.zip attached; run it by hand (Actions → windows → Run workflow) to try a build:
+# the files are then kept as a workflow artifact for a week. Checks are ci.yml's job.
+# Inno Setup 6 is preinstalled on the windows-latest runners.
+name: windows
+on:
+  push:
+    branches: [windows-installer]    # TEMPORARY, for the fork run linked in the PR; removed before merge
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - run: python dev.py build
+      - name: Attach to the release
+        if: inputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" dist/Pianpian-Windows-Setup.exe dist/Pianpian-Windows.zip --clobber
+      - name: Keep the build
+        if: ${{ !inputs.tag }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Pianpian-Windows
+          path: |
+            dist/Pianpian-Windows-Setup.exe
+            dist/Pianpian-Windows.zip
+          retention-days: 7
