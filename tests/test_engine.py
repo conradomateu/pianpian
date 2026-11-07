@@ -176,7 +176,7 @@ def run_setup(e, *args, **kw):
     assert not e.SETUP.thread.is_alive()
 
 
-@pytest.mark.parametrize("broken", ["cannot-start", "no-python"])
+@pytest.mark.parametrize("broken", ["cannot-start", "no-python", "no-pyvenv-cfg"])
 def test_setup_rebuilds_an_engine_that_cannot_start(monkeypatch, tmp_path, broken):
     # [simulated] engine/ is there but its Python is gone or won't start: the setup makes it again instead of
     # failing the same way on every retry (`uv venv` alone exits 2 on an existing folder, uv 0.13.7)
@@ -184,10 +184,13 @@ def test_setup_rebuilds_an_engine_that_cannot_start(monkeypatch, tmp_path, broke
     eng = e.engine_dir()
     py = e.engine_python(eng)
     py.parent.mkdir(parents=True)
-    (eng / "pyvenv.cfg").touch()
+    if broken != "no-pyvenv-cfg":
+        (eng / "pyvenv.cfg").touch()
     (eng / ".pianpian-requirements").write_text(e.requirements_id() + "\n")
     if broken == "cannot-start":
         py.write_text("old")                                  # the base interpreter it pointed to was removed
+    elif broken == "no-pyvenv-cfg":
+        py.write_text("old")                                  # never a venv uv can sync into
     # only this engine counts (a checkout's .venv would otherwise stand in for a missing one)
     calls = fake_setup(monkeypatch, e, working=lambda p: p == py and p.read_text() != "old")
     e.check()
@@ -196,6 +199,42 @@ def test_setup_rebuilds_an_engine_that_cannot_start(monkeypatch, tmp_path, broke
     assert calls[0] == ["uv", "venv", "--python", "3.12", str(eng)]
     assert e.SETUP.state == "done", e.SETUP.error
     assert py.read_text() == ""                               # made again, not the broken one
+
+
+@pytest.mark.parametrize("slow", ["check-times-out", "imports-fail", "python-starts-slowly"])
+def test_setup_keeps_an_engine_whose_python_starts(monkeypatch, tmp_path, slow):
+    # [simulated] a fresh engine's first start on Windows can be slow (Defender scanning its DLLs): a check()
+    # that times out or fails on an import must not throw away 460 MB; `uv pip sync` repairs the packages
+    e = fresh(monkeypatch, tmp_path)
+    eng = e.engine_dir()
+    py = e.engine_python(eng)
+    py.parent.mkdir(parents=True)
+    py.write_text("engine")
+    (eng / "pyvenv.cfg").touch()
+    (eng / "Lib-site-packages-marker").write_text("kept")
+    calls = fake_setup(monkeypatch, e)
+    synced = []
+    monkeypatch.setattr(e.Setup, "_exec", lambda self, cmd, env, sid: calls.append(cmd) or (cmd[1:3] == ["pip", "sync"] and synced.append(1)))
+
+    def run(cmd, **kw):
+        if Path(cmd[0]) != py:
+            return subprocess.CompletedProcess(cmd, 1)
+        if cmd[2] == "pass":
+            if slow == "python-starts-slowly":
+                raise subprocess.TimeoutExpired(cmd, 120)
+            return subprocess.CompletedProcess(cmd, 0)
+        if synced:                                            # the check after the sync
+            return subprocess.CompletedProcess(cmd, 0)
+        if slow == "check-times-out":
+            raise subprocess.TimeoutExpired(cmd, 120)
+        return subprocess.CompletedProcess(cmd, 1)            # an import fails
+    monkeypatch.setattr(e.subprocess, "run", run)
+    e.check()
+    assert e.STATE["engine"] is False
+    run_setup(e, None, None, [])
+    assert e.SETUP.state == "done", e.SETUP.error
+    assert not any(c[1] == "venv" for c in calls) and calls[0][1:3] == ["pip", "sync"]
+    assert (eng / "Lib-site-packages-marker").exists() and py.read_text() == "engine"
 
 
 def test_setup_leaves_a_folder_that_is_not_its_engine(monkeypatch, tmp_path):

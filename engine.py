@@ -213,6 +213,20 @@ def check() -> dict:
     return dict(STATE)
 
 
+def venv_starts(root: Path) -> bool:
+    """Is root a venv whose Python starts? A slow first start (Windows Defender scanning a fresh engine's
+    DLLs) counts as yes: only a missing file or a Python that exits with an error is a broken venv."""
+    py = engine_python(root)
+    if not (py.exists() and (root / "pyvenv.cfg").exists()):
+        return False
+    try:
+        return subprocess.run([str(py), "-c", "pass"], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
+    except subprocess.TimeoutExpired:
+        return True
+    except OSError:
+        return False
+
+
 def free_bytes(path: Path) -> int:
     p = Path(path).expanduser()
     while not p.exists() and p != p.parent:
@@ -330,11 +344,10 @@ class Setup:
                 self._step("engine", state="running")
                 eng = engine_dir()
                 py = engine_python(eng)
-                if STATE["engine"] is None:
-                    check()
-                if not py.exists() or not STATE["engine"]:
-                    # missing, or there but unable to start: made again (`uv venv --clear` refuses a folder without
-                    # pyvenv.cfg, uv 0.13.7). engine/ holds only the venv and its stamp, so nothing else is lost
+                if not venv_starts(eng):
+                    # missing, or a venv whose Python can't start: made again (`uv venv --clear` refuses a folder
+                    # without pyvenv.cfg, uv 0.13.7). engine/ holds only the venv and its stamp, so nothing else is
+                    # lost. Failing imports are not a reason: the sync below repairs the packages
                     if eng.exists():
                         if not ((eng / "pyvenv.cfg").exists() or (eng / ".pianpian-requirements").exists() or not any(eng.iterdir())):
                             raise RuntimeError(f"{eng} is not Pianpian's engine: move it away, or choose another data folder")
