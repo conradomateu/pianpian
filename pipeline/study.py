@@ -133,6 +133,7 @@ def get_video(src: str, browser: str) -> Path:
 
 
 def transcribe(video: str) -> None:
+    # the audio first: a video ffmpeg cannot read fails in seconds, not after the speech model has downloaded
     run(ffmpeg(), "-loglevel", "error", "-y", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "audio.wav")
     model = models.ensure(MODEL)
     print(f"transcribing with {MODEL}", flush=True)
