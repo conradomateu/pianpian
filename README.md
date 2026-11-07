@@ -9,13 +9,11 @@ Chinese, pinyin and English subtitles for Bilibili, YouTube and your own videos,
 
 [![CI](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml/badge.svg)](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/conradomateu/pianpian?sort=semver&color=DE3B26)](https://github.com/conradomateu/pianpian/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/conradomateu/pianpian/total?color=0E8A63)](https://github.com/conradomateu/pianpian/releases)
 [![macOS 14+ · Apple Silicon](https://img.shields.io/badge/macOS_14+-Apple_Silicon-17130F?logo=apple)](#install)
 [![Windows 11 · x64](https://img.shields.io/badge/Windows_11-x64-17130F)](#install)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-8A7F74)](LICENSE)
 
-[**Releases: Mac + Windows**](https://github.com/conradomateu/pianpian/releases/latest) · [**Try it in your browser**](https://conradomateu.github.io/pianpian/) · [What's new](https://github.com/conradomateu/pianpian/releases)
+[**Download for Mac or Windows**](https://pianpian.app/) · [**Try it in your browser**](https://pianpian.app/#demo) · [What's new](https://github.com/conradomateu/pianpian/releases)
 
 <img src="site/shots/app-dark.png" alt="Pianpian: the library on the left, a video with Chinese, pinyin and English subtitles in the middle, the transcript on the right" width="100%">
 
@@ -53,25 +51,21 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 
 ### Windows
 
-1. Get **Pianpian-Windows-Setup.exe** from [releases](https://github.com/conradomateu/pianpian/releases), when attached, and run it; otherwise use the source commands below. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If Windows SmartScreen warns about the unsigned installer: **More info → Run anyway**.
-2. The first start asks where to keep your videos and its tools, then downloads them once, with progress: its engine and the speech and translation models. From mainland China it picks faster mirrors by itself.
+1. Download **Pianpian-Windows-Setup.exe** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest) and run it. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If SmartScreen warns about the unsigned installer: **More info → Run anyway**.
+2. The first start asks where to keep your videos and its tools, then downloads its engine and models once, with progress. From mainland China it picks faster mirrors by itself.
 
-**Needs** Windows 11 x64 and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/), normally included with Windows 11. The installer also allows Windows 10 (untested) and rejects Windows ARM64 and 32-bit Windows. Pinned models and CUDA archives total about 4.1 GB to download, plus Python and packages; allow extra space for installation.
+**Needs** Windows 11 x64 and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/), normally included with Windows 11. The installer also allows Windows 10 (untested) and rejects Windows ARM64 and 32-bit Windows. Models and CUDA archives total about 4.1 GB to download, plus Python and packages; allow extra space for installation.
 NVIDIA uses CUDA; other detected Vulkan GPUs use Vulkan for translation and CPU for speech. GPU startup failures retry once on CPU. Windows word links use the dictionary; model-based alignment is macOS-only. [Download sources and runtime details](ARCHITECTURE.md#two-python-environments).
-
-From source: install Python 3.12 or newer and Git, run `git clone https://github.com/conradomateu/pianpian`, then `cd pianpian`, `python -m pip install uv`, `python dev.py engine` and `python dev.py app`.
 
 **Windows test scope, 7 Nov 2026:** earlier source and installer builds ran on Windows 11 25H2 x64; the source acceptance machine had a Ryzen 9 7940HS and RTX 4060 Laptop. **The current integrated build and revised installer have not been tested on Windows.** RapidOCR, Anki export, AMD/Intel Vulkan inference and mainland-China first-run downloads remain untested there. [Dated test history](ARCHITECTURE.md#windows-test-history).
 
-To update a source checkout, close Pianpian, then run these commands in its folder:
+The app announces new versions and keeps its video downloader updated. To update a source checkout instead, close Pianpian and run:
 
 ```powershell
 git pull --ff-only
 python dev.py engine
 python dev.py app
 ```
-
-Updates: the app tells you when a new version is out, and keeps its video downloader fresh on its own.
 
 ## Use
 
@@ -88,17 +82,15 @@ Videos default to `~/Movies/Pianpian` on macOS or `%USERPROFILE%\Videos\Pianpian
 ### Send a selection to Anki
 
 1. Open Anki Desktop, install [AnkiConnect](https://ankiweb.net/shared/info/2055492159) with add-on code **2055492159**, then restart Anki and open your profile.
-2. In a processed library video, click a Chinese word. **Shift+click** another word to select a range. Open the editor with the **Anki icon** in the word's pinned dictionary card or the toolbar; **Use full sentence** selects the current sentence.
-3. Press **Listen** to prepare and play the original audio. **Adjust audio** reveals the start/end, ±100 ms buttons and **Use sentence audio**. Listen again after changing the interval. Additional options hold the margins (initially 150 ms before and 200 ms after) and connection settings.
-4. Choose a deck, or **New deck…**, then **Add to Anki**. The note includes Chinese, pinyin, meaning, sentence, translation, original audio and source title.
+2. In a processed video, click a Chinese word; **Shift+click** selects a range. Open the **Anki** editor from the dictionary card or toolbar; **Use full sentence** selects the current sentence.
+3. Press **Listen** to hear the original audio. **Adjust audio** changes the start/end, restores the sentence audio and sets the margins.
+4. Choose an existing or new deck, then **Add to Anki**. The note includes Chinese, pinyin, meaning, sentence, translation, audio and source title.
 
-Exporting the same occurrence again offers **Update existing note**. Confirming updates its content while keeping the existing cards, review history, tags and deck. Another occurrence makes a separate note. Keep `.pianpian-source-id` with the video's folder when moving it: that file identifies previous exports.
+Exporting the same occurrence again offers **Update existing note**, preserving its cards, review history, tags and deck. Keep `.pianpian-source-id` with the video's folder when moving it so Pianpian recognizes previous exports.
 
-Expand the text/color controls to edit the fields or choose a highlight. Pinyin tone colors are enabled by default, using Pianpian's light/dark palette; Chinese tone colors are optional. Text that cannot be aligned to the edited pinyin stays uncolored. The independent highlight follows the expression into Anki and marks literal matches in the sentence. **None** removes the highlight on an explicit update; turning off tone colors removes those too. Closing the popover with Escape, its close button or a click outside keeps the current draft.
+The text/color controls edit the note fields, tone colors and highlight. If Anki is unavailable, the open draft stays in place for **Retry connection**. **Connection settings** accepts a local port and optional AnkiConnect API key (default port: 8765).
 
-If Anki is unavailable, the open draft stays in place for **Retry connection**. Reloading Pianpian or selecting another item clears the draft. **Connection settings** accepts a local port and optional AnkiConnect API key; the default port is 8765. A different service on that port must use another port, or AnkiConnect and Pianpian must be configured to agree on a free one.
-
-Word times are estimates: preview and listen before saving. Missing or invalid word times use sentence bounds. Export requires the local app/server; the website demo and files opened directly from disk cannot send notes. Audio-only extraction is covered by backend tests; audio-only library import is still planned. Anki export has not been tested on Windows.
+Word times are estimates: preview and listen before saving; missing or invalid times use sentence bounds. Export requires the local app/server, not the website demo or files opened from disk. Anki export has not been tested on Windows.
 
 ## Development
 
