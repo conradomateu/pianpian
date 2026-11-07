@@ -6,7 +6,7 @@ The app itself is small. What it needs to make subtitles is installed on first r
   2. on Windows, the pinned whisper.cpp and llama.cpp builds for this GPU (pipeline/runtimes.py),
      into <data>/runtime;
   3. the models you pick (pipeline/models.py), into <data>/models.
-<data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\Pianpian on Windows,
+<data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\\Pianpian on Windows,
 unless you choose another folder. Downloads come from PyPI and python-build-standalone, or from mirrors
 in mainland China when those are slow to reach. Settings live in <data>/config.json.
 Standard library only.
@@ -97,7 +97,7 @@ def save_config(**changes) -> dict:
 
 
 def logs_dir() -> Path:
-    """macOS keeps app logs in ~/Library/Logs and Windows in <data>\logs; with $PIANPIAN_HOME they stay
+    """macOS keeps app logs in ~/Library/Logs and Windows in <data>\\logs; with $PIANPIAN_HOME they stay
     next to everything else."""
     if not WINDOWS and not os.environ.get("PIANPIAN_HOME"):
         d = Path.home() / "Library" / "Logs" / "Pianpian"
