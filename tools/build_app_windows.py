@@ -53,7 +53,7 @@ def pyinstaller(debug_console: bool) -> None:
     # pipeline/ (links, models, …) is not on PyInstaller's path: it ships as data, and engine.py puts it on sys.path
     args = ["--noconfirm", "--clean", "--onedir", "--name", "Pianpian", "--icon", ICON,
             "--distpath", DIST, "--workpath", BUILD / "pyi-win", "--specpath", BUILD,
-            "--hidden-import", "webview.platforms.edgechromium"]
+            "--hidden-import", "webview.platforms.edgechromium", "--hidden-import", "ctypes"]
     if not debug_console:
         args.append("--windowed")
     for src, dest in datas:

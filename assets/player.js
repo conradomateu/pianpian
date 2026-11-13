@@ -228,7 +228,7 @@
               </div>
             </div></details>
             <span data-extra></span>
-            <details class="dd" data-dd><summary>Resources</summary><div class="ddp">
+            <details class="dd" data-dd><summary>Resources</summary><div class="ddp" data-resources>
               ${RESOURCES.map(([n, u, d]) => `<a class="res" href="${u}" target="_blank" rel="noopener"><b>${n}</b><small>${d}</small></a>`).join('')}
             </div></details>
             <span class="grow"></span>

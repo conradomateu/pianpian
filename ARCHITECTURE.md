@@ -167,8 +167,11 @@ On 13 Nov 2026 the pinned Windows models and CPU archives total **2,040,369,984 
 the old setup added an estimated 460 MB of installed engine space to that download figure.
 Those were different quantities. The new setup separates known remaining model/runtime bytes
 from Python/package downloads of unknown total size and the engine's estimated disk footprint.
-GPU detection is an explicit read-only action. It checks NVIDIA driver >=551.61 for the pinned
-CUDA 12.4 builds, or a device reported by `vulkaninfo`; detection does not establish successful inference.
+Setup runs GPU detection automatically in a background request, without changing the selection. It checks
+NVIDIA driver >=551.61, initializes the installed driver with `cuInit`/`cuDeviceGetCount`, and checks
+pinned app-owned CUDA runtime stamps. If llama-server is installed, `--list-devices` must report a CUDA
+device before device visibility is confirmed. Driver initialization/device enumeration do not prove model
+inference. With no compatible NVIDIA driver, detection may report a device from `vulkaninfo`.
 No CUDA Toolkit is required. Existing compatible app-managed runtimes are reused; arbitrary system
 CUDA libraries are not reused. Missing `vulkaninfo` means detection is inconclusive; users can still explicitly choose Vulkan, with CPU fallback if it fails to start.
 
@@ -204,6 +207,28 @@ speedup. The Q8 download was SHA-256 verified and the compatibility view removed
 This synthetic, short clip does not establish accuracy on accents, noise or long recordings, nor does
 it validate Windows inference or the packaged installer. Broader audio validation and a native Windows
 CPU/CUDA smoke test remain required before claiming parity there.
+
+### Optional Windows speed comparison
+
+Open **Resources → Models & acceleration** in the player to return to setup. Its **Compare CPU / CUDA speed** button queues `pipeline/acceleration.py` through the normal
+job worker, so setup cannot replace models/runtimes during a comparison. It never downloads models,
+runtimes or a CUDA Toolkit, and never changes the saved acceleration. Already installed CUDA builds
+run once with GPU work disabled and once with GPU work enabled. Missing prerequisites are reported
+per model; there are no guessed speed multipliers.
+
+Whisper processes the bundled 30-second excerpt of our self-made demo (960 KB mono PCM; no new library).
+Its reported total minus model-load time is extrapolated to a rough speech-only 10-minute estimate.
+Hy-MT2 uses the already bundled `llama-bench` with 256 input / 32 output synthetic tokens, two warm
+runs, and estimates 100 subtitles with that same token budget. This is a throughput estimate, not a
+translation-quality test or a guarantee for subtitle lengths/context in real videos. Downloads, OCR,
+pinyin and app overhead are excluded. CUDA model-buffer/offload diagnostics are required before a
+speedup is reported; just detecting a GPU is insufficient. Each model has a 10-minute test deadline.
+Logs stay under `<data>/cache/benchmark`; results are available in the current session's job log.
+
+On 13 Nov 2026, the CLI flags/diagnostics were checked against whisper.cpp b5454 and llama.cpp b11851
+source. Detection, benchmark parsing, queue exclusion and real browser clicks are tested on macOS with
+simulated Windows responses. Native Windows benchmark execution remains **not tested**. The Windows
+bundle explicitly includes stdlib `ctypes` for the driver probe; no additional Python package is added.
 
 ## The pipeline
 
@@ -292,7 +317,8 @@ layout is unit-tested on macOS; execution on Windows remains untested.
 |---|---|---|
 | GET | `/api/status` | Local status: version, library, engine readiness, platform, accelerator, browsers, busy; foreign origins get only `ok`/`version` |
 | GET / POST | `/api/setup` | Setup plan/progress; start setup with library/data folders, model choices, acceleration and cleanup option |
-| GET | `/api/setup-gpu` | Explicit read-only GPU/driver probe; downloads nothing and does not change saved settings |
+| GET | `/api/setup-gpu` | Read-only GPU/driver probe; downloads nothing and does not change saved settings |
+| POST | `/api/setup-benchmark` | Queue an optional offline CPU/CUDA comparison using installed models/runtimes; results in `/api/jobs` |
 | GET | `/api/videos` | Library folders with title, link, HSK level and the tracks they have |
 | GET | `/api/videos/<id>` | One video, plus its `zh.lines.txt` for translating by hand |
 | GET | `/api/jobs` | Recent jobs with their state and the end of their log |

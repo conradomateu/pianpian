@@ -23,7 +23,9 @@ def test_pyinstaller_ships_the_logo_only_and_pins_its_tools(monkeypatch, tmp_pat
     design = [d for d in datas if ";design" in d]
     assert design == [f"{ROOT / 'design' / 'icons' / '20-pianpian-watermelon.svg'};design/icons"]
     assert "links" not in cmd                                 # pipeline/ ships as data, not as hidden imports
+    assert "ctypes" in [cmd[i + 1] for i, c in enumerate(cmd) if c == "--hidden-import"]
     assert (tmp_path / "stage" / "stage" / "pipeline" / "links.py").is_file()
+    assert (tmp_path / "stage" / "stage" / "pipeline" / "benchmark-mandarin.wav").is_file()
 
 
 def test_an_old_installer_is_neither_kept_nor_reported(monkeypatch, tmp_path, capsys):

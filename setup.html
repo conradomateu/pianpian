@@ -83,7 +83,7 @@ const api = async (path, body) => {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 };
-let plan = null, timer = null, lastBody = null;
+let plan = null, timer = null, lastBody = null, benchmarkTimer = null;
 
 function renderPlan() {
   const f = $('plan'), e = plan.engine, ok = e.engine && e.current;
@@ -100,9 +100,12 @@ function renderPlan() {
         <option value="vulkan">Vulkan · translation GPU, speech CPU</option>
       </select>
       <small id="runtime-label"></small>
-      <div class="row"><button class="btn" type="button" id="detect-gpu" ${plan.accelLocked ? 'disabled' : ''}>Detect GPU</button></div>
+      <div class="row"><button class="btn" type="button" id="detect-gpu">Check GPU again</button>
+      <button class="btn" type="button" id="benchmark-gpu" disabled>Compare CPU / CUDA speed</button></div>
       <small id="gpu-fallback"></small>
       <small id="gpu-note">CPU needs no CUDA. GPU acceleration uses app-managed libraries; no CUDA Toolkit installation needed.${plan.accelLocked ? ' Choice fixed by PIANPIAN_ACCEL.' : ''}</small>
+      <p class="muted">The optional speed test uses installed models and CUDA tools only. It downloads nothing and can take several minutes. Estimates appear after measuring this computer.</p>
+      <div id="gpu-speed" role="status" aria-live="polite"></div>
     </span><span class="sz" id="runtime-size"></span></div>` : '') +
     plan.models.map(m => `
     <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${!chosen || chosen.includes(m.id) ? 'checked' : ''}>
@@ -113,16 +116,56 @@ function renderPlan() {
       <span class="sz">frees ${gb(plan.old.reduce((t, o) => t + o.bytes, 0))}</span></label>` : '');
   if (plan.runtime) {
     f.accel.value = plan.runtime.backend;
-    $('detect-gpu').onclick = async () => {
+    const detect = async () => {
       const button = $('detect-gpu'); button.disabled = true; $('gpu-note').textContent = 'Checking the GPU driver…';
       try {
         const detected = await api('/api/setup-gpu');
-        f.accel.value = detected.backend; $('gpu-note').textContent = detected.message; sum();
+        $('gpu-note').textContent = detected.message;
+        $('benchmark-gpu').disabled = !(detected.benchmarkAvailable && ok);
       } catch (e) { $('gpu-note').textContent = 'Could not check the GPU: ' + e.message; }
       finally { button.disabled = false; }
     };
+    $('detect-gpu').onclick = detect;
+    $('benchmark-gpu').onclick = async () => {
+      $('benchmark-gpu').disabled = true;
+      $('gpu-speed').textContent = 'Comparing CPU and CUDA locally. Your acceleration choice will stay unchanged.';
+      try {
+        const job = await api('/api/setup-benchmark', {});
+        watchBenchmark(job.id);
+      } catch (e) { $('gpu-speed').textContent = e.message; $('benchmark-gpu').disabled = false; }
+    };
+    detect(); // Background detection never selects an accelerator or starts a benchmark/download.
   }
   sum();
+}
+const seconds = n => n >= 60 ? `${(n / 60).toFixed(1)} min` : `${n.toFixed(1)} s`;
+function showBenchmark(result) {
+  $('gpu-speed').innerHTML = result.tools.map(t => {
+    const title = t.tool === 'whisper' ? 'Speech recognition' : 'Translation';
+    if (t.status !== 'measured') return `<p><b>${title}</b>: ${esc(t.reason || 'Not measured')}</p>`;
+    const comparison = t.speedup >= 1 ? `${t.speedup.toFixed(1)}× faster with CUDA` : `${(1 / t.speedup).toFixed(1)}× slower with CUDA`;
+    return `<p><b>${title}</b>: CPU ${seconds(t.cpu_seconds)} → CUDA ${seconds(t.gpu_seconds)} (${comparison} in this test).<br>
+      <small>${esc(t.workload)}. ${t.estimate ? `Approximate ${esc(t.estimate.label)}: CPU ${seconds(t.estimate.cpu_seconds)} / CUDA ${seconds(t.estimate.gpu_seconds)}.` : ''}</small></p>`;
+  }).join('') + '<small>A short local sample, not a guaranteed completion time. Downloading videos, OCR and pinyin are not included. Your acceleration choice has not changed.</small>';
+}
+async function watchBenchmark(id) {
+  clearTimeout(benchmarkTimer);
+  try {
+    const job = (await api('/api/jobs')).find(j => j.id === id);
+    if (!job) throw new Error('The speed test is no longer available. Run it again.');
+    if (job.state === 'done' || job.state === 'failed') {
+      const line = [...job.log].reverse().find(line => line.startsWith('@benchmark '));
+      if (line) showBenchmark(JSON.parse(line.slice(11)));
+      else $('gpu-speed').textContent = 'The speed test could not finish. No speed estimate is available.';
+      $('benchmark-gpu').disabled = false;
+      return;
+    }
+  } catch (e) {
+    $('gpu-speed').textContent = 'Could not read the speed test: ' + e.message;
+    $('benchmark-gpu').disabled = false;
+    return;
+  }
+  benchmarkTimer = setTimeout(() => watchBenchmark(id), 1000);
 }
 function sum() {
   const e = plan.engine, f = $('plan');

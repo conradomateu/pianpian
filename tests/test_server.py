@@ -637,3 +637,68 @@ def test_setup_rejects_unknown_acceleration_before_saving(monkeypatch):
     handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
     handler.do_POST()
     assert handler.response[0] == 400 and "acceleration" in handler.response[1]["error"]
+
+
+@pytest.fixture
+def benchmark_requests(monkeypatch, tmp_path):
+    """Real request handlers and queue, with no worker, binaries, downloads or settings changes."""
+    monkeypatch.setattr(server, "CLOSING", False)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "QUEUE", server.queue.Queue())
+    monkeypatch.setattr(server, "ANKI_ACTIVE", 0)
+    monkeypatch.setattr(server, "IMPORTS_ACTIVE", 0)
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine, "STATE", {"engine": True, "current": True})
+    monkeypatch.setattr(server.engine.SETUP, "state", "idle")
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("benchmark changed setup"))
+    monkeypatch.setattr(server.engine, "python", lambda: "installed-engine-python")
+    monkeypatch.setattr(server.engine, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(server.engine, "pipeline_env", lambda: {"PIANPIAN_ACCEL": "cpu"})
+
+    def request(path="/api/setup-benchmark", authenticated=True):
+        handler = server.Handler.__new__(server.Handler)
+        handler.path, handler.headers = path, {"X-Kit": "1"} if authenticated else {}
+        handler.body = lambda: {}
+        handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+        handler.do_POST()
+        return handler.response
+
+    return request
+
+
+@pytest.mark.parametrize("windows,engine,code", [(False, True, 400), (True, False, 409), (True, None, 409)])
+def test_speed_test_requires_windows_and_an_installed_engine(benchmark_requests, monkeypatch, windows, engine, code):
+    monkeypatch.setattr(server.engine, "WINDOWS", windows)
+    monkeypatch.setitem(server.engine.STATE, "engine", engine)
+    status, _ = benchmark_requests()
+    assert status == code and not server.JOBS and server.QUEUE.empty()
+
+
+def test_speed_test_uses_the_job_queue_and_deduplicates_requests(benchmark_requests):
+    existing = server.Job("video pipeline", ["unused"], ".")
+    server.enqueue(existing)
+    status, first = benchmark_requests()
+    again, duplicate = benchmark_requests()
+    assert status == again == 200 and first["id"] == duplicate["id"]
+    assert len(server.JOBS) == server.QUEUE.qsize() == 2
+    assert server.QUEUE.get_nowait() is existing
+    job = server.QUEUE.get_nowait()
+    assert job.kind == "benchmark" and job.state == "queued"
+    assert Path(job.cmd[1]).name == "acceleration.py"
+    assert job.env["PIANPIAN_ACCEL"] == "cpu"  # measuring does not change the user's acceleration choice
+
+
+def test_speed_test_and_setup_exclude_each_other(benchmark_requests, monkeypatch):
+    assert benchmark_requests()[0] == 200
+    status, body = benchmark_requests("/api/setup")
+    assert status == 409 and "speed test" in body["error"]
+    server.JOBS[0].state = "done"
+    monkeypatch.setattr(server.engine.SETUP, "state", "running")
+    status, body = benchmark_requests()
+    assert status == 409 and body["error"] == server.SETUP_RUNS
+    assert len(server.JOBS) == 1
+
+
+def test_speed_test_cannot_start_without_csrf_header(benchmark_requests):
+    assert benchmark_requests(authenticated=False)[0] == 403
+    assert not server.JOBS and server.QUEUE.empty()

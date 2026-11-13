@@ -258,6 +258,9 @@ def enqueue(job: Job) -> Job:
             raise RuntimeError("Pianpian is closing")
         if engine.SETUP.state == "running":
             raise RuntimeError(SETUP_RUNS)
+        if job.kind == "benchmark":
+            if existing := next((j for j in JOBS if j.kind == "benchmark" and j.state in ("queued", "running")), None):
+                return existing
         JOBS.append(job)
         del JOBS[:-30]
         QUEUE.put(job)
@@ -529,6 +532,15 @@ class Handler(BaseHTTPRequestHandler):
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
                 return self.send_json(engine.SETUP.public())
+            if path == "/api/setup-benchmark":
+                if not engine.WINDOWS:
+                    return self.fail(400, "The CUDA speed test is for Windows.")
+                if not engine.STATE["engine"]:
+                    return self.fail(409, "Install the engine before measuring speed.")
+                job = Job("CPU / CUDA speed test", [engine.python(), str(HERE / "pipeline" / "acceleration.py"),
+                          "--work-dir", str(engine.cache_dir() / "benchmark")], str(HERE), engine.pipeline_env())
+                job.kind = "benchmark"
+                return self.send_json(enqueue(job).public())
             if path == "/api/update-downloader":           # sites change; yt-dlp follows them
                 job = downloader_job()
                 return self.send_json(job.public()) if job else self.fail(409, "uv was not found, so the downloader can't be updated")

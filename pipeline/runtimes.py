@@ -27,6 +27,7 @@ bytes safe either way.
 import functools
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -109,10 +110,42 @@ def vulkan() -> bool:
         return False
 
 
+def cuda_driver() -> bool:
+    """Initialize the installed NVIDIA driver, without requiring or installing the CUDA Toolkit."""
+    import ctypes
+    try:
+        driver = ctypes.WinDLL("nvcuda.dll")
+        driver.cuInit.argtypes, driver.cuInit.restype = [ctypes.c_uint], ctypes.c_int
+        driver.cuDeviceGetCount.argtypes, driver.cuDeviceGetCount.restype = [ctypes.POINTER(ctypes.c_int)], ctypes.c_int
+        count = ctypes.c_int()
+        return driver.cuInit(0) == 0 and driver.cuDeviceGetCount(ctypes.byref(count)) == 0 and count.value > 0
+    except (AttributeError, OSError):
+        return False
+
+
 def detect() -> dict:
-    """Read-only suggestion. No libraries are installed and a GPU still needs a real inference test."""
+    """Read-only checks: driver, cached runtimes and optional device enumeration; never selects CUDA."""
     if nvidia():
-        return {"backend": "cuda", "message": "NVIDIA driver 551.61 or newer detected. CUDA is optional; inference is not tested yet."}
+        driver = cuda_driver()
+        installed = {tool: bool(exe(tool, "cuda")) for tool in EXES}
+        device = False
+        if driver and installed["llama"]:
+            try:
+                # b11851 loads its backends before listing devices; --help does not prove GPU support.
+                result = probe_run([str(exe("llama", "cuda")), "--list-devices"], capture_output=True,
+                                   text=True, timeout=15, creationflags=NO_WINDOW)
+                device = result.returncode == 0 and bool(re.search(r"^\s*CUDA\d+:", result.stdout, re.M))
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        message = "Compatible NVIDIA driver detected. "
+        message += "CUDA driver initialized successfully. " if driver else "CUDA driver initialization was not confirmed. "
+        names = ["Whisper" if tool == "whisper" else "translation" for tool, ready in installed.items() if ready]
+        message += ("Pianpian CUDA tools already installed: " + ", ".join(names) + ". ") if names else "Pianpian CUDA tools are not installed. "
+        if device:
+            message += "The translation engine can see a CUDA device. "
+        message += "Speed and model execution need the optional local test. Your acceleration choice has not changed."
+        return {"backend": "cuda", "message": message, "cuda": {"driverReady": driver, "installed": installed, "deviceVisible": device},
+                "benchmarkAvailable": driver and any(installed.values())}
     if vulkan():
         return {"backend": "vulkan", "message": "Vulkan device detected. Translation can use it; speech uses the CPU. Inference is not tested yet."}
     return {"backend": "cpu", "message": "No compatible GPU was confirmed. CPU works without CUDA. Vulkan detection needs vulkaninfo."}

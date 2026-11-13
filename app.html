@@ -284,6 +284,7 @@ setTimeout(() => document.documentElement.classList.add('ready'), 80);   // moti
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */
 player.extra.innerHTML = '<details class="dd" data-dd id="vmenu" hidden><summary>Video</summary><div class="ddp" id="vpanel"></div></details>';
+if (!OFFLINE && !DEMO) $('player').querySelector('[data-resources]').insertAdjacentHTML('beforeend', '<a class="btn" id="toolslink" href="setup.html?again">Models &amp; acceleration</a>');
 ankiUI = AnkiExport.mount(player, { api, source: () => current, enabled: !DEMO && !OFFLINE });
 
 /* ---------- status ---------- */
