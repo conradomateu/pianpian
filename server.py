@@ -360,9 +360,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
                 accel = "mlx"
-                if engine.WINDOWS:                    # status never probes hardware: use the saved choice or "auto"
-                    accel = "auto"
-                    choice = engine.PATH_OVERRIDES["PIANPIAN_ACCEL"] or engine.config().get("accel")
+                if engine.WINDOWS:                    # status never probes hardware: use the saved choice or CPU
+                    accel = "cpu"
+                    choice = (engine.PATH_OVERRIDES["PIANPIAN_ACCEL"] or engine.config().get("accel") or "cpu").lower()
                     if choice in ("cpu", "vulkan", "cuda"):
                         bw = choice if ("whisper", choice) in engine.runtimes.ASSETS else "cpu"
                         bl = choice if ("llama", choice) in engine.runtimes.ASSETS else "cpu"
@@ -388,6 +388,8 @@ class Handler(BaseHTTPRequestHandler):
                     info["lines"] = read(p / "zh.lines.txt")
                     info["english"] = read(p / "en.lines.txt")
                 return self.send_json(info)
+            if path == "/api/setup-gpu":
+                return self.send_json(engine.runtimes.detect() if engine.WINDOWS else {"backend": "mlx", "message": "Apple Silicon uses Metal."})
             if path == "/api/setup":                       # what the first-run setup would do, and how it is going
                 return self.send_json({**engine.SETUP.plan(), "progress": engine.SETUP.public()})
             if path == "/api/report":                      # ?job=<id>, or the setup's failure, or a general report
@@ -511,6 +513,8 @@ class Handler(BaseHTTPRequestHandler):
                 for d in (library, folder):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
+                if data.get("accel") not in (None, "cpu", "cuda", "vulkan"):
+                    return self.fail(400, "unknown acceleration choice")
                 with STARTING:
                     if ANKI_ACTIVE:
                         return self.fail(409, "Wait for Anki audio and word processing to finish, then run the setup.")
@@ -519,7 +523,7 @@ class Handler(BaseHTTPRequestHandler):
                     if busy := next((j for j in JOBS if j.state in ("queued", "running")), None):
                         return self.fail(409, f"Wait for “{busy.label}” to finish, then run the setup.")
                     try:
-                        engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
+                        engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")), accel=data.get("accel"))
                     except RuntimeError as e:
                         return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()

@@ -1,5 +1,5 @@
 /* Landing page: show only the visitor's download and say whether their computer can run Pianpian.
-   Progressive enhancement: both buttons work without JavaScript; detection hides the other platform and adds a line.
+   Downloads appear only after desktop detection; GitHub stays available without JavaScript.
    What browsers tell (checked 7 Nov 2026 against their docs, not on every device): Chromium gives
    userAgentData and architecture/bitness/platformVersion hints; Safari and Firefox give none, and Safari's
    user agent says "Intel Mac" on Apple Silicon too, so a WebGL renderer name is only a hint. */
@@ -12,8 +12,8 @@
   function classify({ ua = '', platform = '', touch = 0, hints = {}, gpu = '' } = {}) {
     const arch = hints.architecture || '';
     const major = parseInt(hints.platformVersion, 10);
-    if (/iPhone|iPad|iPod|Android/.test(ua) || (/Macintosh/.test(ua) && touch > 1))   // iPadOS asks for the Mac page
-      return { os: 'other', fits: false, note: 'Pianpian is for Mac and Windows computers, not phones or tablets. Open this page on a computer.' };
+    if (/iPhone|iPad|iPod|Android/.test(ua) || /^(Android|iOS)$/.test(platform) || (/Macintosh/.test(ua) && touch > 1))   // iPadOS asks for the Mac page
+      return { os: 'other', fits: false, note: 'Pianpian isn’t available here: it runs on Mac and Windows computers, not phones or tablets. You can star the project on GitHub.' };
     if (platform === 'macOS' || /Macintosh|Mac OS X/.test(ua)) {
       if (arch === 'x86') return { os: 'mac', fits: false, note: 'Your browser reports an Intel Mac. Pianpian needs Apple Silicon (M1 or newer).' };
       if (arch === 'arm') {
@@ -50,16 +50,25 @@
     return { ua: nav.userAgent, platform: data?.platform || '', touch: nav.maxTouchPoints || 0, hints, gpu };
   }
 
-  async function apply() {
+  function render(seen) {
     const cta = document.getElementById('download');
     if (!cta) return;
-    const seen = classify(await probe());
+    document.documentElement.dataset.siteOs = seen.os;
     const note = document.getElementById('os-note');
     note.textContent = seen.note;
     note.dataset.fits = seen.fits;
     note.hidden = false;
+    document.querySelectorAll('[data-os-note]').forEach(el => {
+      el.textContent = seen.note;
+      el.hidden = seen.os !== 'other';
+    });
+    for (const star of document.querySelectorAll('.cta .star')) {
+      star.classList.toggle('dl', seen.os === 'other');
+      star.classList.toggle('ghost', seen.os !== 'other');
+    }
     for (const el of document.querySelectorAll('[data-umami-event="download"]')) el.dataset.umamiEventDetected = seen.os;
-    const head = document.querySelector('header.top .dl');
+    const head = document.querySelector('header.top [data-umami-event="download"]');
+    if (head) head.hidden = seen.os === 'other';
     head?.querySelectorAll('[data-platform]').forEach(icon => icon.toggleAttribute('hidden', icon.dataset.platform !== seen.os));
     if (seen.os === 'other') {          // phones, tablets and Linux: explain; do not offer an incompatible download
       document.querySelectorAll('[data-os]').forEach(a => { a.hidden = true; a.classList.replace('dl', 'ghost'); });
@@ -83,6 +92,12 @@
       head.href = button.href;
       head.dataset.umamiEventOs = seen.os;
     }
+  }
+
+  async function apply() {
+    // Decide from the UA immediately; optional Chromium hints must not delay the mobile state.
+    render(classify({ ua: navigator.userAgent, platform: navigator.userAgentData?.platform || '', touch: navigator.maxTouchPoints || 0 }));
+    render(classify(await probe()));
   }
 
   window.PianpianOS = { classify };

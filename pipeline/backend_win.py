@@ -30,7 +30,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 import runtimes
 import srt_tool
 
-WHISPER_MODEL = "ggml-large-v3-turbo.bin"
+WHISPER_MODEL = "ggml-large-v3-turbo-q8_0.bin"
 LLAMA_MODEL = "Hy-MT2-1.8B-Q4_K_M.gguf"
 
 

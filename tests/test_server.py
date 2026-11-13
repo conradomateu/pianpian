@@ -98,7 +98,7 @@ def test_windows_status_never_probes_gpu(monkeypatch):
     handler.path, handler.headers = "/api/status", {}
     handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
     handler.do_GET()
-    assert handler.response[0] == 200 and handler.response[1]["accel"] == "auto"
+    assert handler.response[0] == 200 and handler.response[1]["accel"] == "cpu"
 
 
 def test_windows_report_never_probes_gpu(tmp_path, monkeypatch):
@@ -109,7 +109,7 @@ def test_windows_report_never_probes_gpu(tmp_path, monkeypatch):
     monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
     monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
     result = server.problem_report({})
-    assert "auto (GPU detected during setup)" in result["details"]
+    assert "whisper.cpp: CPU" in result["details"]
 
 
 def test_library_poster_and_thumbnail(tmp_path, monkeypatch):
@@ -615,3 +615,25 @@ def test_setup_cannot_change_library_during_import(tmp_path, monkeypatch):
     assert names == ["clip.mp4"] and not starts
     assert setup()[0] == 200 and len(starts) == 1
     assert server.IMPORTS_ACTIVE == 0 and not server.IMPORT_TARGETS
+
+
+def test_setup_gpu_probe_does_not_start_an_install(monkeypatch):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes, "detect", lambda: {"backend": "cuda", "message": "driver detected"})
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("probe started setup"))
+    handler = server.Handler.__new__(server.Handler)
+    handler.path, handler.headers = "/api/setup-gpu", {}
+    handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+    handler.do_GET()
+    assert handler.response == (200, {"backend": "cuda", "message": "driver detected"})
+
+
+def test_setup_rejects_unknown_acceleration_before_saving(monkeypatch):
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("invalid choice started setup"))
+    handler = server.Handler.__new__(server.Handler)
+    body = json.dumps({"accel": "auto-download-everything"}).encode()
+    handler.path, handler.headers = "/api/setup", {"X-Kit": "1", "Content-Length": str(len(body))}
+    handler.rfile = io.BytesIO(body)
+    handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+    handler.do_POST()
+    assert handler.response[0] == 400 and "acceleration" in handler.response[1]["error"]

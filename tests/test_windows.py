@@ -109,19 +109,22 @@ def test_backend_override_and_missing_vulkan_build(monkeypatch):
     monkeypatch.setattr(runtimes, "vulkan", lambda: True)
     monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
     assert runtimes.backend_for("whisper") == "cpu"          # no pinned Vulkan whisper.cpp yet
-    assert runtimes.backend_for("llama") == "vulkan"
+    assert runtimes.backend_for("llama") == "cpu"
     monkeypatch.setenv("PIANPIAN_ACCEL", "cpu")
     assert runtimes.backend_for("llama") == "cpu"
     monkeypatch.setenv("PIANPIAN_ACCEL", "vulkan")           # asked-for Vulkan: whisper still has no such build
     assert runtimes.backend_for("whisper") == "cpu"
 
 
-def test_cuda_is_preferred_when_nvidia_is_present(monkeypatch):
+def test_detecting_nvidia_does_not_enable_cuda_implicitly(monkeypatch):
     monkeypatch.setattr(runtimes, "nvidia", lambda: True)
     monkeypatch.setattr(runtimes, "vulkan", lambda: True)
     monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
+    assert runtimes.detect()["backend"] == "cuda"
+    assert runtimes.backend_for("whisper") == "cpu"
+    assert runtimes.backend_for("llama") == "cpu"
+    monkeypatch.setenv("PIANPIAN_ACCEL", "cuda")
     assert runtimes.backend_for("whisper") == "cuda"
-    assert runtimes.backend_for("llama") == "cuda"
 
 
 @pytest.mark.parametrize("probe", [True, False])
@@ -168,4 +171,37 @@ def test_windows_plan_never_probes_gpu(monkeypatch, tmp_path):
     monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: (_ for _ in ()).throw(AssertionError("GPU probe ran")))
     e.STATE.update(engine=True, current=True)
     plan = e.SETUP.plan()
-    assert plan["runtime"]["backend"] == "auto" and plan["needed"]
+    assert plan["runtime"]["backend"] == "cpu" and not plan["needed"]
+
+
+@pytest.mark.parametrize("version, returncode, supported", [("551.61", 0, True), ("591.74", 0, True),
+                                                          ("550.10", 0, False), ("", 0, False),
+                                                          ("N/A", 0, False), ("591.74", 1, False)])
+def test_nvidia_probe_checks_the_driver_not_the_toolkit(monkeypatch, tmp_path, version, returncode, supported):
+    import subprocess
+    exe = tmp_path / "nvidia-smi.exe"
+    exe.touch()
+    monkeypatch.setattr(runtimes.shutil, "which", lambda name: str(exe))
+    def query(cmd, **kwargs):
+        assert cmd[1:] == ["--query-gpu=driver_version", "--format=csv,noheader"]
+        return subprocess.CompletedProcess(cmd, returncode, stdout=version)
+    monkeypatch.setattr(runtimes, "probe_run", query)
+    assert runtimes.nvidia.__wrapped__() is supported
+
+
+def test_runtime_size_counts_only_missing_selected_archives(monkeypatch, tmp_path):
+    fake_downloads(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIANPIAN_ACCEL", "cpu")
+    assert runtimes.status()["size"] == 33_101_461
+    runtimes.ensure("whisper")
+    assert runtimes.status()["size"] == 24_172_821
+    assert runtimes.status(which=["whisper"])["ready"]
+    assert runtimes.status(which=["whisper"])["size"] == 0
+    assert runtimes.status(which=[])["ready"] and runtimes.status(which=[])["size"] == 0
+
+
+def test_uppercase_acceleration_has_the_same_plan_and_runtime(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
+    monkeypatch.setenv("PIANPIAN_ACCEL", "CUDA")
+    assert runtimes.status()["backend"] == runtimes.backend_for("whisper") == "cuda"
+    assert runtimes.status()["size"] == 1_348_786_869

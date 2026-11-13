@@ -359,52 +359,81 @@ def test_moving_back_never_offers_the_engine_in_use(monkeypatch, tmp_path):
     assert all(not o["path"].startswith(str(old / "engine")) for o in e.SETUP.plan()["old"])
 
 
-def test_the_setup_keeps_the_gpu_choice_for_the_jobs(monkeypatch, tmp_path):
-    # [simulated] the GPU probes (up to 35 s) run once at setup; every job gets the answer as PIANPIAN_ACCEL
+def windows_setup(monkeypatch, tmp_path):
     e = fresh(monkeypatch, tmp_path)
     monkeypatch.setattr(e, "WINDOWS", True)
     e.STATE.update(engine=True, current=True)
-    monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e.runtimes, "status", lambda **kwargs: {"ready": True, "size": 0, "label": "runtime"})
+    monkeypatch.setattr(e.models, "status", lambda: [
+        {"id": "speech", "task": "transcribe", "about": "speech", "size": 1, "ready": False},
+        {"id": "translation", "task": "translate", "about": "translation", "size": 1, "ready": False}])
     monkeypatch.setattr(e, "mirror_env", lambda: {})
     monkeypatch.setattr(e, "check", lambda: {"engine": True, "current": True})
-    monkeypatch.setattr(e.Setup, "_exec", lambda self, *args: None)
+    calls = []
+    monkeypatch.setattr(e.Setup, "_exec", lambda self, cmd, env, sid: calls.append((cmd, env, sid)))
+    return e, calls
+
+
+def test_fresh_setup_defaults_to_cpu_without_a_gpu_probe(monkeypatch, tmp_path):
+    e, calls = windows_setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(e.runtimes, "nvidia", lambda: pytest.fail("CPU setup probed NVIDIA"))
+    monkeypatch.setattr(e.runtimes, "vulkan", lambda: pytest.fail("CPU setup probed Vulkan"))
+    assert e.pipeline_env()["PIANPIAN_ACCEL"] == "cpu"
+    run_setup(e, None, None, ["speech"])
+    assert e.SETUP.state == "done" and e.config()["accel"] == "cpu"
+    runtime = [cmd for cmd, env, sid in calls if sid == "runtime"]
+    assert len(runtime) == 1 and runtime[0][-2:] == ["ensure", "whisper"]
+    assert all(env["PIANPIAN_ACCEL"] == "cpu" for cmd, env, sid in calls)
+
+
+def test_setup_without_models_downloads_no_runtime(monkeypatch, tmp_path):
+    e, calls = windows_setup(monkeypatch, tmp_path)
+    run_setup(e, None, None, [])
+    assert e.SETUP.state == "done" and not calls
+    assert not e.SETUP.plan()["needed"]
+
+
+def test_the_setup_keeps_the_gpu_choice_for_the_jobs(monkeypatch, tmp_path):
+    e, calls = windows_setup(monkeypatch, tmp_path)
     probes = []
-    monkeypatch.setattr(e.runtimes, "backend_for", lambda tool: probes.append(tool) or "cuda")
-    assert "PIANPIAN_ACCEL" not in e.pipeline_env()
-    run_setup(e, None, None, [])
-    assert e.config()["accel"] == "cuda" and e.pipeline_env()["PIANPIAN_ACCEL"] == "cuda" and len(probes) == 1
-    assert os.environ["PIANPIAN_ACCEL"] == "cuda"            # the server process too: its /api/status needs no probe
-    monkeypatch.setitem(e.PATH_OVERRIDES, "PIANPIAN_ACCEL", "cpu")   # yours wins, and is not probed or saved
-    run_setup(e, None, None, [])
-    assert e.pipeline_env()["PIANPIAN_ACCEL"] == "cpu" and len(probes) == 1 and e.config()["accel"] == "cuda"
+    monkeypatch.setattr(e.runtimes, "nvidia", lambda: probes.append("nvidia") or True)
+    run_setup(e, None, None, ["translation"], accel="cuda")
+    assert e.SETUP.state == "done" and e.config()["accel"] == "cuda"
+    assert e.pipeline_env()["PIANPIAN_ACCEL"] == os.environ["PIANPIAN_ACCEL"] == "cuda"
+    run_setup(e, None, None, ["translation"])
+    assert e.config()["accel"] == "cuda"  # a later setup preserves the deliberate GPU choice
+    monkeypatch.setitem(e.PATH_OVERRIDES, "PIANPIAN_ACCEL", "cpu")
+    run_setup(e, None, None, ["translation"])
+    assert e.pipeline_env()["PIANPIAN_ACCEL"] == "cpu" and len(probes) == 2 and e.config()["accel"] == "cuda"
     monkeypatch.setattr(e, "WINDOWS", False)
     assert "PIANPIAN_ACCEL" not in e.pipeline_env()
+
+
+def test_unavailable_gpu_uses_cpu_before_any_runtime_download(monkeypatch, tmp_path):
+    e, calls = windows_setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(e.runtimes, "nvidia", lambda: False)
+    run_setup(e, None, None, ["speech"], accel="cuda")
+    assert e.SETUP.state == "done" and e.config()["accel"] == "cpu"
+    assert all(env["PIANPIAN_ACCEL"] == "cpu" for cmd, env, sid in calls)
+    assert any("could not be confirmed" in line for line in e.SETUP.log)
 
 
 def test_slow_gpu_probe_does_not_block_setup_admission(monkeypatch, tmp_path):
     import threading
     import time
 
-    e = fresh(monkeypatch, tmp_path)
-    monkeypatch.setattr(e, "WINDOWS", True)
-    e.STATE.update(engine=True, current=True)
-    monkeypatch.setattr(e.models, "status", lambda: [])
-    monkeypatch.setattr(e, "mirror_env", lambda: {})
-    monkeypatch.setattr(e, "check", lambda: {"engine": True, "current": True})
-    monkeypatch.setattr(e.Setup, "_exec", lambda self, *args: None)
+    e, calls = windows_setup(monkeypatch, tmp_path)
     started, release = threading.Event(), threading.Event()
 
-    def probe(tool):
+    def probe():
         started.set()
         release.wait(timeout=5)
-        return "cuda"
+        return True
 
-    monkeypatch.setattr(e.runtimes, "backend_for", probe)
+    monkeypatch.setattr(e.runtimes, "nvidia", probe)
     before = time.monotonic()
-    e.SETUP.start(None, None, [])
+    e.SETUP.start(None, None, ["speech"], accel="cuda")
     assert time.monotonic() - before < 1 and e.SETUP.state == "running"
-    assert started.wait(timeout=1)                          # the probe is already running in the setup thread
+    assert started.wait(timeout=1)
     release.set()
     e.SETUP.thread.join(timeout=5)
     assert not e.SETUP.thread.is_alive() and e.SETUP.state == "done"
@@ -426,3 +455,18 @@ def test_the_packaged_app_never_writes_bytecode_into_itself(monkeypatch, tmp_pat
     monkeypatch.delenv("PYTHONDONTWRITEBYTECODE")
     importlib.reload(engine)                                  # a checkout, not the app: bytecode is fine
     assert sys.dont_write_bytecode is False and "PYTHONDONTWRITEBYTECODE" not in os.environ
+
+
+@pytest.mark.parametrize("selected, expected", [(["old-speech"], ["new-speech"]),
+                                               (["translation"], ["translation"]), ([], []), (None, None)])
+def test_model_upgrade_preserves_which_tasks_were_selected(monkeypatch, tmp_path, selected, expected):
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", False)
+    catalog = [{"id": "new-speech", "replaces": "old-speech", "task": "transcribe", "ready": False},
+               {"id": "translation", "task": "translate", "ready": True}]
+    monkeypatch.setattr(e.models, "status", lambda: catalog)
+    e.save_config(models=selected)
+    e.STATE.update(engine=True, current=True)
+    plan = e.SETUP.plan()
+    assert plan["config"]["models"] == expected
+    assert plan["needed"] == (selected is None or "old-speech" in selected)

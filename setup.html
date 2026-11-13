@@ -91,27 +91,57 @@ function renderPlan() {
   const chosen = plan.config.models;
   $('items').innerHTML = `
     <label class="item"><input type="checkbox" checked disabled><span><b>Engine</b><small>Python and the tools that download videos and make pinyin${ok ? '' : e.engine ? ' (an update)' : ''}</small></span>
-      <span class="sz ${ok ? 'ready' : ''}">${ok ? 'ready' : '≈ ' + gb(plan.engineMB * 1e6)}</span></label>` +
+      <span class="sz ${ok ? 'ready' : ''}">${ok ? 'ready' : 'download varies'}</span></label>
+    ${ok ? '' : `<p class="muted">Python, packages and dictionary: additional download; size depends on what is installed. About ${gb(plan.engineMB * 1e6)} on disk (estimate).</p>`}` +
     (plan.runtime ? `
-    <label class="item"><input type="checkbox" checked disabled><span><b>GPU runtime</b><small>${esc(plan.runtime.label)}${plan.runtime.backend === 'cpu' ? ' (no GPU detected; the CPU works too)' : ''}</small></span>
-      <span class="sz ${plan.runtime.ready ? 'ready' : ''}">${plan.runtime.ready ? 'ready' : (plan.runtime.backend === 'auto' ? 'up to ' : '') + gb(plan.runtime.size)}</span></label>` : '') +
+    <div class="item"><span></span><span><b>Processing tools</b>
+      <select class="field" name="accel" aria-label="Acceleration" ${plan.accelLocked ? 'disabled' : ''}>
+        <option value="cpu">CPU · smallest download</option><option value="cuda">NVIDIA CUDA · optional, larger download</option>
+        <option value="vulkan">Vulkan · translation GPU, speech CPU</option>
+      </select>
+      <small id="runtime-label"></small>
+      <div class="row"><button class="btn" type="button" id="detect-gpu" ${plan.accelLocked ? 'disabled' : ''}>Detect GPU</button></div>
+      <small id="gpu-fallback"></small>
+      <small id="gpu-note">CPU needs no CUDA. GPU acceleration uses app-managed libraries; no CUDA Toolkit installation needed.${plan.accelLocked ? ' Choice fixed by PIANPIAN_ACCEL.' : ''}</small>
+    </span><span class="sz" id="runtime-size"></span></div>` : '') +
     plan.models.map(m => `
-    <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${m.ready || !chosen || chosen.includes(m.id) ? 'checked' : ''} ${m.ready ? 'disabled' : ''}>
+    <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${!chosen || chosen.includes(m.id) ? 'checked' : ''}>
       <span><b>${m.task === 'transcribe' ? 'Speech recognition' : 'English translation'}</b><small>${esc(m.about)}${m.task === 'transcribe' ? '. Needed when a video has no Chinese subtitles' : '. You can also translate by hand'}</small></span>
       <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already installed' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('') +
     (plan.old && plan.old.length ? `
-    <label class="item"><input type="checkbox" name="cleanup" checked><span><b>Delete old files</b><small>${plan.old.map(o => esc(o.name)).join(', ')}: no longer used by this version or data folder</small></span>
+    <label class="item"><input type="checkbox" name="cleanup" checked><span><b>Delete old files</b><small>${plan.old.map(o => esc(o.name)).join(', ')}: replaced models are removed only after their replacements are ready</small></span>
       <span class="sz">frees ${gb(plan.old.reduce((t, o) => t + o.bytes, 0))}</span></label>` : '');
+  if (plan.runtime) {
+    f.accel.value = plan.runtime.backend;
+    $('detect-gpu').onclick = async () => {
+      const button = $('detect-gpu'); button.disabled = true; $('gpu-note').textContent = 'Checking the GPU driver…';
+      try {
+        const detected = await api('/api/setup-gpu');
+        f.accel.value = detected.backend; $('gpu-note').textContent = detected.message; sum();
+      } catch (e) { $('gpu-note').textContent = 'Could not check the GPU: ' + e.message; }
+      finally { button.disabled = false; }
+    };
+  }
   sum();
 }
 function sum() {
-  const e = plan.engine, picked = [...$('plan').querySelectorAll('input[name=m]:checked:not(:disabled)')].map(i => i.value);
-  const bytes = (e.engine && e.current ? 0 : plan.engineMB * 1e6) + (plan.runtime && !plan.runtime.ready ? plan.runtime.size : 0) +
-                plan.models.filter(m => picked.includes(m.id)).reduce((t, m) => t + (m.size || 0), 0);
-  const upd = e.engine && !e.current;                 // an update fetches only the packages that changed
-  const auto = plan.runtime && !plan.runtime.ready && plan.runtime.backend === 'auto';
-  $('sum').textContent = `${upd || auto ? 'up to ' : ''}${gb(bytes)} to download · ${gb(plan.free)} free`;
-  $('go').textContent = !bytes ? 'Continue' : upd ? 'Update' : `Install (${auto ? 'up to ' : ''}${gb(bytes)})`;
+  const e = plan.engine, f = $('plan');
+  const picked = [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value);
+  const selected = plan.models.filter(m => picked.includes(m.id));
+  let runtimeBytes = 0;
+  if (plan.runtime) {
+    const runtime = plan.runtimeOptions[f.accel.value], tasks = selected.map(m => m.task);
+    const tools = Object.entries(runtime.tools).filter(([tool]) => tasks.includes(tool === 'whisper' ? 'transcribe' : 'translate'));
+    runtimeBytes = tools.reduce((t, [, r]) => t + r.size, 0);
+    const fallbackBytes = tools.filter(([, r]) => r.backend !== 'cpu').reduce((t, [tool]) => t + plan.runtimeOptions.cpu.tools[tool].size, 0);
+    $('gpu-fallback').textContent = fallbackBytes ? `If the GPU cannot start, CPU fallback may download up to ${gb(fallbackBytes)} extra.` : '';
+    $('runtime-label').textContent = tools.map(([tool, r]) => `${tool}.cpp: ${r.backend.toUpperCase()}`).join(' · ') || 'No model runtime selected';
+    $('runtime-size').textContent = runtimeBytes ? gb(runtimeBytes) : tools.length ? 'ready' : 'not needed';
+  }
+  const bytes = runtimeBytes + selected.filter(m => !m.ready).reduce((t, m) => t + (m.size || 0), 0);
+  const engineNeeded = !(e.engine && e.current), unknownModel = selected.some(m => !m.ready && !m.size);
+  $('sum').textContent = `${gb(bytes)} models & processing tools${unknownModel ? ' + models of unknown size' : ''}${engineNeeded ? ' + Python/packages/dictionary (size varies)' : ''}. ${gb(plan.free)} free on current data drive; unpacking needs extra space.`;
+  $('go').textContent = !bytes && !engineNeeded ? 'Continue' : e.engine && !e.current ? 'Update' : 'Install';
   $('go').disabled = bytes > plan.free;
 }
 $('plan').addEventListener('change', sum);
@@ -119,6 +149,7 @@ $('plan').onsubmit = async ev => {
   ev.preventDefault();
   const f = $('plan');
   lastBody = { library: f.library.value.trim(), data: f.data.value.trim(),
+               accel: plan.runtime ? f.accel.value : null,
                models: [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value), cleanup: !!(f.cleanup && f.cleanup.checked) };
   start();
 };

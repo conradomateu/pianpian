@@ -9,6 +9,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent
 
@@ -26,6 +27,21 @@ def ffmpeg_on_path() -> None:
     os.environ["PATH"] = f"{link.parent}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
+@contextmanager
+def whisper_model(model_dir: str, work_dir: Path):
+    """mlx-whisper 0.4.3 expects weights.safetensors; newer model repos use model.safetensors."""
+    source = Path(model_dir).resolve()
+    if not (source / "model.safetensors").is_file() or (source / "weights.safetensors").exists():
+        yield model_dir
+        return
+    # A temporary view keeps shared/download-verified caches untouched and does not copy the weights.
+    with TemporaryDirectory(prefix=".whisper-model-", dir=work_dir) as folder:
+        view = Path(folder)
+        (view / "config.json").symlink_to(source / "config.json")
+        (view / "weights.safetensors").symlink_to(source / "model.safetensors")
+        yield folder
+
+
 def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None:
     """Whisper (MLX) on a 16 kHz mono wav: writes srt (one cue per segment) and words_json (segments with word times).
     mlx_whisper writes whisper.* next to srt first, so srt and words_json must be in the same folder."""
@@ -33,10 +49,11 @@ def transcribe(audio: Path, model_dir: str, srt: Path, words_json: Path) -> None
     out = srt.parent
     # a Simplified-Chinese prompt nudges Whisper away from Traditional output; no conditioning on the
     # previous text avoids repetition loops on long audio; word timestamps let lines be cut exactly
-    subprocess.run([str(Path(sys.executable).parent / "mlx_whisper"), str(audio), "--model", model_dir, "--language", "zh",
-                    "--initial-prompt", "以下是普通话的句子，使用简体中文。",
-                    "--condition-on-previous-text", "False", "--word-timestamps", "True",
-                    "--output-format", "all", "--output-name", "whisper", "--output-dir", str(out)], check=True)
+    with whisper_model(model_dir, out) as compatible_model:
+        subprocess.run([str(Path(sys.executable).parent / "mlx_whisper"), str(audio), "--model", compatible_model, "--language", "zh",
+                        "--initial-prompt", "以下是普通话的句子，使用简体中文。",
+                        "--condition-on-previous-text", "False", "--word-timestamps", "True",
+                        "--output-format", "all", "--output-name", "whisper", "--output-dir", str(out)], check=True)
     (out / "whisper.srt").replace(srt)
     (out / "whisper.json").replace(words_json)
     for ext in ("txt", "vtt", "tsv"):

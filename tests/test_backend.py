@@ -99,6 +99,24 @@ def test_mac_transcribe_writes_what_srt_tool_reads(monkeypatch, tmp_path):
     assert "以下是普通话的句子，使用简体中文。" in cmd and cmd[cmd.index("--model") + 1] == "model-dir"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the Mac compatibility view uses POSIX symlinks")
+def test_mac_quantized_model_view_reuses_weights_and_cleans_up_on_failure(tmp_path):
+    model = tmp_path / "cached-model"
+    model.mkdir()
+    (model / "config.json").write_text('{"quantization":{"bits":8,"group_size":64}}')
+    weight = model / "model.safetensors"
+    weight.write_bytes(b"quantized weights")
+    with pytest.raises(RuntimeError):
+        with backend_mac.whisper_model(str(model), tmp_path) as folder:
+            view = Path(folder)
+            assert (view / "weights.safetensors").is_symlink()
+            assert (view / "weights.safetensors").samefile(weight)
+            assert (view / "config.json").samefile(model / "config.json")
+            raise RuntimeError("transcription failed")
+    assert not view.exists()
+    assert sorted(p.name for p in model.iterdir()) == ["config.json", "model.safetensors"]
+
+
 def test_translate_retries_once_when_chinese_survives(capsys):
     asked = []
 
@@ -529,10 +547,11 @@ def test_catalog_and_lock_follow_the_platform(monkeypatch, tmp_path):
         assert models.default(task) == next(m["id"] for m in models.CATALOG if m["task"] == task)
 
 
-def test_mac_installs_keep_their_models():
+def test_quantized_speech_defaults_keep_existing_translation_models():
     # .complete holds this fingerprint: it changes only when a model update should make every Mac download again
     lock = json.loads(models.LOCKFILE.read_text(encoding="utf-8"))["platforms"]["darwin"]
-    assert models.lock_id(lock["mlx-community/whisper-large-v3-turbo"]) == "950cefa3ce3484fb"
+    assert "mlx-community/whisper-large-v3-turbo" not in lock
+    assert "mlx-community/whisper-large-v3-turbo-8bit" in lock
     assert models.lock_id(lock["mlx-community/Hy-MT2-1.8B-4bit"]) == "b12bda06891875f9"
 
 
@@ -562,10 +581,53 @@ def test_model_cache_requires_the_current_complete_files_and_revision(monkeypatc
     assert models.hf_cached("a/model", entry) == snapshots / "new-revision"
 
 
+def test_whisper_upgrade_offers_old_weights_only_after_q8_is_complete(monkeypatch, tmp_path):
+    repo = "ggerganov/whisper.cpp"
+    entry = {"huggingface": "q8", "files": [{"name": backend_win.WHISPER_MODEL, "size": 2, "sha256": "aa"}]}
+    monkeypatch.setattr(models, "lock", lambda: {repo: entry})
+    monkeypatch.setattr(models, "CATALOG", [{"id": repo}])
+    monkeypatch.setattr(models, "LEGACY", tmp_path / "legacy")
+    monkeypatch.setenv("PIANPIAN_MODELS", str(tmp_path / "models"))
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    folder = models.cache() / models.folder_name(repo)
+    folder.mkdir(parents=True)
+    old = folder / "ggml-large-v3-turbo.bin"
+    old.write_bytes(b"old fp16")
+    (folder / ".complete").write_text("old-pin")
+    assert models.unused() == []                        # interrupted upgrade keeps its previous model
+    assert [Path(m["path"]) for m in models.unused(include_pending=True)] == [old]
+    assert models.remove_unused() == 0 and old.exists()
+    weight = folder / backend_win.WHISPER_MODEL
+    weight.write_bytes(b"q8")
+    assert models.unused() == []                        # download must also pass verification
+    (folder / ".complete").write_text(models.lock_id(entry))
+    unrelated = folder / "my-notes.txt"
+    unrelated.write_text("keep")
+    assert [Path(m["path"]) for m in models.unused()] == [old]
+    assert models.remove_unused() == len(b"old fp16")
+    assert not old.exists() and weight.exists() and unrelated.exists()
+    assert models.local_path(repo) == folder
+
+
+def test_renamed_model_cleanup_waits_for_its_replacement(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANPIAN_MODELS", str(tmp_path / "models"))
+    monkeypatch.setattr(models, "CATALOG", [{"id": "a/q8", "replaces": "a/fp16"}])
+    old = models.cache() / "a__fp16"
+    old.mkdir(parents=True)
+    (old / "weights.safetensors").write_bytes(b"fp16")
+    monkeypatch.setattr(models, "local_path", lambda repo: None)
+    assert models.unused() == []
+    assert [Path(m["path"]) for m in models.unused(include_pending=True)] == [old]
+    assert models.remove_unused() == 0 and old.exists()
+    monkeypatch.setattr(models, "local_path", lambda repo: models.cache() / "a__q8")
+    assert [Path(m["path"]) for m in models.unused()] == [old]
+    assert models.remove_unused() == 4 and not old.exists()
+
+
 def test_make_lock_pins_every_platform(monkeypatch, tmp_path):
     lockfile = tmp_path / "models.lock.json"
     lockfile.write_text(json.dumps({"platforms": {"win32": {"b/win": {"files": []}}}}))
-    names = {"ggerganov/whisper.cpp": "ggml-large-v3-turbo.bin", "OllmOne/whisper.cpp": "ggml-large-v3-turbo.bin",
+    names = {"ggerganov/whisper.cpp": "ggml-large-v3-turbo-q8_0.bin", "OllmOne/whisper.cpp": "ggml-large-v3-turbo-q8_0.bin",
              "tencent/Hy-MT2-1.8B-GGUF": "Hy-MT2-1.8B-Q4_K_M.gguf", "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF": "Hy-MT2-1.8B-Q4_K_M.gguf"}
 
     def fake(url, timeout):
@@ -600,7 +662,28 @@ def test_windows_models_try_modelscope_before_hugging_face():
     windows = json.loads(models.LOCKFILE.read_text(encoding="utf-8"))["platforms"]["win32"]
     assert windows["ggerganov/whisper.cpp"]["modelscope_repo"] == "OllmOne/whisper.cpp"
     assert windows["tencent/Hy-MT2-1.8B-GGUF"]["modelscope_repo"] == "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF"
-    assert all(f.get("modelscope") for entry in windows.values() for f in entry["files"])
+    assert all("modelscope" in f for entry in windows.values() for f in entry["files"])
+    speech = windows["ggerganov/whisper.cpp"]
+    assert speech["files"][0]["name"] == backend_win.WHISPER_MODEL
+    assert speech["files"][0]["modelscope"] is False
+    assert all("modelscope.cn" not in url for url in models.sources("ggerganov/whisper.cpp", speech, speech["files"][0]))
+
+
+def test_lock_falls_back_when_the_mirror_lacks_the_selected_quantization(monkeypatch):
+    row = {"id": "ggerganov/whisper.cpp", "platform": "win32"}
+    pinned = {"name": backend_win.WHISPER_MODEL, "size": 2, "sha256": "aa"}
+    monkeypatch.setattr(models, "ROWS", [row])
+    monkeypatch.setattr(models, "hf_files", lambda m: ("hf-rev", [pinned]))
+    monkeypatch.setattr(models, "ms_files", lambda m: [])
+    entry = models.make_lock()["platforms"]["win32"][row["id"]]
+    assert entry == {"huggingface": "hf-rev", "files": [{**pinned, "modelscope": False}]}
+
+
+def test_setup_model_sizes_use_the_pinned_files(monkeypatch):
+    monkeypatch.setattr(models, "CATALOG", [{"id": "a/model", "size": 100}])
+    monkeypatch.setattr(models, "lock", lambda: {"a/model": {"files": [{"size": 2}, {"size": 3}]}})
+    monkeypatch.setattr(models, "local_path", lambda repo: None)
+    assert models.status()[0]["size"] == 5
 
 
 def test_fetch_starts_over_when_the_part_file_is_too_long(monkeypatch, tmp_path):

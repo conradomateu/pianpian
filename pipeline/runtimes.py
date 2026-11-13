@@ -10,8 +10,8 @@ is checked against the SHA-256 written here; the running app never trusts the ne
 itself goes through models.download(). Backends:
   cuda    NVIDIA GPU (the CUDA 12.4 builds; tested on 27 Oct 2026 with an RTX 4060 Laptop, driver 591.74)
   vulkan  any Vulkan GPU (AMD, Intel, or NVIDIA when CUDA is not chosen)
-  cpu     no usable GPU, or PIANPIAN_ACCEL=cpu (also: vulkan / cuda to force one)
-The app's setup probes once and passes its choice to every job as PIANPIAN_ACCEL (engine.pipeline_env()),
+  cpu     default: the smallest download; GPU acceleration is an explicit setup choice
+The app passes its saved choice to every job as PIANPIAN_ACCEL (engine.pipeline_env()),
 so a job neither waits for the probes nor picks another build than the setup downloaded.
 whisper.cpp has no Vulkan Windows asset in its official release yet, so a Vulkan-only machine uses
 the CPU build for speech and the Vulkan build for translation. That gap is deliberate and visible in
@@ -79,9 +79,15 @@ def cache() -> Path:
 def nvidia() -> bool:
     exe = shutil.which("nvidia-smi") or str(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe")
     try:
-        return Path(exe).is_file() and probe_run([exe, "-L"], capture_output=True, timeout=15,
-                                                      creationflags=NO_WINDOW).returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+        if not Path(exe).is_file():
+            return False
+        out = probe_run([exe, "--query-gpu=driver_version", "--format=csv,noheader"],
+                        capture_output=True, text=True, timeout=15, creationflags=NO_WINDOW)
+        # Conservative CUDA 12.4 GA driver floor, not a claim that inference will work on every GPU.
+        # https://docs.nvidia.com/cuda/archive/12.4.0/cuda-toolkit-release-notes/index.html
+        versions = [tuple(int(n) for n in line.strip().split(".")) for line in out.stdout.splitlines() if line.strip()]
+        return out.returncode == 0 and bool(versions) and all(v >= (551, 61) for v in versions)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         return False
 
 
@@ -103,16 +109,19 @@ def vulkan() -> bool:
         return False
 
 
+def detect() -> dict:
+    """Read-only suggestion. No libraries are installed and a GPU still needs a real inference test."""
+    if nvidia():
+        return {"backend": "cuda", "message": "NVIDIA driver 551.61 or newer detected. CUDA is optional; inference is not tested yet."}
+    if vulkan():
+        return {"backend": "vulkan", "message": "Vulkan device detected. Translation can use it; speech uses the CPU. Inference is not tested yet."}
+    return {"backend": "cpu", "message": "No compatible GPU was confirmed. CPU works without CUDA. Vulkan detection needs vulkaninfo."}
+
+
 def backend_for(tool: str) -> str:
-    """The build to use for one tool: the requested backend, else CUDA on NVIDIA, then Vulkan, then CPU."""
-    want = os.environ.get("PIANPIAN_ACCEL", "").lower()
-    if want in ("cpu", "vulkan", "cuda"):
-        return want if (tool, want) in ASSETS else "cpu"
-    if nvidia() and (tool, "cuda") in ASSETS:
-        return "cuda"
-    if vulkan() and (tool, "vulkan") in ASSETS:
-        return "vulkan"
-    return "cpu"
+    """Use the explicit choice, otherwise CPU; discovering a GPU must never trigger a large download."""
+    want = os.environ.get("PIANPIAN_ACCEL", "cpu").lower()
+    return want if (tool, want) in ASSETS else "cpu"
 
 
 def assets(tool: str, backend: str) -> list[dict]:
@@ -148,28 +157,22 @@ def exe(tool: str, backend: str | None = None) -> Path | None:
     return _find(d, tool)
 
 
-def status(probe: bool = True) -> dict:
-    """What this machine would run; probe=False uses saved/installed backends without starting hardware tools."""
+def status(probe: bool = False, backend: str | None = None, which=None) -> dict:
+    """Pinned archive bytes still missing for the chosen tools. Retains probe for older callers; no probes run."""
+    want = (backend or os.environ.get("PIANPIAN_ACCEL") or "cpu").lower()
+    if want not in ("cpu", "cuda", "vulkan"):
+        want = "cpu"
+    selected = ("whisper", "llama") if which is None else which
     tools = {}
-    total = 0
-    ready = True
-    for tool in ("whisper", "llama"):
-        if probe:
-            b = backend_for(tool)
-        else:
-            want = os.environ.get("PIANPIAN_ACCEL", "").lower()
-            b = want if (tool, want) in ASSETS else next(
-                (candidate for candidate in ("cuda", "vulkan", "cpu") if (tool, candidate) in ASSETS and exe(tool, candidate)), "auto")
-        ok = b != "auto" and exe(tool, b) is not None
-        tools[tool] = {"backend": b, "ready": ok, "exe": str(exe(tool, b)) if ok else None}
-        total += sum(a["size"] for a in assets(tool, b)) if b != "auto" else max(
-            sum(a["size"] for a in choices) for backend, choices in ASSETS.items() if backend[0] == tool)
-        ready = ready and ok
-    labels = {"cuda": "CUDA (NVIDIA GPU)", "vulkan": "Vulkan GPU", "cpu": "CPU", "auto": "auto (GPU detected during setup)"}
-    wb, lb = tools["whisper"]["backend"], tools["llama"]["backend"]
-    label = (f"whisper.cpp + llama.cpp: {labels.get(wb, wb)}" if wb == lb
-             else f"whisper.cpp: {labels.get(wb, wb)}; llama.cpp: {labels.get(lb, lb)}")
-    return {"backend": lb, "label": label, "size": total, "ready": ready, "tools": tools}
+    for tool in selected:
+        b = want if (tool, want) in ASSETS else "cpu"
+        installed = exe(tool, b)
+        tools[tool] = {"backend": b, "ready": bool(installed), "exe": str(installed) if installed else None,
+                       "size": 0 if installed else sum(a["size"] for a in assets(tool, b))}
+    labels = {"cuda": "CUDA (NVIDIA GPU)", "vulkan": "Vulkan GPU", "cpu": "CPU"}
+    label = "; ".join(f"{tool}.cpp: {labels[t['backend']]}" for tool, t in tools.items()) or "No model runtime selected"
+    return {"backend": want, "label": label, "size": sum(t["size"] for t in tools.values()),
+            "ready": all(t["ready"] for t in tools.values()), "tools": tools}
 
 
 def extract(archive: Path, dest: Path) -> None:
@@ -196,7 +199,7 @@ def _install(tool: str, backend: str) -> str:
         try:
             models.download(urls, work / a["name"], a["size"], a["sha256"], tool)
         except OSError as e:
-            raise OSError(f"could not download the GPU runtime ({a['name']}): {e}; it resumes, try again") from e
+            raise OSError(f"could not download the runtime ({a['name']}): {e}; it resumes, try again") from e
     for a in assets(tool, backend):
         extract(work / a["name"], new)
         (work / a["name"]).unlink()

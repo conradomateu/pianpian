@@ -18,11 +18,11 @@ the server to make subtitles.
 - **The engine** runs the pipeline. It is the `runtime` dependency group in `pyproject.toml`: pypinyin,
   jieba, zhconv, yt-dlp, imageio-ffmpeg (a static ffmpeg, so no system ffmpeg is needed), and on
   Windows RapidOCR. On macOS it adds mlx-whisper and mlx-lm; torch is left out on purpose (mlx-whisper
-  lists it for a conversion tool the app never uses), which keeps that engine at about 700 MB. The
-  Windows engine is about 460 MB (measured 24 Oct 2026) and installs neither MLX nor llama-cpp-python.
+  lists it for a conversion tool the app never uses), which keeps that engine at about 650 MB on disk. This is not its download size. The
+  Windows engine is about 460 MB on disk (measured 24 Oct 2026) and installs neither MLX nor llama-cpp-python.
 - **The Windows GPU runtime** is not a Python package: `pipeline/runtimes.py` downloads pinned
-  whisper.cpp and llama.cpp Windows builds (CUDA for NVIDIA — the CUDA 12.4 builds were reported tested
-  on 27 Oct 2026 with an RTX 4060 Laptop, driver 591.74 — Vulkan for llama.cpp on other GPUs, CPU fallback) into `<data>/runtime` (`$PIANPIAN_RUNTIME`)
+  whisper.cpp and llama.cpp Windows builds (CPU by default; optional CUDA for NVIDIA or Vulkan for
+  llama.cpp, CPU fallback) into `<data>/runtime` (`$PIANPIAN_RUNTIME`)
   and checks every archive against its SHA-256. whisper.cpp has no Vulkan asset in its official release
   yet, so Vulkan-only machines run speech on the CPU. A GPU build that won't start is retried once with
   the CPU build (`backend_win.py`). Downloads come from GitHub; `PIANPIAN_GITHUB_MIRROR` is an opt-in
@@ -31,7 +31,7 @@ the server to make subtitles.
   Each build's `.complete` records the tool, backend, release and archive SHA-256s. A changed pin makes
   the installed build stale; setup downloads and unpacks a replacement before replacing the whole
   build folder, so old DLLs do not survive an upgrade. A failed download leaves the old folder intact.
-  Setup saves its GPU choice as `accel` in the config and passes it to every Windows job through
+  Setup installs only the runtimes needed by the selected model tasks and saves its acceleration choice as `accel` in the config and passes it to every Windows job through
   `PIANPIAN_ACCEL`; an explicit environment override wins. Vulkan still means CPU speech recognition.
 
 `engine.python()` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
@@ -107,8 +107,11 @@ links the release page when a release has none.
 
 Each platform's release workflow rebuilds the website after uploading its files. `tools/build_site.py`
 reads release assets at build time: it offers the Windows installer only when attached, otherwise a
-release-page link. `assets/site-os.js` orders and emphasizes download links using browser platform hints;
-this is a compatibility hint, not a hardware test. Windows CI installs the hashed Windows engine lock
+release-page link. `assets/site-os.js` shows the matching desktop download using browser platform hints. On phones/tablets
+(including iPad desktop-style user agents), downloads stay hidden and the primary action opens the GitHub
+repository to star it. Desktop users also have explicit GitHub star links. With JavaScript disabled,
+GitHub and the platform availability message remain visible. Browser classification is a compatibility
+hint, not a hardware test; links never star the repository automatically. Windows CI installs the hashed Windows engine lock
 before running `dev.py check` with `UV_NO_SYNC=1`.
 
 ### Windows test history
@@ -146,16 +149,61 @@ picks this platform's model:
 
 | | macOS | Windows |
 |---|---|---|
-| Speech | Whisper large-v3-turbo, MLX (1.6 GB) | `ggml-large-v3-turbo.bin` for whisper.cpp (1.6 GB) |
+| Speech | Whisper large-v3-turbo 8-bit, MLX (0.864 GB) | `ggml-large-v3-turbo-q8_0.bin` for whisper.cpp (0.874 GB) |
 | Translation | Hy-MT2 1.8B 4-bit, MLX (1.0 GB) | `Hy-MT2-1.8B-Q4_K_M.gguf` for llama.cpp (1.1 GB) |
 
 Each file comes from ModelScope first, which is fast from mainland China — the Windows models are
 mirrored there under other ids (`OllmOne/whisper.cpp`, `Tencent-Hunyuan/Hy-MT2-1.8B-GGUF`; the pinned
-files are byte-identical to Hugging Face's, checked 31 Oct 2026) — then Hugging Face, then
+files are checked against the same pinned hashes as Hugging Face) — then Hugging Face, then
 hf-mirror.com. Every file is checked against the size and SHA-256 in the lock. Stopped downloads
 resume. A model already in the Hugging Face cache is used where it is. Progress goes to stdout as
 `@progress {json}` lines. The Windows binaries are pinned separately in `pipeline/runtimes.py`
 (release tag, size, SHA-256).
+
+### Compact installation accounting
+
+On 13 Nov 2026 the pinned Windows models and CPU archives total **2,040,369,984 bytes**
+(2.04 GB, decimal). The old FP16 models with CUDA archives totalled 4,106,422,592 bytes;
+the old setup added an estimated 460 MB of installed engine space to that download figure.
+Those were different quantities. The new setup separates known remaining model/runtime bytes
+from Python/package downloads of unknown total size and the engine's estimated disk footprint.
+GPU detection is an explicit read-only action. It checks NVIDIA driver >=551.61 for the pinned
+CUDA 12.4 builds, or a device reported by `vulkaninfo`; detection does not establish successful inference.
+No CUDA Toolkit is required. Existing compatible app-managed runtimes are reused; arbitrary system
+CUDA libraries are not reused. Missing `vulkaninfo` means detection is inconclusive; users can still explicitly choose Vulkan, with CPU fallback if it fails to start.
+
+For scale, a metadata-only estimate on 13 Nov 2026 selected the pinned Python 3.12 package artifacts:
+151 MB for Windows x64 and 177 MB for macOS 14 arm64. The Python standalone archives referenced for
+mirror probes are 21 MB and 16 MB respectively; the installed Python patch may differ. These are
+not clean-install transfer measurements and exclude build dependencies, metadata, retries, the dictionary,
+bootstrap tools and the desktop installer. A Windows CPU installation is therefore approximately
+2.3 GB including the installer and small extras, **to verify on Windows**, rather than an exact budget.
+This assumes WebView2 is already installed; if absent, its separate Microsoft download must be added.
+The compressed download, installed space and temporary unpacking peak are separate quantities.
+
+Windows Whisper Q8 was absent from the configured ModelScope mirror on 13 Nov 2026, so that
+file uses pinned Hugging Face with hf-mirror fallback. The Mac Q8 model retains ModelScope support.
+Only the selected weights/config are fetched; the tokenizer bundled with mlx-whisper is reused.
+The Mac adapter presents the newer `model.safetensors` filename to mlx-whisper 0.4.3 through a
+short-lived symlink, without duplicating weights or modifying shared caches. Setup can remove the
+superseded app-owned FP16 model after installing Q8; shared Hugging Face caches are left alone.
+
+### Q8 verification on 13 Nov 2026
+
+On an Apple M1 Pro with 16 GB RAM, the self-made 44.8-second demo was transcribed using both
+FP16 and Q8 through `backend_mac.transcribe`. The isolated environment used Python 3.12.13 and
+the exact hashed release packages (MLX 0.29.3, mlx-whisper 0.4.3, mlx-lm 0.30.2). Both outputs
+matched the authored script after Chinese/punctuation normalization: 0 character edits in 100 reference
+characters. Both returned 85 valid word intervals; one cue start differed by 20 ms. Pinyin, dictionary
+words/grammar and Hy-MT2 translations (fixed seed) matched between models. Translation retained the
+baseline mistake “like a watermelon” for “一块西瓜”; this is not a translation-accuracy benchmark.
+
+Single warmed runs took 6.65 s for FP16 and 5.93 s for Q8, including process startup and loading.
+The first FP16 run in the fresh environment took 28.42 s. These numbers do not establish a general
+speedup. The Q8 download was SHA-256 verified and the compatibility view removed after inference.
+This synthetic, short clip does not establish accuracy on accents, noise or long recordings, nor does
+it validate Windows inference or the packaged installer. Broader audio validation and a native Windows
+CPU/CUDA smoke test remain required before claiming parity there.
 
 ## The pipeline
 
@@ -243,7 +291,8 @@ layout is unit-tested on macOS; execution on Windows remains untested.
 | Method | Path | Does |
 |---|---|---|
 | GET | `/api/status` | Local status: version, library, engine readiness, platform, accelerator, browsers, busy; foreign origins get only `ok`/`version` |
-| GET / POST | `/api/setup` | Setup plan/progress; start setup with library/data folders, model choices and cleanup option |
+| GET / POST | `/api/setup` | Setup plan/progress; start setup with library/data folders, model choices, acceleration and cleanup option |
+| GET | `/api/setup-gpu` | Explicit read-only GPU/driver probe; downloads nothing and does not change saved settings |
 | GET | `/api/videos` | Library folders with title, link, HSK level and the tracks they have |
 | GET | `/api/videos/<id>` | One video, plus its `zh.lines.txt` for translating by hand |
 | GET | `/api/jobs` | Recent jobs with their state and the end of their log |
