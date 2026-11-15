@@ -96,16 +96,15 @@ function renderPlan() {
     (plan.runtime ? `
     <div class="item"><span></span><span><b>Processing tools</b>
       <select class="field" name="accel" aria-label="Acceleration" ${plan.accelLocked ? 'disabled' : ''}>
-        <option value="cpu">CPU · smallest download</option><option value="cuda">NVIDIA CUDA · optional, larger download</option>
-        <option value="vulkan">Vulkan · translation GPU, speech CPU</option>
+        ${Object.keys(plan.runtimeOptions).map(b => `<option value="${b}">${({cpu: 'CPU', metal: 'Apple Metal · CPU fallback included', cuda: 'NVIDIA CUDA · optional, larger download', vulkan: 'Vulkan · translation GPU, speech CPU'})[b]}</option>`).join('')}
       </select>
       <small id="runtime-label"></small>
-      <div class="row"><button class="btn" type="button" id="detect-gpu">Check GPU again</button>
+      ${plan.runtimeOptions.cuda ? `<div class="row"><button class="btn" type="button" id="detect-gpu">Check GPU again</button>
       <button class="btn" type="button" id="benchmark-gpu" disabled>Compare CPU / CUDA speed</button></div>
-      <small id="gpu-fallback"></small>
-      <small id="gpu-note">CPU needs no CUDA. GPU acceleration uses app-managed libraries; no CUDA Toolkit installation needed.${plan.accelLocked ? ' Choice fixed by PIANPIAN_ACCEL.' : ''}</small>
+      <small id="gpu-note">SenseVoice runs on CPU. Optional GPU acceleration applies to translation only; no CUDA Toolkit installation needed.${plan.accelLocked ? ' Choice fixed by PIANPIAN_ACCEL.' : ''}</small>
       <p class="muted">The optional speed test uses installed models and CUDA tools only. It downloads nothing and can take several minutes. Estimates appear after measuring this computer.</p>
-      <div id="gpu-speed" role="status" aria-live="polite"></div>
+      <div id="gpu-speed" role="status" aria-live="polite"></div>` : '<small>SenseVoice runs on CPU. Translation uses Apple Metal or CPU from the same download; CUDA is not needed.</small>'}
+      <small id="gpu-fallback"></small>
     </span><span class="sz" id="runtime-size"></span></div>` : '') +
     plan.models.map(m => `
     <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${!chosen || chosen.includes(m.id) ? 'checked' : ''}>
@@ -116,37 +115,39 @@ function renderPlan() {
       <span class="sz">frees ${gb(plan.old.reduce((t, o) => t + o.bytes, 0))}</span></label>` : '');
   if (plan.runtime) {
     f.accel.value = plan.runtime.backend;
-    const detect = async () => {
-      const button = $('detect-gpu'); button.disabled = true; $('gpu-note').textContent = 'Checking the GPU driver…';
-      try {
-        const detected = await api('/api/setup-gpu');
-        $('gpu-note').textContent = detected.message;
-        $('benchmark-gpu').disabled = !(detected.benchmarkAvailable && ok);
-      } catch (e) { $('gpu-note').textContent = 'Could not check the GPU: ' + e.message; }
-      finally { button.disabled = false; }
-    };
-    $('detect-gpu').onclick = detect;
-    $('benchmark-gpu').onclick = async () => {
-      $('benchmark-gpu').disabled = true;
-      $('gpu-speed').textContent = 'Comparing CPU and CUDA locally. Your acceleration choice will stay unchanged.';
-      try {
-        const job = await api('/api/setup-benchmark', {});
-        watchBenchmark(job.id);
-      } catch (e) { $('gpu-speed').textContent = e.message; $('benchmark-gpu').disabled = false; }
-    };
-    detect(); // Background detection never selects an accelerator or starts a benchmark/download.
+    if ($('detect-gpu')) {
+      const detect = async () => {
+        const button = $('detect-gpu'); button.disabled = true; $('gpu-note').textContent = 'Checking the GPU driver…';
+        try {
+          const detected = await api('/api/setup-gpu');
+          $('gpu-note').textContent = detected.message;
+          $('benchmark-gpu').disabled = !(detected.benchmarkAvailable && ok);
+        } catch (e) { $('gpu-note').textContent = 'Could not check the GPU: ' + e.message; }
+        finally { button.disabled = false; }
+      };
+      $('detect-gpu').onclick = detect;
+      $('benchmark-gpu').onclick = async () => {
+        $('benchmark-gpu').disabled = true;
+        $('gpu-speed').textContent = 'Comparing CPU and CUDA locally. Your acceleration choice will stay unchanged.';
+        try {
+          const job = await api('/api/setup-benchmark', {});
+          watchBenchmark(job.id);
+        } catch (e) { $('gpu-speed').textContent = e.message; $('benchmark-gpu').disabled = false; }
+      };
+      detect(); // Background detection never selects an accelerator or starts a benchmark/download.
+    }
   }
   sum();
 }
 const seconds = n => n >= 60 ? `${(n / 60).toFixed(1)} min` : `${n.toFixed(1)} s`;
 function showBenchmark(result) {
   $('gpu-speed').innerHTML = result.tools.map(t => {
-    const title = t.tool === 'whisper' ? 'Speech recognition' : 'Translation';
+    const title = 'Translation';
     if (t.status !== 'measured') return `<p><b>${title}</b>: ${esc(t.reason || 'Not measured')}</p>`;
     const comparison = t.speedup >= 1 ? `${t.speedup.toFixed(1)}× faster with CUDA` : `${(1 / t.speedup).toFixed(1)}× slower with CUDA`;
     return `<p><b>${title}</b>: CPU ${seconds(t.cpu_seconds)} → CUDA ${seconds(t.gpu_seconds)} (${comparison} in this test).<br>
       <small>${esc(t.workload)}. ${t.estimate ? `Approximate ${esc(t.estimate.label)}: CPU ${seconds(t.estimate.cpu_seconds)} / CUDA ${seconds(t.estimate.gpu_seconds)}.` : ''}</small></p>`;
-  }).join('') + '<small>A short local sample, not a guaranteed completion time. Downloading videos, OCR and pinyin are not included. Your acceleration choice has not changed.</small>';
+  }).join('') + '<small>A short local sample, not a guaranteed completion time. Downloading videos and pinyin are not included. Your acceleration choice has not changed.</small>';
 }
 async function watchBenchmark(id) {
   clearTimeout(benchmarkTimer);
@@ -171,20 +172,21 @@ function sum() {
   const e = plan.engine, f = $('plan');
   const picked = [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value);
   const selected = plan.models.filter(m => picked.includes(m.id));
-  let runtimeBytes = 0;
+  let runtimeBytes = 0, runtimeReady = true;
   if (plan.runtime) {
     const runtime = plan.runtimeOptions[f.accel.value], tasks = selected.map(m => m.task);
-    const tools = Object.entries(runtime.tools).filter(([tool]) => tasks.includes(tool === 'whisper' ? 'transcribe' : 'translate'));
+    const tools = Object.entries(runtime.tools).filter(([tool]) => tool === 'llama' && tasks.includes('translate'));
     runtimeBytes = tools.reduce((t, [, r]) => t + r.size, 0);
-    const fallbackBytes = tools.filter(([, r]) => r.backend !== 'cpu').reduce((t, [tool]) => t + plan.runtimeOptions.cpu.tools[tool].size, 0);
-    $('gpu-fallback').textContent = fallbackBytes ? `If the GPU cannot start, CPU fallback may download up to ${gb(fallbackBytes)} extra.` : '';
+    runtimeReady = tools.every(([, r]) => r.ready);
+    const fallbackBytes = tools.reduce((t, [, r]) => t + (r.cpu_size || 0), 0);
+    $('gpu-fallback').textContent = fallbackBytes ? `Includes ${gb(fallbackBytes)} for CPU word links and GPU fallback.` : '';
     $('runtime-label').textContent = tools.map(([tool, r]) => `${tool}.cpp: ${r.backend.toUpperCase()}`).join(' · ') || 'No model runtime selected';
-    $('runtime-size').textContent = runtimeBytes ? gb(runtimeBytes) : tools.length ? 'ready' : 'not needed';
+    $('runtime-size').textContent = runtimeBytes ? gb(runtimeBytes) : !tools.length ? 'not needed' : runtimeReady ? 'ready' : 'repair needed';
   }
   const bytes = runtimeBytes + selected.filter(m => !m.ready).reduce((t, m) => t + (m.size || 0), 0);
   const engineNeeded = !(e.engine && e.current), unknownModel = selected.some(m => !m.ready && !m.size);
   $('sum').textContent = `${gb(bytes)} models & processing tools${unknownModel ? ' + models of unknown size' : ''}${engineNeeded ? ' + Python/packages/dictionary (size varies)' : ''}. ${gb(plan.free)} free on current data drive; unpacking needs extra space.`;
-  $('go').textContent = !bytes && !engineNeeded ? 'Continue' : e.engine && !e.current ? 'Update' : 'Install';
+  $('go').textContent = !bytes && !engineNeeded && runtimeReady ? 'Continue' : e.engine && (!e.current || !runtimeReady) ? 'Update' : 'Install';
   $('go').disabled = bytes > plan.free;
 }
 $('plan').addEventListener('change', sum);

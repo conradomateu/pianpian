@@ -10,9 +10,13 @@ on some site, a sentence in the docs that confused you.
 
 ## Set up
 
+Needs Python 3.12+, Git, uv, CMake 3.21+ and a C++17 compiler (Xcode command-line tools on Mac,
+Visual Studio C++ tools on Windows). Node.js enables JavaScript syntax checks. These compiler tools
+are for development; downloaded apps contain the speech and word-link helpers already.
+
 ```bash
 git clone https://github.com/conradomateu/pianpian && cd pianpian
-python3 dev.py engine     # the pipeline's environment in .venv (about 700 MB)
+python3 dev.py engine     # the five-package pipeline environment in .venv and native helpers
 python3 dev.py serve      # the app in your browser at http://127.0.0.1:8770
 python3 dev.py check      # lint and tests: the same as CI
 ```
@@ -25,7 +29,7 @@ From mainland China set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simp
 - `python3 dev.py check` passes.
 - No videos, subtitles, textbook pages or other people's content, in the repository, tests or screenshots. Use the demo in `demo/`.
 - Say what you tested, on what, and mark the rest "not tested". UI changes are tried with a real click in a real browser.
-- Keep paths, OCR and the model engines behind their small interfaces shared by macOS and Windows, and the page free of frameworks and build steps.
+- Keep paths and the model engines behind their small interfaces shared by macOS and Windows, and the page free of frameworks and build steps.
 - One change per pull request. Its title starts with `fix:`, `feat:`, `docs:` or `chore:`: releases and the changelog are made from it (`python3 dev.py version` shows what the commits so far would release).
 - No personal data in commits, code or screenshots. An AI assistant is fine; you answer for what you send. No AI co-author trailers.
 

@@ -38,7 +38,24 @@ jobs:
       - run: python dev.py check
         env:
           UV_NO_SYNC: "1"
-      - run: python dev.py build                  # compile the installer on every PR; only windows.yml publishes releases
+      - run: cmake --version                    # runner includes CMake and Visual Studio C++ for native speech
+      - run: python dev.py build                # builds/checks bundled speech helper and installer; no publication here
+      - name: Exercise packaged native pipeline on CPU
+        shell: pwsh
+        run: |
+          uv venv scratch/native-acceptance/engine --python 3.12
+          uv pip sync --python scratch/native-acceptance/engine/Scripts/python.exe --require-hashes pipeline/requirements-windows.txt
+          scratch/native-acceptance/engine/Scripts/python.exe tools/check_native_pipeline.py --pipeline dist/Pianpian/_internal/pipeline
+      - name: Keep native acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Windows-native-acceptance
+          path: |
+            scratch/native-acceptance/**/acceptance.json
+            scratch/native-acceptance/**/pipeline.log
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: Pianpian-Windows-PR

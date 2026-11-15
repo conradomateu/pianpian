@@ -1,6 +1,8 @@
 """The setup must show a rejected start while its progress card is still hidden."""
 import json
 
+import pytest
+
 from test_player_browser import ROOT, browser, click, navigate, wait  # noqa: F401
 
 
@@ -48,6 +50,7 @@ def test_setup_start_error_is_visible(browser, monkeypatch):  # noqa: F811 (shar
 def test_windows_setup_cpu_default_and_optional_gpu_costs(browser, monkeypatch):  # noqa: F811
     """Real Chrome clicks, simulated Windows hardware/API. Does not install a runtime."""
     import runtimes
+    monkeypatch.setattr(runtimes.platform_backend, "NAME", "win32")
     c, url, handler = browser
     monkeypatch.setenv("PIANPIAN_RUNTIME", str(ROOT / "scratch" / "setup-browser-missing-runtime"))
     original_get = handler.do_GET
@@ -58,9 +61,9 @@ def test_windows_setup_cpu_default_and_optional_gpu_costs(browser, monkeypatch):
     options = {b: runtimes.status(backend=b) for b in ("cpu", "cuda", "vulkan")}
     submitted, detections = [], []
     payload = {"needed": True, "config": {"library": "/videos", "data": "/tools"},
-               "engine": {"engine": False, "current": False}, "engineMB": 460,
-               "models": [{"id": "speech", "task": "transcribe", "about": "Whisper Q8", "size": 874188075, "ready": False},
-                          {"id": "translation", "task": "translate", "about": "Hy-MT2 Q4", "size": 1133080448, "ready": False}],
+               "engine": {"engine": False, "current": False}, "engineMB": 230,
+               "models": [{"id": "speech", "task": "transcribe", "about": "SenseVoice Q8", "size": 255928832, "ready": False},
+                          {"id": "translation", "task": "translate", "about": "PLaMo Q3", "size": 486385856, "ready": False}],
                "runtime": options["cpu"], "runtimeOptions": options,
                "free": 10**10, "progress": {"state": "idle"}}
 
@@ -94,8 +97,8 @@ def test_windows_setup_cpu_default_and_optional_gpu_costs(browser, monkeypatch):
     navigate(c, url + "/setup.html")
     wait(c, "!document.querySelector('#plan').hidden")
     assert c.js("document.querySelector('[name=accel]').value") == "cpu"
-    assert c.js("document.querySelector('#runtime-size').textContent") == "33 MB"
-    assert c.js("document.querySelector('#sum').textContent.startsWith('2.0 GB models')")
+    assert c.js("document.querySelector('#runtime-size').textContent") == "24 MB"
+    assert c.js("document.querySelector('#sum').textContent.startsWith('766 MB models')")
     assert c.js("document.querySelector('#sum').textContent.includes('Python/packages/dictionary (size varies)')")
     wait(c, "document.querySelector('#gpu-note').textContent.startsWith('Test NVIDIA')")
     assert detections == ["/api/setup-gpu"] and not submitted
@@ -110,11 +113,11 @@ def test_windows_setup_cpu_default_and_optional_gpu_costs(browser, monkeypatch):
         for event in ("keyDown", "keyUp"):
             c.call("Input.dispatchKeyEvent", type=event, key=key, code="KeyN" if key == "n" else key, windowsVirtualKeyCode=code, text="n" if key == "n" and event == "keyDown" else "")
     wait(c, "document.querySelector('[name=accel]').value === 'cuda'")
-    assert c.js("document.querySelector('#runtime-size').textContent") == "1.3 GB"
-    assert c.js("document.querySelector('#gpu-fallback').textContent.includes('33 MB extra')")
-    assert c.js("document.querySelector('#sum').textContent.startsWith('3.4 GB models')")
+    assert c.js("document.querySelector('#runtime-size').textContent") == "688 MB"
+    assert c.js("document.querySelector('#gpu-fallback').textContent.includes('24 MB for CPU word links')")
+    assert c.js("document.querySelector('#sum').textContent.startsWith('1.4 GB models')")
     activate("input[value=translation]")
-    assert c.js("document.querySelector('#runtime-size').textContent") == "685 MB"
+    assert c.js("document.querySelector('#runtime-size').textContent") == "not needed"
     activate("input[value=speech]")
     assert c.js("document.querySelector('#runtime-size').textContent") == "not needed"
     assert c.js("document.querySelector('#sum').textContent.startsWith('0 MB models')")
@@ -128,7 +131,7 @@ def test_windows_setup_cpu_default_and_optional_gpu_costs(browser, monkeypatch):
         model["ready"] = True
     navigate(c, url + "/setup.html")
     wait(c, "!document.querySelector('#plan').hidden")
-    assert c.js("document.querySelector('#runtime-size').textContent") == "9 MB"
+    assert c.js("document.querySelector('#runtime-size').textContent") == "not needed"
     assert not c.js("document.querySelector('input[value=translation]').checked")
     assert not c.js("document.querySelector('input[value=speech]').disabled")
     activate("input[value=speech]")
@@ -136,20 +139,30 @@ def test_windows_setup_cpu_default_and_optional_gpu_costs(browser, monkeypatch):
     activate("input[value=translation]")
     assert c.js("document.querySelector('#runtime-size').textContent") == "24 MB"
 
+    # App-local DLL repair has no network cost, but must not be presented as already ready.
+    payload["config"]["models"] = ["translation"]
+    payload["engine"] = {"engine": True, "current": True}
+    payload["runtimeOptions"]["cpu"]["tools"]["llama"].update(size=0, ready=False)
+    navigate(c, url + "/setup.html")
+    wait(c, "!document.querySelector('#plan').hidden")
+    assert c.js("document.querySelector('#runtime-size').textContent") == "repair needed"
+    assert c.js("document.querySelector('#go').textContent") == "Update"
+
 
 def test_speed_comparison_requires_a_click_and_reports_only_local_measurements(browser, monkeypatch):  # noqa: F811
     """Real browser interaction; fake CPU/CUDA timings deliberately do not validate Windows performance."""
     import runtimes
+    monkeypatch.setattr(runtimes.platform_backend, "NAME", "win32")
     c, url, handler = browser
     monkeypatch.setenv("PIANPIAN_RUNTIME", str(ROOT / "scratch" / "setup-browser-missing-runtime"))
     original_get = handler.do_GET
     options = {b: runtimes.status(backend=b) for b in ("cpu", "cuda", "vulkan")}
     payload = {"needed": True, "config": {"library": "/videos", "data": "/tools"},
-               "engine": {"engine": True, "current": True}, "engineMB": 460, "models": [],
+               "engine": {"engine": True, "current": True}, "engineMB": 230, "models": [],
                "runtime": options["cpu"], "runtimeOptions": options, "free": 10**10, "progress": {"state": "idle"}}
-    measured = {"tools": [{"tool": "whisper", "status": "measured", "cpu_seconds": 10.0, "gpu_seconds": 2.5,
-                            "speedup": 4.0, "workload": "30 seconds of the bundled demo",
-                            "estimate": {"label": "speech-only time for 10 minutes", "cpu_seconds": 200.0, "gpu_seconds": 50.0}},
+    measured = {"tools": [{"tool": "llama", "status": "measured", "cpu_seconds": 10.0, "gpu_seconds": 2.5,
+                            "speedup": 4.0, "workload": "Synthetic translation token workload",
+                            "estimate": {"label": "estimate for 100 similar translation requests", "cpu_seconds": 200.0, "gpu_seconds": 50.0}},
                            {"tool": "llama", "status": "unconfirmed", "reason": "CUDA offload was not confirmed; no estimate."}]}
     submissions, polls = [], []
 
@@ -235,3 +248,45 @@ def test_resources_reopens_models_and_acceleration_but_link_is_absent_from_demo(
     navigate(c, url + "/app.html?demo#v=pianpian-day")
     wait(c, "document.documentElement.classList.contains('demo') && document.querySelector('video')")
     assert not c.js("!!document.querySelector('#toolslink')")
+
+
+def test_mac_setup_shows_shared_metal_cpu_download_without_nvidia_controls(browser, monkeypatch):  # noqa: F811
+    """Real browser clicks, Mac runtime prices; no models or runtimes are installed."""
+    import runtimes
+    c, url, handler = browser
+    monkeypatch.setattr(runtimes.platform_backend, "NAME", "darwin")
+    monkeypatch.setenv("PIANPIAN_RUNTIME", str(ROOT / "scratch" / "setup-browser-missing-runtime"))
+    original_get = handler.do_GET
+    options = {b: runtimes.status(backend=b) for b in ("metal", "cpu")}
+    payload = {"needed": True, "config": {"library": "/videos", "data": "/tools"},
+               "engine": {"engine": True, "current": True}, "engineMB": 230,
+               "models": [{"id": "translation", "task": "translate", "about": "PLaMo Q3", "size": 486385856, "ready": False}],
+               "runtime": options["metal"], "runtimeOptions": options, "free": 10**10, "progress": {"state": "idle"}}
+
+    def get(self):
+        if self.path == "/setup.html":
+            body, kind = (ROOT / "setup.html").read_bytes(), "text/html"
+        elif self.path == "/api/setup":
+            body, kind = json.dumps(payload).encode(), "application/json"
+        elif self.path == "/api/setup-gpu":
+            pytest.fail("Mac setup must not probe NVIDIA hardware")
+        else:
+            return original_get(self)
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    monkeypatch.setattr(handler, "do_GET", get)
+    navigate(c, url + "/setup.html")
+    wait(c, "!document.querySelector('#plan').hidden")
+    assert c.js("document.querySelector('[name=accel]').value") == "metal"
+    assert c.js("[...document.querySelector('[name=accel]').options].map(o => o.value)") == ["metal", "cpu"]
+    assert not c.js("!!document.querySelector('#detect-gpu') || !!document.querySelector('#benchmark-gpu')")
+    assert c.js("document.querySelector('#runtime-size').textContent") == "16 MB"
+    assert c.js("document.querySelector('#gpu-fallback').textContent") == ""
+    click(c, "input[value=translation]")
+    assert c.js("document.querySelector('#runtime-size').textContent") == "not needed"
+    click(c, "input[value=translation]")
+    assert c.js("document.querySelector('#sum').textContent.startsWith('503 MB models')")

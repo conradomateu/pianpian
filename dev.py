@@ -8,6 +8,7 @@
     python dev.py lint        # ruff (real mistakes only) + node --check on the JavaScript
     python dev.py test        # pytest (tests/)
     python dev.py serve       # the app at http://127.0.0.1:8770
+    python dev.py native      # build the native CPU speech helper (developers only)
     python dev.py app         # a dev app that runs this checkout (macOS: ~/Applications; Windows: launcher.py)
     python dev.py build       # the release build in dist/: Pianpian.app + zip on macOS, installer + zip on Windows
     python dev.py site        # the website into _site/ (landing page + live demo)
@@ -44,7 +45,7 @@ def lint() -> None:
 
 
 def test() -> None:
-    run(UV, "run", "--group", "dev", "pytest", "-q")
+    run(UV, "run", "--group", "dev", "pytest", "-q", "--basetemp", str(ROOT / "scratch" / "pytest-check"))
 
 
 def lock() -> None:
@@ -61,7 +62,17 @@ def lock() -> None:
     run(sys.executable, "pipeline/models.py", "lock")          # and every model file, pinned on both sites
 
 
+def native() -> None:
+    name = "pianpian-sensevoice.exe" if WINDOWS else "pianpian-sensevoice"
+    run(sys.executable, "tools/build_sensevoice.py", "--output", str(ROOT / "pipeline" / "bin" / name))
+    alignment = "pianpian-align.exe" if WINDOWS else "pianpian-align"
+    run(sys.executable, "tools/build_alignment.py", "--output", str(ROOT / "pipeline" / "bin" / alignment))
+    if WINDOWS:
+        run(sys.executable, "tools/windows_crt.py", "--output", str(ROOT / "pipeline" / "bin"))
+
+
 def app() -> None:
+    native()
     if WINDOWS:
         run(UV, "run", "--group", "runtime", "--group", "desktop", "python", "launcher.py")
     else:
@@ -77,7 +88,8 @@ TASKS = {
     "lint": lint,
     "test": test,
     "check": lambda: (lint(), test()),
-    "engine": lambda: run(UV, "sync", "--group", "runtime", *(["--group", "desktop"] if WINDOWS else [])),
+    "native": native,
+    "engine": lambda: (native(), run(UV, "sync", "--group", "runtime", *(["--group", "desktop"] if WINDOWS else []))),
     "lock": lock,
     "version": lambda: run(sys.executable, "tools/next_version.py"),
     "serve": lambda: run(sys.executable, "server.py"),

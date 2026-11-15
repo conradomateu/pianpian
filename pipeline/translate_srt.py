@@ -1,23 +1,7 @@
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["mlx-lm>=0.28; sys_platform == 'darwin'"]
-# ///
-"""Translate zh.srt into English line by line with a small local translation model.
+"""Translate zh.srt to id<TAB>English using PLaMo 3 Translate 0.8B Q3_K_M.
 
-    uv run translate_srt.py zh.srt                  # -> en.lines.txt next to it
-    uv run translate_srt.py zh.srt -o out.txt
-
-Writes the same "id<TAB>English" file as the manual ChatGPT/Claude step, so
-`srt_tool.py import` checks it and the English keeps the Chinese timings.
-
-Model: Tencent Hy-MT2-1.8B: the 4-bit MLX build on macOS (1.02 GB), Q4_K_M GGUF on Windows
-(1.13 GB). models.py tries ModelScope first, then Hugging Face and hf-mirror.com, and checks every
-file against the lock. Translation-quality figures for other quantizations do not establish the
-quality of the Windows Q4_K_M build; that comparison has not been measured here.
-Each line is translated with the video title and the previous lines as background,
-using the model card's prompt and sampling settings. Set MT_MODEL to try another.
-The model itself runs in the platform's backend (backend.py); this file keeps the prompt and the loop.
-Nothing leaves the machine.
+The same pinned GGUF and native llama.cpp runtime run on Mac and Windows. PFML3 keeps source,
+context and target language separate. Existing subtitle IDs and times remain unchanged.
 """
 import argparse
 import os
@@ -29,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import backend  # noqa: E402
 import models  # noqa: E402
-from models import ensure as ensure_model  # noqa: E402  (shared with Whisper, align_srt.py and the installer)
+from models import ensure as ensure_model  # noqa: E402  (shared with speech, alignment and setup)
 
 MODEL = os.environ.get("MT_MODEL") or models.default("translate")
 TIME = re.compile(r"\d{2}:\d{2}:\d{2}[,.]\d{3} --> ")
@@ -51,12 +35,13 @@ def read_lines(path: Path) -> list[tuple[str, str]]:
 
 
 def prompt_for(text: str, background: str) -> str:
-    # the model card's "background information" template, plus its "translation only" instruction
-    if not background:
-        return f"将以下文本翻译为英语，注意只需要输出翻译后的结果，不要额外解释：\n\n{text}"
-    return (f"【背景信息】\n{background}\n\n"
-            f"请结合背景信息将以下文本翻译为英语，注意只需要输出翻译后的结果，不要额外解释，也不要翻译背景信息。\n"
-            f"【待翻译文本】\n{text}")
+    # Official PFML3 format; the runtime supplies BOS. Reserved delimiters cannot be source text.
+    if "<|plamo:" in text or "<|plamo:" in background:
+        raise ValueError("Subtitle or context contains a reserved PLaMo delimiter")
+    return ("<|plamo:tag|>dataset<|plamo:msg|>translation"
+            + (f"<|plamo:tag|>context<|plamo:msg|>{background}" if background else "")
+            + f"<|plamo:tag|>input<|plamo:msg|>{text}"
+            + "<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>")
 
 
 def translate(lines: list[tuple[str, str]], title: str, generate) -> list[str]:
@@ -65,14 +50,14 @@ def translate(lines: list[tuple[str, str]], title: str, generate) -> list[str]:
     for n, (cid, text) in enumerate(lines):
         before = [t for _, t in lines[max(0, n - CONTEXT_LINES):n]]
         background = "\n".join(([f"视频标题：{title}"] if title else []) + ([f"前文：{' '.join(before)}"] if before else []))
-        prompt = prompt_for(text, background)
-        # a lower temperature than the model card's, so names stay the same from line to line;
-        # a reply that still has Chinese in it gets one greedy retry
-        for temperature in (0.3, 0.0):
-            reply = generate(prompt, temperature, 40 + 6 * len(text))
-            english = " ".join(re.sub(r"<think>.*?</think>", "", reply, flags=re.S).split()).strip().strip('"“”')
-            if not HAN.search(english):
+        # The model card recommends greedy translation. Retry without surrounding context if needed.
+        for context in dict.fromkeys((background, "")):
+            reply = generate(prompt_for(text, context), 0.0, 40 + 6 * len(text))
+            english = " ".join(reply.split()).strip().strip('"“”')
+            if english and not HAN.search(english):
                 break
+        if not english or HAN.search(english):
+            raise ValueError(f"PLaMo did not return an English translation for subtitle {cid}")
         out.append(f"{cid}\t{english}")
         if (n + 1) % 10 == 0 or n + 1 == len(lines):
             print(f"translated {n + 1}/{len(lines)}", flush=True)

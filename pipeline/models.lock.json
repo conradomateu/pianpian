@@ -1,99 +1,65 @@
 {
  "platforms": {
   "darwin": {
-   "mlx-community/Hy-MT2-1.8B-4bit": {
-    "huggingface": "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912",
+   "FunAudioLLM/SenseVoiceSmall-GGUF": {
+    "huggingface": "90c1c61912018b70ada0fcc024ea24aca62f2e63",
     "files": [
      {
-      "name": "chat_template.jinja",
-      "size": 654,
-      "sha256": "b7491ec0e9c869dfce20f2176758099bf248d979dd05530ede99deb21698acee",
-      "modelscope": "b6f9dbc2ccb2c87bfe5a8363c76ad41b76f63e43"
+      "name": "sensevoice-small-q8.gguf",
+      "size": 254208320,
+      "sha256": "4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5",
+      "modelscope": false
      },
      {
-      "name": "config.json",
-      "size": 1688,
-      "sha256": "63180daf56cf2ca15223b358eae0bcb5252b7fd4bfa2b2882b36e82f4c410da8",
-      "modelscope": "385b00e054f8273c28abfb2c85864bf39efc5ee9"
-     },
-     {
-      "name": "generation_config.json",
-      "size": 221,
-      "sha256": "0e28667f1cb4c7b880b9223b2d87978f88e79ed7ae037de1021f826c18d4ed6f",
-      "modelscope": "f95e986b1839faf5c771807c4ebff61d585c2f5d"
-     },
-     {
-      "name": "mlx_manifest.json",
-      "size": 375,
-      "sha256": "73de5f79e38fc86ec2a0a3a7e7ad830c049064b8de09686bb2c4de92a7819c35",
-      "modelscope": "a470a06f9481ebe0b926f8a89216cb217d1294f0"
-     },
-     {
-      "name": "model.safetensors",
-      "size": 1007776125,
-      "sha256": "a9cecbc77050b86b2fa3df3a8941d34ed3585cdbcce07bd64b3da289d50537c6",
-      "modelscope": "e7fcda0b2393379172f8efea77d29bc1dda9e057"
-     },
-     {
-      "name": "model.safetensors.index.json",
-      "size": 57380,
-      "sha256": "6026955be1656bf6cf7b9ffd56aac91c88287ba13fbab8b9f140655464b9de4b",
-      "modelscope": "969641a6e7b4c5730d77c27950848d5157ba1f69"
-     },
-     {
-      "name": "tokenizer.json",
-      "size": 9527287,
-      "sha256": "b475bbef1b0b2fd57dcb865332b546475bd1ede2deb3bb91bafd0c047a8a530a",
-      "modelscope": "925278dd3d496a090c15bd2f14b43aff94abf30d"
-     },
-     {
-      "name": "tokenizer_config.json",
-      "size": 359,
-      "sha256": "9c8fad86305966b62964ad3f4b56d00fb3234141028a31710ca312ba3e417cd9",
-      "modelscope": "9b86cb44f236e1bb7298adbdb2fb7f2eb46ed814"
+      "name": "fsmn-vad.gguf",
+      "size": 1720512,
+      "sha256": "1270f2559c495f4e7b6e739541151027d360761a3fda43fc147034f5719f5479",
+      "modelscope": false,
+      "repo": "FunAudioLLM/fsmn-vad-GGUF",
+      "huggingface": "6840bae4c5c92ee8c04faaf4db23dd0105098d7f"
      }
     ]
    },
-   "mlx-community/whisper-large-v3-turbo-8bit": {
-    "huggingface": "62103fc276a35fdc76e318f314d8ff47987fba89",
+   "pfnet/plamo-3-translate-0.8b-GGUF": {
+    "huggingface": "1cf96ae02133958a20074bfdfab76517bb737d00",
     "files": [
      {
-      "name": "config.json",
-      "size": 341,
-      "sha256": "f79a081378ac52606707abdfdae4a9cc41410f47ffc2ad2cd582dc8cc8e29e6f",
-      "modelscope": "22576ef2f9b7ec05c3856e36488089f5040e18e3"
-     },
-     {
-      "name": "model.safetensors",
-      "size": 863659156,
-      "sha256": "1dffa280543756dcdd5324250c811c2a1ba8654c363d7d0b1a5da2b1563629df",
-      "modelscope": "09d9d8d460f50da44937aa9dbb30d6d2da04bd36"
+      "name": "plamo-3-translate-0.8b-Q3_K_M.gguf",
+      "size": 486385856,
+      "sha256": "6c64dd53a367966ec00a7335ff34bb77ad5a893b6fbc7bf9ae51f7241e0dbfbe",
+      "modelscope": false
      }
     ]
    }
   },
   "win32": {
-   "ggerganov/whisper.cpp": {
-    "huggingface": "5359861c739e955e79d9a303bcbc70fb988958b1",
-    "modelscope_repo": "OllmOne/whisper.cpp",
+   "FunAudioLLM/SenseVoiceSmall-GGUF": {
+    "huggingface": "90c1c61912018b70ada0fcc024ea24aca62f2e63",
     "files": [
      {
-      "name": "ggml-large-v3-turbo-q8_0.bin",
-      "size": 874188075,
-      "sha256": "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
+      "name": "sensevoice-small-q8.gguf",
+      "size": 254208320,
+      "sha256": "4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5",
       "modelscope": false
+     },
+     {
+      "name": "fsmn-vad.gguf",
+      "size": 1720512,
+      "sha256": "1270f2559c495f4e7b6e739541151027d360761a3fda43fc147034f5719f5479",
+      "modelscope": false,
+      "repo": "FunAudioLLM/fsmn-vad-GGUF",
+      "huggingface": "6840bae4c5c92ee8c04faaf4db23dd0105098d7f"
      }
     ]
    },
-   "tencent/Hy-MT2-1.8B-GGUF": {
-    "huggingface": "a0c709d9fac510f2c807aa3af52872340dc37a4a",
-    "modelscope_repo": "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF",
+   "pfnet/plamo-3-translate-0.8b-GGUF": {
+    "huggingface": "1cf96ae02133958a20074bfdfab76517bb737d00",
     "files": [
      {
-      "name": "Hy-MT2-1.8B-Q4_K_M.gguf",
-      "size": 1133080448,
-      "sha256": "dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699",
-      "modelscope": "ef1d40b8b315575d30d1eb6579996130b8fc0bb2"
+      "name": "plamo-3-translate-0.8b-Q3_K_M.gguf",
+      "size": 486385856,
+      "sha256": "6c64dd53a367966ec00a7335ff34bb77ad5a893b6fbc7bf9ae51f7241e0dbfbe",
+      "modelscope": false
      }
     ]
    }

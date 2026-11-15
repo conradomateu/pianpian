@@ -5,7 +5,7 @@ macOS: Pianpian.app (launcher.py, pywebview/WebKit) · Windows: Pianpian.exe (la
   └── server.py   127.0.0.1 only, Python standard library
         ├── serves   app.html · assets/ · the library folder (with byte ranges, so video can seek)
         └── runs     pipeline/study.py with the engine's Python   (one job at a time, live log)
-                       └── yt-dlp · ffmpeg · srt_tool.py · the platform's backend (backend.py: Whisper, OCR, Hy-MT2)
+                       └── yt-dlp · ffmpeg · srt_tool.py · the platform's backend (backend.py: SenseVoice, PLaMo)
 ```
 
 `python3 server.py` (or `python server.py` on Windows) runs the same server in a browser tab, without
@@ -16,23 +16,26 @@ the server to make subtitles.
 
 - **The app** (`launcher.py`, `server.py`) needs only the standard library plus pywebview for the window.
 - **The engine** runs the pipeline. It is the `runtime` dependency group in `pyproject.toml`: pypinyin,
-  jieba, zhconv, yt-dlp, imageio-ffmpeg (a static ffmpeg, so no system ffmpeg is needed), and on
-  Windows RapidOCR. On macOS it adds mlx-whisper and mlx-lm; torch is left out on purpose (mlx-whisper
-  lists it for a conversion tool the app never uses), which keeps that engine at about 650 MB on disk. This is not its download size. The
-  Windows engine is about 460 MB on disk (measured 24 Oct 2026) and installs neither MLX nor llama-cpp-python.
-- **The Windows GPU runtime** is not a Python package: `pipeline/runtimes.py` downloads pinned
-  whisper.cpp and llama.cpp Windows builds (CPU by default; optional CUDA for NVIDIA or Vulkan for
-  llama.cpp, CPU fallback) into `<data>/runtime` (`$PIANPIAN_RUNTIME`)
-  and checks every archive against its SHA-256. whisper.cpp has no Vulkan asset in its official release
-  yet, so Vulkan-only machines run speech on the CPU. A GPU build that won't start is retried once with
-  the CPU build (`backend_win.py`). Downloads come from GitHub; `PIANPIAN_GITHUB_MIRROR` is an opt-in
-  prefix for networks where GitHub is slow — there is no default proxy, because one would see the
-  download whenever GitHub fails, and the SHA-256 pins are what keep the bytes safe.
+  jieba, zhconv, yt-dlp and imageio-ffmpeg (a static ffmpeg, so no system ffmpeg is needed).
+  These are the complete five runtime packages on both platforms. Speech, translation and model
+  word-link inference are native; no MLX, llama-cpp-python, PyTorch, transformers or OCR packages
+  are installed. Python still orchestrates the pipeline and creates the dictionary/pinyin/subtitle files.
+- **Speech inference** uses the bundled `pianpian-sensevoice` CPU executable on both platforms. First
+  run downloads SenseVoice Small Q8 and FSMN-VAD weights, not a compiler or GPU runtime. The shared
+  `pipeline/sensevoice.py` adapter preserves the existing subtitle/word-timing output format.
+- **The translation runtime** is not a Python package: `pipeline/runtimes.py` downloads pinned
+  llama.cpp builds: Metal/CPU share one Mac archive; Windows defaults to CPU with optional CUDA or Vulkan
+  into `<data>/runtime` (`$PIANPIAN_RUNTIME`) and checks every archive against its SHA-256.
+  A translation GPU build that will not start is retried once with the CPU build (`pipeline/plamo.py`).
+  Downloads come from GitHub; `PIANPIAN_GITHUB_MIRROR` is an opt-in prefix for slow networks.
   Each build's `.complete` records the tool, backend, release and archive SHA-256s. A changed pin makes
-  the installed build stale; setup downloads and unpacks a replacement before replacing the whole
-  build folder, so old DLLs do not survive an upgrade. A failed download leaves the old folder intact.
-  Setup installs only the runtimes needed by the selected model tasks and saves its acceleration choice as `accel` in the config and passes it to every Windows job through
-  `PIANPIAN_ACCEL`; an explicit environment override wins. Vulkan still means CPU speech recognition.
+  the installed build stale; setup replaces the whole build folder so old DLLs do not survive an upgrade.
+  A failed download leaves the old folder intact. Setup installs runtimes only when translation is selected.
+  On Windows, a GPU choice also installs CPU tools for word links and startup fallback; both downloads
+  count toward readiness and size. Setup passes its saved `accel` choice through `PIANPIAN_ACCEL`;
+  an explicit environment override wins. Speech and model word-link generation stay on CPU. The
+  bundled `pianpian-align` helper loads the CPU runtime's libllama and the same PLaMo GGUF; it adds no
+  model download or Python ML dependency.
 
 `engine.python()` picks the engine in this order: `$PIANPIAN_PYTHON`, the installed engine in
 `<data>/engine` (`Scripts/python.exe` on Windows, `bin/python` on macOS), the repository's `.venv`
@@ -43,10 +46,12 @@ the server to make subtitles.
 - `engine.py` holds the paths and settings (`~/Library/Application Support/Pianpian/config.json` on
   macOS, `%LOCALAPPDATA%\Pianpian\config.json` on Windows) and runs the setup that `setup.html` shows:
   Python 3.12 and the packages pinned with hashes in `pipeline/requirements.txt` (or
-  `pipeline/requirements-windows.txt`), the GPU runtime on Windows, the dictionary, then the models you
+  `pipeline/requirements-windows.txt`), the native translation runtime, the dictionary, then the models you
   pick. Each source is timed against its mirror in mainland China and the faster one is used. The engine
   remembers which requirements it was installed from, so a release that changes them sends you back to
   the setup page, which then says "An update for Pianpian" and only fetches what changed (`uv pip sync`).
+  Superseded Hy-MT2 selections map to PLaMo; missing new weights make setup necessary even when old
+  weights are installed. Sync removes the former MLX dependency stack. Saved video files are preserved.
   Explicit model/cache/runtime environment overrides are captured at app startup; app-derived paths
   follow the chosen data folder before setup checks the catalog or starts downloads.
 - **Repair:** setup recreates the engine only when its Python or `pyvenv.cfg` is missing, or the
@@ -78,8 +83,8 @@ the server to make subtitles.
 ## Packaging and releases
 
 `tools/build_app.py` (`dev.py build`) freezes `launcher.py` with PyInstaller into `dist/Pianpian.app`:
-the window, the server, the pages, the pipeline scripts, both locks, `uv`, the OCR helper compiled
-from `ocr_frames.swift`, and a `VERSION` file. Measured on 7 Nov 2026: 57 MB of files (bundle links counted once), 27 MB zipped. The engine and the models
+the window, the server, the pages, the pipeline scripts, both locks, `uv`, the native CPU speech helper,
+the native word-link helper, and a `VERSION` file. The engine and the models
 are not inside: the first run installs them. The bundle is signed ad hoc; without a paid Developer ID,
 macOS asks once before opening it. Inside the app, `engine.python()` never falls back to
 `sys.executable` (that would open a second window), and the server checks static paths by name,
@@ -95,7 +100,15 @@ Releases: merging release-please's pull request tags a version and creates the G
 `Pianpian-macOS.dmg` and `Pianpian-macOS.zip`; the website and Mac update card prefer the DMG.
 `.github/workflows/windows.yml` (`tools/build_app_windows.py`) does the same on windows-latest with
 `Pianpian-Windows-Setup.exe` and `Pianpian-Windows.zip`. Both build scripts use an isolated uv environment
-with PyInstaller 6.22.3 and pywebview 6.2.1; CI bundles uv 0.13.7. The Windows build needs Inno Setup 6
+with PyInstaller 6.22.3 and pywebview 6.2.1; CI bundles uv 0.13.7. Both call
+`tools/build_sensevoice.py` to compile pinned source with CMake and a C++17 compiler (Xcode command-line
+tools on macOS, Visual Studio C++ tools on Windows). The helper is collected as a binary, so PyInstaller
+checks its dependencies and signs it on macOS. It lives at `pipeline/bin/pianpian-sensevoice` or
+`pipeline/bin/pianpian-sensevoice.exe`, beside `sensevoice-NOTICES.txt` and `build-manifest.json`.
+Packaging fails if the notices are missing, and runs the packaged helper's `--help` before making the
+archives. `tools/build_alignment.py` likewise builds the small `pianpian-align[.exe]` helper, which
+loads the separately installed runtime's libllama. Startup checks do not validate model inference. End users do not need CMake, a compiler,
+PyTorch or CUDA to run speech recognition. The Windows build needs Inno Setup 6
 for the installer; without it (or with `--no-installer`) it produces the app folder and zip only.
 The installer is per-user (no admin), allows x64 Windows 10 or newer, and rejects ARM64 and 32-bit Windows.
 It replaces `{app}\_internal` on upgrade and checks the `PianpianApp` mutex held by the frozen app,
@@ -132,7 +145,8 @@ These are reports for earlier builds, **not acceptance of the current integrated
 
 As of **7 Nov 2026**, the integrated app, revised installer, engine repair/data migration and security
 changes have not been exercised natively on Windows. The integration reports use macOS Apple Silicon
-tests, including simulated Windows paths/processes. RapidOCR, Anki export, Windows 10, AMD/Intel Vulkan
+tests, including simulated Windows paths/processes. The SenseVoice/PLaMo integration added on 16 Nov 2026
+has not been run on Windows. OCR extraction has been removed. Anki export, Windows 10, AMD/Intel Vulkan
 inference and mainland-China Windows first-run downloads remain untested. Windows ARM64 is unsupported.
 
 Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,
@@ -149,64 +163,84 @@ picks this platform's model:
 
 | | macOS | Windows |
 |---|---|---|
-| Speech | Whisper large-v3-turbo 8-bit, MLX (0.864 GB) | `ggml-large-v3-turbo-q8_0.bin` for whisper.cpp (0.874 GB) |
-| Translation | Hy-MT2 1.8B 4-bit, MLX (1.0 GB) | `Hy-MT2-1.8B-Q4_K_M.gguf` for llama.cpp (1.1 GB) |
+| Speech | SenseVoice Small Q8 + FSMN-VAD (0.256 GB), native CPU | Same weights and native CPU implementation (0.256 GB) |
+| Translation | PLaMo 0.8B Q3_K_M GGUF (486 MB), llama.cpp Metal/CPU | Same weights, llama.cpp CPU by default; optional CUDA/Vulkan |
 
-Each file comes from ModelScope first, which is fast from mainland China — the Windows models are
-mirrored there under other ids (`OllmOne/whisper.cpp`, `Tencent-Hunyuan/Hy-MT2-1.8B-GGUF`; the pinned
-files are checked against the same pinned hashes as Hugging Face) — then Hugging Face, then
-hf-mirror.com. Every file is checked against the size and SHA-256 in the lock. Stopped downloads
-resume. A model already in the Hugging Face cache is used where it is. Progress goes to stdout as
-`@progress {json}` lines. The Windows binaries are pinned separately in `pipeline/runtimes.py`
-(release tag, size, SHA-256).
+SenseVoice, FSMN-VAD and PLaMo come from pinned Hugging Face revisions with hf-mirror.com fallback;
+no ModelScope mirrors are configured for these files. Every file is checked against the size and
+SHA-256 in the lock. Stopped downloads resume. A matching model in the Hugging Face cache is used
+where it is. Progress goes to stdout as `@progress {json}` lines. Native translation binaries are pinned
+separately in `pipeline/runtimes.py`. Hy-MT2 is no longer a selectable model or an inference fallback;
+its former IDs only identify saved selections that must migrate to PLaMo.
+
+PLaMo is distributed under the [PLaMo Community License](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF#license),
+not the app's MIT license. Refer to the model's license for commercial-use terms.
+
+Windows packaging also includes the three app-local Microsoft C++ runtime DLLs required by the
+pinned llama.cpp binaries. They come from the build machine's Visual Studio x64 redistributable
+folder, with a provenance/hash manifest; setup places them beside each native runtime. Missing or
+changed DLLs are repaired from the app without downloading the model/runtime again. This avoids
+requiring a separate system-wide Visual C++ installation. Their servicing follows Pianpian updates.
 
 ### Compact installation accounting
 
-On 13 Nov 2026 the pinned Windows models and CPU archives total **2,040,369,984 bytes**
-(2.04 GB, decimal). The old FP16 models with CUDA archives totalled 4,106,422,592 bytes;
-the old setup added an estimated 460 MB of installed engine space to that download figure.
-Those were different quantities. The new setup separates known remaining model/runtime bytes
-from Python/package downloads of unknown total size and the engine's estimated disk footprint.
-Setup runs GPU detection automatically in a background request, without changing the selection. It checks
+Pinned artifact sizes on 16 Nov 2026:
+
+| Component | macOS ARM64 | Windows x64 |
+|---|---:|---:|
+| SenseVoice Q8 + FSMN-VAD | 255,928,832 bytes | 255,928,832 bytes |
+| PLaMo Q3_K_M | 486,385,856 bytes | 486,385,856 bytes |
+| **All model weights** | **742,314,688 bytes** | **742,314,688 bytes** |
+| Native translation archive (default) | 16,244,820 bytes | 24,172,821 bytes |
+| Five Python package artifacts | 44,567,849 bytes | 54,700,782 bytes |
+
+Models, default runtime and package artifacts total **803,127,357 bytes on Mac** and
+**821,188,291 bytes on Windows**, **before Python itself, the dictionary, installer and retries**.
+The native speech and word-link helpers are bundled in the desktop app. Optional Windows CUDA archives
+total **663,873,465 bytes**, or Vulkan **36,970,920 bytes**, in addition to the CPU tools used for word
+links and startup fallback. No CUDA Toolkit is required or downloaded. Mac Metal/CPU share one archive.
+These are component sizes, not measured clean-install transfers or peak disk use. Setup separates
+model/runtime downloads from Python/package downloads and estimated installed engine space.
+WebView2 is a separate Microsoft download when absent on Windows.
+
+A fresh five-package Mac engine was installed on 16 Nov 2026 and occupied **105,702,916 logical bytes**,
+excluding its shared Python interpreter; filesystem allocation and caches can differ. Windows package
+sizes come from artifact metadata, not a Windows installation. The Mac self-made demo completed with
+nine subtitle cues, Chinese word times, pinyin, English, 41 model word links and a six-track study video.
+The small development checks do not establish general translation quality or alignment parity with the
+former model. Native Windows execution remains untested.
+
+Setup detects Windows GPU availability in a background request without changing the selection. It checks
 NVIDIA driver >=551.61, initializes the installed driver with `cuInit`/`cuDeviceGetCount`, and checks
 pinned app-owned CUDA runtime stamps. If llama-server is installed, `--list-devices` must report a CUDA
-device before device visibility is confirmed. Driver initialization/device enumeration do not prove model
-inference. With no compatible NVIDIA driver, detection may report a device from `vulkaninfo`.
-No CUDA Toolkit is required. Existing compatible app-managed runtimes are reused; arbitrary system
-CUDA libraries are not reused. Missing `vulkaninfo` means detection is inconclusive; users can still explicitly choose Vulkan, with CPU fallback if it fails to start.
+device before device visibility is confirmed. Driver/device enumeration does not prove model inference.
+With no compatible NVIDIA driver, detection may report a device from `vulkaninfo`; its absence is
+inconclusive. Existing compatible app-managed runtimes are reused; arbitrary system CUDA libraries are not.
 
-For scale, a metadata-only estimate on 13 Nov 2026 selected the pinned Python 3.12 package artifacts:
-151 MB for Windows x64 and 177 MB for macOS 14 arm64. The Python standalone archives referenced for
-mirror probes are 21 MB and 16 MB respectively; the installed Python patch may differ. These are
-not clean-install transfer measurements and exclude build dependencies, metadata, retries, the dictionary,
-bootstrap tools and the desktop installer. A Windows CPU installation is therefore approximately
-2.3 GB including the installer and small extras, **to verify on Windows**, rather than an exact budget.
-This assumes WebView2 is already installed; if absent, its separate Microsoft download must be added.
-The compressed download, installed space and temporary unpacking peak are separate quantities.
+Setup can clean superseded app-owned model folders after their replacements are ready. Shared Hugging
+Face caches are left alone. Existing video subtitles and timing files remain readable.
 
-Windows Whisper Q8 was absent from the configured ModelScope mirror on 13 Nov 2026, so that
-file uses pinned Hugging Face with hf-mirror fallback. The Mac Q8 model retains ModelScope support.
-Only the selected weights/config are fetched; the tokenizer bundled with mlx-whisper is reused.
-The Mac adapter presents the newer `model.safetensors` filename to mlx-whisper 0.4.3 through a
-short-lived symlink, without duplicating weights or modifying shared caches. Setup can remove the
-superseded app-owned FP16 model after installing Q8; shared Hugging Face caches are left alone.
+### SenseVoice timing contract
 
-### Q8 verification on 13 Nov 2026
+The native helper uses VAD for speech segmentation and estimates token intervals from the ASR output.
+`pipeline/sensevoice.py` adapts these to subtitle segments and word intervals consumed by line cutting,
+pinyin, word highlighting and Anki export. `zh.whisper.json` remains the compatibility filename even
+for SenseVoice output. Times are estimates, not manually annotated boundaries. Preserve raw results
+when investigating timing problems; structural checks alone cannot establish temporal accuracy.
+The current native Windows build and inference remain untested.
 
-On an Apple M1 Pro with 16 GB RAM, the self-made 44.8-second demo was transcribed using both
-FP16 and Q8 through `backend_mac.transcribe`. The isolated environment used Python 3.12.13 and
-the exact hashed release packages (MLX 0.29.3, mlx-whisper 0.4.3, mlx-lm 0.30.2). Both outputs
-matched the authored script after Chinese/punctuation normalization: 0 character edits in 100 reference
-characters. Both returned 85 valid word intervals; one cue start differed by 20 ms. Pinyin, dictionary
-words/grammar and Hy-MT2 translations (fixed seed) matched between models. Translation retained the
-baseline mistake “like a watermelon” for “一块西瓜”; this is not a translation-accuracy benchmark.
+### PLaMo word-link contract
 
-Single warmed runs took 6.65 s for FP16 and 5.93 s for Q8, including process startup and loading.
-The first FP16 run in the fresh environment took 28.42 s. These numbers do not establish a general
-speedup. The Q8 download was SHA-256 verified and the compatibility view removed after inference.
-This synthetic, short clip does not establish accuracy on accents, noise or long recordings, nor does
-it validate Windows inference or the packaged installer. Broader audio validation and a native Windows
-CPU/CUDA smoke test remain required before claiming parity there.
+`align_srt.py` sends each Chinese/English subtitle pair to the bundled `pianpian-align` helper. It loads
+the same translation GGUF through pinned libllama on CPU and extracts layer-7 hidden states. Token byte
+offsets map vectors back to the dictionary's Chinese word boundaries and English words. Mutual nearest
+word vectors supply `zh.align.json` links; dictionary matches continue to take priority in the player.
+The output format stays compatible with existing libraries. All cues are validated before existing links
+are replaced. No second neural model or Python ML stack is installed.
+
+The middle layer was checked on six self-authored sentences on Mac, and the demo produced 41 links.
+This is a heuristic, not a guarantee that every link is correct or evidence of equal quality to the former
+alignment model. CPU alignment uses the same path regardless of the translation accelerator.
 
 ### Optional Windows speed comparison
 
@@ -216,17 +250,15 @@ runtimes or a CUDA Toolkit, and never changes the saved acceleration. Already in
 run once with GPU work disabled and once with GPU work enabled. Missing prerequisites are reported
 per model; there are no guessed speed multipliers.
 
-Whisper processes the bundled 30-second excerpt of our self-made demo (960 KB mono PCM; no new library).
-Its reported total minus model-load time is extrapolated to a rough speech-only 10-minute estimate.
-Hy-MT2 uses the already bundled `llama-bench` with 256 input / 32 output synthetic tokens, two warm
-runs, and estimates 100 subtitles with that same token budget. This is a throughput estimate, not a
-translation-quality test or a guarantee for subtitle lengths/context in real videos. Downloads, OCR,
-pinyin and app overhead are excluded. CUDA model-buffer/offload diagnostics are required before a
-speedup is reported; just detecting a GPU is insufficient. Each model has a 10-minute test deadline.
-Logs stay under `<data>/cache/benchmark`; results are available in the current session's job log.
+SenseVoice and word-link generation are CPU-only, so the comparison includes translation only.
+PLaMo uses the installed `llama-bench`
+with 256 input / 32 output synthetic tokens, two warm runs, and estimates 100 subtitles with that same
+token budget. This is a throughput estimate, not a translation-quality test or a guarantee for subtitle
+lengths/context in real videos. Downloads, pinyin and app overhead are excluded. CUDA model-buffer/offload
+diagnostics are required before a speedup is reported; detecting a GPU alone is insufficient. The test
+has a 10-minute deadline. Logs stay under `<data>/cache/benchmark`; results appear in the job log.
 
-On 13 Nov 2026, the CLI flags/diagnostics were checked against whisper.cpp b5454 and llama.cpp b11851
-source. Detection, benchmark parsing, queue exclusion and real browser clicks are tested on macOS with
+The CLI flags/diagnostics use pinned llama.cpp b11851. Detection, benchmark parsing, queue exclusion and real browser clicks are tested on macOS with
 simulated Windows responses. Native Windows benchmark execution remains **not tested**. The Windows
 bundle explicitly includes stdlib `ctypes` for the driver probe; no additional Python package is added.
 
@@ -237,39 +269,35 @@ output is newer than its inputs, so it can run again after `zh.srt` is fixed by 
 
 1. **Video**: yt-dlp, H.264 first (AV1 does not play everywhere), plus the platform's Chinese
    subtitles if any. A browser name borrows that browser's Bilibili login for the AI subtitles.
-2. **Chinese**: the platform's subtitles, else OCR when the Chinese is burned into the picture
-   (macOS Vision; RapidOCR on Windows — not tested there as of 7 Nov 2026), else Whisper with word timestamps (MLX on
-   macOS, whisper.cpp on Windows). `srt_tool.py split` cuts long lines at word boundaries.
+2. **Chinese**: the platform's subtitle tracks, otherwise SenseVoice on CPU with estimated word timestamps
+   on both platforms. Burned-in text is not extracted. `srt_tool.py split` cuts long lines at word boundaries.
 3. **Pinyin and words**: pypinyin and dictionary-refined jieba segmentation, with `pinyin_fixes.txt` on top. `zh.words.json` holds
    each word's pinyin, CC-CEDICT gloss, HSK level and measure words, the tense tags from `grammar.py`
-   and Whisper's word times (for the spoken-word highlight).
-4. **English**: `translate_srt.py` runs Hy-MT2 line by line (MLX on macOS, `llama-server` on Windows),
-   with the title and the previous lines as context, so every English line keeps its Chinese line's
-   timing. On macOS, `align_srt.py` then links English words to Chinese words where the dictionary can't.
+   and the speech recognizer's word times (for the spoken-word highlight).
+4. **English**: `translate_srt.py` runs PLaMo Q3 line by line through shared native `llama-server`,
+   with PFML3 prompts containing the title and preceding lines as context. Every English line keeps
+   its Chinese timing. On both platforms, `align_srt.py` adds model links where the dictionary cannot.
 5. **study.mkv**: every track in one file, for IINA, mpv or VLC.
 
 `srt_tool.segment_words()` keeps known CC-CEDICT words whole and splits unknown Chinese jieba
 compounds into the longest dictionary parts, preserving unmatched text: `今天天气` becomes `今天 天气`.
 Pinyin overrides and V一V constructions stay whole; without the dictionary, jieba's boundaries remain.
-Pinyin tracks, word JSON and macOS model alignment share these boundaries. This is a greedy dictionary
+Pinyin tracks, word JSON and model alignment share these boundaries. This is a greedy dictionary
 heuristic, not a linguistic parser; it can also split names or reduplications absent from the dictionary.
 
 The model engines sit behind `pipeline/backend.py`, the only platform check in `pipeline/`:
-`backend.impl()` is `backend_mac.py` (mlx-whisper, mlx-lm, macOS OCR) or `backend_win.py` (whisper.cpp,
-llama.cpp's `llama-server`, RapidOCR) and requires three functions,
-`transcribe()`, `translator()` (a context manager yielding `generate(prompt, temperature, max_tokens)`)
-and `ocr()`. The steps above call those, so the prompt, the per-line loop and the line cutting are the
-same for every engine. `tests/test_backend.py` has the checks a new backend reuses (the signature
-test and the `assert_*` output helpers) and adds its own cases to.
-The optional `align(zh_srt, en_srt)` capability exists only in `backend_mac.py`, which runs
-`align_srt.py` to read MLX hidden states. `study.py` skips that step on backends without it, including
-Windows; dictionary links remain available. Running `align_srt.py` directly without MLX exits with a message.
+`backend.impl()` loads `backend_native.py` on both platforms; it delegates to shared `sensevoice.py`,
+`plamo.py` and `align_srt.py`. The interfaces are `transcribe()`, `translator()` (a context manager yielding
+`generate(prompt, temperature, max_tokens)`) and `align(zh_srt, en_srt)`. Prompts, per-line translation,
+word segmentation and alignment are shared. `tests/test_backend.py` checks their signatures and output
+contracts. The old MLX implementation has been removed.
 
 ## State
 
 Everything lives in the video's folder, so the app and the command line always agree: `source.*`,
-`title.txt`, `source.url`, `.hardsubs`, `.english-auto`, `.from-whisper`, `.split`, the `.srt` tracks,
+`title.txt`, `source.url`, `.english-auto`, `.from-whisper`, `.split`, the `.srt` tracks,
 `zh.words.json`, `zh.align.json`, `zh.whisper.json` when transcribed, `en.lines.txt` and `study.mkv`.
+Older folders may retain `.hardsubs` from the removed OCR path; their saved subtitles are not deleted.
 The self-made demo retains its original `zh.whisper.json` timing source so word-data regeneration can
 reuse spoken timings without retranscription. The first Anki export adds `.pianpian-source-id`, a UUID
 that moves with the folder. Jobs live in memory.
@@ -284,7 +312,7 @@ The status endpoint reports whether an Anki collection is usable, rather than gu
 
 The preview URL is required on export and must match the source path/size/mtime and exact interval.
 Preview MP3s live in `engine.cache_dir()/anki`, limited to 128 files; clips are limited to 120 seconds.
-The same bytes are uploaded to Anki. With raw Whisper data, old word timings are repaired in memory by
+The same bytes are uploaded to Anki. With raw ASR timing data, old word timings are repaired in memory by
 `srt_tool.py retime`; failure removes word bounds so the player offers sentence audio. User files stay intact.
 
 `PianpianId` hashes the source UUID and normalized transcript character offsets/text. Editable meanings,

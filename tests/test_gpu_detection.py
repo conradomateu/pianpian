@@ -42,13 +42,16 @@ def test_cuda_driver_missing_or_unloadable_is_not_ready(monkeypatch, missing_api
     assert not runtimes.cuda_driver()
 
 
-def installed_cuda(monkeypatch, tmp_path, tools=("whisper", "llama")):
+def installed_cuda(monkeypatch, tmp_path, tools=("llama",)):
     monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
+    from test_windows_crt import bundle
+    monkeypatch.setattr(runtimes, "CRT_DIR", bundle(tmp_path / "crt"))
     for tool in tools:
         folder = runtimes.folder(tool, "cuda")
         folder.mkdir(parents=True)
         (folder / runtimes.EXES[tool][0]).write_bytes(b"simulated executable; never run")
         (folder / ".complete").write_text(json.dumps(runtimes.stamp(tool, "cuda")))
+        runtimes._sync_crt(folder / runtimes.EXES[tool][0])
     monkeypatch.setattr(runtimes, "ensure", lambda *args, **kw: pytest.fail("detection must never install"))
     monkeypatch.setattr(runtimes.models, "download", lambda *args, **kw: pytest.fail("detection must never download"))
     monkeypatch.setattr(runtimes, "nvidia", lambda: True)
@@ -70,11 +73,17 @@ def test_installed_cuda_tools_enumerate_without_claiming_inference(monkeypatch, 
 
     monkeypatch.setattr(runtimes, "probe_run", probe)
     result = runtimes.detect()
-    assert result["cuda"] == {"driverReady": True, "installed": {"whisper": True, "llama": True}, "deviceVisible": visible}
+    assert result["cuda"] == {"driverReady": True, "installed": {"llama": True}, "deviceVisible": visible}
     assert calls == [[str(runtimes.exe("llama", "cuda")), "--list-devices"]]
-    assert "optional local test" in result["message"]
+    assert "optional local test" in result["message"] and "SenseVoice speech stays on CPU" in result["message"]
     assert "speedup" not in result
-    assert runtimes.backend_for("whisper") == "cpu"
+    assert runtimes.backend_for("llama") == "cpu"
+
+
+@pytest.fixture(autouse=True)
+def windows_runtime(monkeypatch):
+    import runtimes
+    monkeypatch.setattr(runtimes.platform_backend, "NAME", "win32")
 
 
 def test_failed_driver_initialization_never_launches_installed_cuda_tools(monkeypatch, tmp_path):
@@ -92,7 +101,7 @@ def test_driver_without_pianpian_cuda_tools_does_not_download_them(monkeypatch, 
     monkeypatch.setattr(runtimes, "cuda_driver", lambda: True)
     monkeypatch.setattr(runtimes, "probe_run", lambda *args, **kw: pytest.fail("missing tools must not launch"))
     result = runtimes.detect()
-    assert result["cuda"]["installed"] == {"whisper": False, "llama": False}
+    assert result["cuda"]["installed"] == {"llama": False}
     assert not result["benchmarkAvailable"] and not result["cuda"]["deviceVisible"]
 
 

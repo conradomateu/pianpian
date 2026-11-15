@@ -28,13 +28,14 @@ def test_the_app_tells_the_pipeline_where_its_data_is(monkeypatch, tmp_path):
     monkeypatch.delenv("PIANPIAN_MODELS", raising=False)
     monkeypatch.delenv("PIANPIAN_CACHE", raising=False)
     monkeypatch.delenv("PIANPIAN_RUNTIME", raising=False)
+    monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
     import importlib
     import engine
     importlib.reload(engine)
     env = engine.pipeline_env()
     expected = {"PIANPIAN_MODELS": str(tmp_path / "models"), "PIANPIAN_CACHE": str(tmp_path / "cache")}
-    if engine.WINDOWS:
-        expected["PIANPIAN_RUNTIME"] = str(tmp_path / "runtime")
+    expected["PIANPIAN_RUNTIME"] = str(tmp_path / "runtime")
+    expected["PIANPIAN_ACCEL"] = engine.runtimes.default_backend()
     assert env == expected
 
 

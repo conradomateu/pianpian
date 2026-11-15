@@ -3,7 +3,7 @@
 The app itself is small. What it needs to make subtitles is installed on first run, after asking:
   1. Python 3.12 and the pipeline's packages, pinned with hashes in pipeline/requirements.txt
      (pipeline/requirements-windows.txt on Windows), into <data>/engine with uv;
-  2. on Windows, the pinned whisper.cpp and llama.cpp builds for this GPU (pipeline/runtimes.py),
+  2. the pinned llama.cpp build for translation (pipeline/runtimes.py),
      into <data>/runtime;
   3. the models you pick (pipeline/models.py), into <data>/models.
 <data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\\Pianpian on Windows,
@@ -52,9 +52,8 @@ PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANP
 REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
 RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
-CHECK = ("import yt_dlp, pypinyin, jieba, zhconv, rapidocr_onnxruntime" if WINDOWS
-         else "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm")
-ENGINE_MB = 460 if WINDOWS else 650                          # Python + packages on disk (460 measured on Windows, 24 Oct 2026)
+CHECK = "import yt_dlp, pypinyin, jieba, zhconv"
+ENGINE_MB = 230                          # Python + packages on disk: rough estimate, not download size
 # each source and its mirror in mainland China, with a file both serve to time them by
 PY_BUILD = ("20251014/cpython-3.12.12+20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz" if WINDOWS
             else "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz")
@@ -68,7 +67,7 @@ SOURCES = {
 
 sys.path.insert(0, str(HERE / "pipeline"))
 import models  # noqa: E402
-import runtimes  # noqa: E402  (the pinned Windows GPU builds; only used when WINDOWS)
+import runtimes  # noqa: E402  (the pinned native translation builds)
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # the app is windowed: its own processes get no console
 PROCESSES = set()
@@ -217,18 +216,15 @@ def cache_dir() -> Path:
 
 
 def runtime_dir() -> Path:
-    """The pinned whisper.cpp / llama.cpp builds (Windows)."""
+    """The pinned llama.cpp translation builds."""
     return Path(PATH_OVERRIDES["PIANPIAN_RUNTIME"] or data_dir() / "runtime")
 
 
 def pipeline_env() -> dict:
-    """Where the pipeline finds the models, the dictionary and (on Windows) the runtime, and which GPU build
-    it runs (PIANPIAN_ACCEL: yours, else the one the setup picked): set for every job and setup step."""
-    env = {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
-    if WINDOWS:
-        env["PIANPIAN_RUNTIME"] = str(runtime_dir())
-        env["PIANPIAN_ACCEL"] = (PATH_OVERRIDES["PIANPIAN_ACCEL"] or config().get("accel") or "cpu").lower()
-    return env
+    """Model, dictionary and native-runtime paths and the saved accelerator, for every job/setup step."""
+    return {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir()),
+            "PIANPIAN_RUNTIME": str(runtime_dir()),
+            "PIANPIAN_ACCEL": (PATH_OVERRIDES["PIANPIAN_ACCEL"] or config().get("accel") or runtimes.default_backend()).lower()}
 
 
 def engine_dir() -> Path:
@@ -325,13 +321,14 @@ def free_bytes(path: Path) -> int:
 # ---------------------------------------------------------------- the setup
 def model_choices(catalog: list[dict], chosen: list[str] | None) -> list[str] | None:
     """Carry an existing opt-in to its replacement, without enabling a previously skipped task."""
-    replacements = {m["replaces"]: m["id"] for m in catalog if m.get("replaces")}
+    replacements = {old: m["id"] for m in catalog
+                    for old in ([m["replaces"]] if isinstance(m.get("replaces"), str) else m.get("replaces", []))}
     return list(dict.fromkeys(replacements.get(repo, repo) for repo in chosen)) if chosen is not None else None
 
 
 def runtime_tools(catalog: list[dict], chosen: list[str] | None) -> list[str]:
     tasks = {m["task"] for m in catalog if chosen is None or m["id"] in chosen}
-    return [tool for task, tool in (("transcribe", "whisper"), ("translate", "llama")) if task in tasks]
+    return ["llama"] if "translate" in tasks else []
 
 
 class Setup:
@@ -356,10 +353,10 @@ class Setup:
         chosen = model_choices(catalog, cfg.get("models"))
         cfg = {**cfg, "models": chosen}
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
-        runtime = runtimes.status(which=runtime_tools(catalog, chosen)) if WINDOWS else None
+        runtime = runtimes.status(which=runtime_tools(catalog, chosen))
         return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(include_pending=True) + old_engines(),
                 "runtime": runtime, "accelLocked": bool(PATH_OVERRIDES["PIANPIAN_ACCEL"]),
-                "runtimeOptions": {b: runtimes.status(backend=b) for b in ("cpu", "cuda", "vulkan")} if WINDOWS else {},
+                "runtimeOptions": {b: runtimes.status(backend=b, which=runtime_tools(catalog, None)) for b in runtimes.available_backends()},
                 "free": free_bytes(Path(cfg["data"])),
                 "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
 
@@ -367,13 +364,13 @@ class Setup:
         with self.lock:
             if self.state == "running":
                 raise RuntimeError("the setup is already running")
-            if accel not in (None, "cpu", "cuda", "vulkan"):
+            if accel is not None and accel not in runtimes.available_backends():
                 raise ValueError("unknown acceleration choice")
             previous_python, before = python(), _moveable()
             old_data = data_dir()
             want = model_choices(models.CATALOG, want)
             save_config(library=library, data=data, models=want,
-                        accel=(accel or config().get("accel") or "cpu") if WINDOWS else None)
+                        accel=accel or config().get("accel") or runtimes.default_backend())
             if data_dir() != old_data:                      # the old engine can't move (absolute paths): offered for cleanup
                 save_config(moved_from=sorted(d for d in {*config().get("moved_from", []), str(old_data)} if Path(d) != data_dir()))
             os.environ.update(pipeline_env())
@@ -386,7 +383,7 @@ class Setup:
             self.state, self.error = "running", ""
             self.steps = [{"id": "engine", "label": "Engine: Python and the pipeline's tools", "state": "waiting", "done": 0, "total": 0}]
             catalog = models.status()
-            self.runtime_tools = runtime_tools(catalog, want) if WINDOWS else []
+            self.runtime_tools = runtime_tools(catalog, want)
             if self.runtime_tools:
                 r = runtimes.status(which=self.runtime_tools)
                 self.steps.append({"id": "runtime", "label": r["label"], "state": "waiting", "done": 0, "total": r["size"]})
@@ -428,7 +425,7 @@ class Setup:
 
     def _run(self) -> None:
         try:
-            if self.runtime_tools and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
+            if WINDOWS and self.runtime_tools and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
                 # Optional GPU checks stay in the worker so setup admission remains quick.
                 chosen = config().get("accel", "cpu")
                 # Vulkan can be chosen manually without vulkaninfo; backend startup still checks it.

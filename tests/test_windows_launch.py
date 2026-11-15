@@ -16,7 +16,12 @@ def test_windows_app_uses_the_uv_environment_python(monkeypatch):
     monkeypatch.setattr(dev.sys, "executable", "C:/global/python.exe")
     monkeypatch.setattr(dev, "run", lambda *cmd: commands.append(cmd))
     dev.app()
-    assert commands == [(dev.UV, "run", "--group", "runtime", "--group", "desktop", "python", "launcher.py")]
+    assert commands == [
+        ("C:/global/python.exe", "tools/build_sensevoice.py", "--output", str(dev.ROOT / "pipeline/bin/pianpian-sensevoice.exe")),
+        ("C:/global/python.exe", "tools/build_alignment.py", "--output", str(dev.ROOT / "pipeline/bin/pianpian-align.exe")),
+        ("C:/global/python.exe", "tools/windows_crt.py", "--output", str(dev.ROOT / "pipeline/bin")),
+        (dev.UV, "run", "--group", "runtime", "--group", "desktop", "python", "launcher.py"),
+    ]
 
 
 def test_native_window_job_preserves_chinese_paths_without_main(monkeypatch, tmp_path):

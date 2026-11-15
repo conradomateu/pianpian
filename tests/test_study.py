@@ -66,8 +66,7 @@ def test_streaming_retry_with_a_real_process(monkeypatch, tmp_path, capsys):
 
 
 def test_word_links_run_only_where_the_backend_can_align(monkeypatch, tmp_path):
-    # align_srt.py needs MLX: on Windows (no align() in backend_win) a job must not start it, fail and log
-    # "No module named 'mlx'", which report.explain() would then blame for a later failure
+    # A replacement backend may omit alignment; the shared native backend supplies it on both platforms.
     import types
     for name in ("source.mp4", "zh.srt", "zh.en.srt", "en.lines.txt"):
         (tmp_path / name).write_text("x", encoding="utf-8")
@@ -78,7 +77,7 @@ def test_word_links_run_only_where_the_backend_can_align(monkeypatch, tmp_path):
     monkeypatch.setattr(study, "run", lambda *cmd, **kw: pytest.fail(f"unexpected step {cmd}"))
     monkeypatch.setattr(sys, "argv", ["study.py", str(tmp_path / "source.mp4")])
     aligned = []
-    monkeypatch.setattr(study.backend, "impl", lambda: types.SimpleNamespace())          # like backend_win
+    monkeypatch.setattr(study.backend, "impl", lambda: types.SimpleNamespace())          # a backend without word links
     study.main()
     assert aligned == []
     monkeypatch.setattr(study.backend, "impl", lambda: types.SimpleNamespace(align=lambda zh, en: aligned.append((zh, en))))

@@ -1,7 +1,7 @@
 """The app's models: downloaded once, resumable, checked, and pinned.
 
     python pipeline/models.py list                                     # JSON: each model, its size, ready or not
-    python pipeline/models.py ensure mlx-community/Hy-MT2-1.8B-4bit    # download it (progress lines on stdout)
+    python pipeline/models.py ensure pfnet/plamo-3-translate-0.8b-GGUF    # download it (progress lines on stdout)
     python pipeline/models.py lock                                     # write models.lock.json (python3 dev.py lock)
 
 models.lock.json pins every file of every model (name, size, SHA-256) and the exact revision on both
@@ -9,7 +9,7 @@ sites, so everyone gets the same files and a release can change a model on purpo
 per platform (backend.NAME), and so do the catalog rows; `lock` pins every platform from any machine.
 Files come from ModelScope first when mirrored (the row's own id, or its mirrored repo on Windows;
 fast from mainland China), then Hugging Face, then hf-mirror.com, and each is checked against the lock.
-Windows Whisper Q8 was absent from its ModelScope mirror on 13 Nov 2026; a false modelscope pin skips it.
+SenseVoice and its VAD have no configured ModelScope mirror; a false modelscope pin skips that source.
 A stopped download resumes. A model already in the Hugging Face cache ($HF_HUB_CACHE, $HF_HOME/hub or
 ~/.cache/huggingface/hub) or in ~/.cache/mandarin-kit/models (older versions) is used where it is when its files match.
 Folder: $PIANPIAN_MODELS (the app sets it to <data>/models), else ~/.cache/pianpian/models.
@@ -32,18 +32,24 @@ HERE = Path(__file__).resolve().parent
 
 LOCKFILE = HERE / "models.lock.json"
 LEGACY = Path.home() / ".cache" / "mandarin-kit" / "models"           # older versions: read, never written
-# weights, config, tokenizer; no images. .bin and .gguf are the whisper.cpp / llama.cpp builds.
+# Weights, config and tokenizer files; no images. .bin and .gguf include native-engine model weights.
 NEEDED = re.compile(r"\.(json|safetensors|jinja|model|tiktoken|npz|bin|gguf)$")
 ROWS = [
     # size: what the download weighs, for the setup page before anything is fetched;
     # include: the one file the app uses, when the repo holds more
-    {"id": "mlx-community/whisper-large-v3-turbo-8bit", "platform": "darwin", "task": "transcribe", "about": "Whisper large-v3-turbo (8-bit): Chinese speech to text",
-     "size": 863_659_497, "include": r"^(config\.json|model\.safetensors)$", "replaces": "mlx-community/whisper-large-v3-turbo"},
-    {"id": "mlx-community/Hy-MT2-1.8B-4bit", "platform": "darwin", "task": "translate", "about": "Hy-MT2 1.8B (4-bit): Chinese to English, and the word links", "size": 1_017_000_000},
-    {"id": "ggerganov/whisper.cpp", "platform": "win32", "task": "transcribe", "about": "Whisper large-v3-turbo (8-bit, whisper.cpp): Chinese speech to text",
-     "size": 874_188_075, "include": r"^ggml-large-v3-turbo-q8_0\.bin$", "modelscope_repo": "OllmOne/whisper.cpp"},
-    {"id": "tencent/Hy-MT2-1.8B-GGUF", "platform": "win32", "task": "translate", "about": "Hy-MT2 1.8B (Q4_K_M, llama.cpp): Chinese to English",
-     "size": 1_133_080_448, "include": r"^Hy-MT2-1\.8B-Q4_K_M\.gguf$", "modelscope_repo": "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF"},
+    {"id": "FunAudioLLM/SenseVoiceSmall-GGUF", "platform": "darwin", "task": "transcribe", "about": "SenseVoice Small (8-bit): Chinese speech and word timing",
+     "size": 255_928_832, "include": r"^sensevoice-small-q8\.gguf$", "hf_only": True,
+     "replaces": ["mlx-community/whisper-large-v3-turbo", "mlx-community/whisper-large-v3-turbo-8bit"],
+     "companions": [{"id": "FunAudioLLM/fsmn-vad-GGUF", "include": r"^fsmn-vad\.gguf$", "hf_only": True}]},
+    {"id": "pfnet/plamo-3-translate-0.8b-GGUF", "platform": "darwin", "task": "translate", "about": "PLaMo 0.8B (Q3_K_M): Chinese to English and word links",
+     "size": 486_385_856, "include": r"^plamo-3-translate-0\.8b-Q3_K_M\.gguf$", "hf_only": True,
+     "replaces": "mlx-community/Hy-MT2-1.8B-4bit"},
+    {"id": "FunAudioLLM/SenseVoiceSmall-GGUF", "platform": "win32", "task": "transcribe", "about": "SenseVoice Small (8-bit): Chinese speech and word timing",
+     "size": 255_928_832, "include": r"^sensevoice-small-q8\.gguf$", "hf_only": True, "replaces": "ggerganov/whisper.cpp",
+     "companions": [{"id": "FunAudioLLM/fsmn-vad-GGUF", "include": r"^fsmn-vad\.gguf$", "hf_only": True}]},
+    {"id": "pfnet/plamo-3-translate-0.8b-GGUF", "platform": "win32", "task": "translate", "about": "PLaMo 0.8B (Q3_K_M): Chinese to English and word links",
+     "size": 486_385_856, "include": r"^plamo-3-translate-0\.8b-Q3_K_M\.gguf$", "hf_only": True,
+     "replaces": "tencent/Hy-MT2-1.8B-GGUF"},
 ]
 CATALOG = [m for m in ROWS if m["platform"] == backend.NAME]
 
@@ -96,7 +102,8 @@ def sources(repo: str, entry: dict | None, f: dict) -> list[str]:
     the commit that last changed it), ModelScope's current copy, then Hugging Face's pinned revision, then
     hf-mirror.com (the usual route to Hugging Face from mainland China). The SHA-256 check makes sure that
     whichever answers, it is the pinned file."""
-    hf = (entry or {}).get("huggingface", "main")
+    repo = f.get("repo", repo)
+    hf = f.get("huggingface") or (entry or {}).get("huggingface", "main")
     ms = f.get("modelscope") or (None if entry else "master")
     # False records a missing mirror file at lock time; do not stall every install on a known 404.
     urls = [] if f.get("modelscope") is False else [f"https://www.modelscope.cn/models/{modelscope_repo(repo, entry)}/resolve/{ms or 'master'}/"]
@@ -136,11 +143,13 @@ def make_lock() -> dict:
         repo = m["id"]
         rev, hf = hf_files(m)
         try:
+            if m.get("hf_only"):
+                raise ValueError("No verified ModelScope mirror for this model")
             files = ms_files(m)
             if {f["name"] for f in files} != {f["name"] for f in hf}:
                 raise ValueError("ModelScope does not mirror all selected files")
         except (OSError, ValueError, KeyError, TypeError) as e:
-            if m["platform"] != "win32":
+            if m["platform"] != "win32" and not m.get("hf_only"):
                 raise
             print(f"  {repo}: ModelScope mirror unavailable ({e}); pinning Hugging Face only", flush=True)
             files = [{**f, "modelscope": False} for f in hf]
@@ -148,6 +157,11 @@ def make_lock() -> dict:
         for f in files:                                       # small files have no LFS hash on Hugging Face: sizes only
             if hf_sha.get(f["name"]) and hf_sha[f["name"]] != f["sha256"]:
                 sys.exit(f"{repo}/{f['name']}: ModelScope and Hugging Face serve different files; not locking")
+        for companion in m.get("companions", []):
+            companion_rev, companion_files = hf_files(companion)
+            files += [{**f, "repo": companion["id"], "huggingface": companion_rev, "modelscope": False} for f in companion_files]
+        if len({f["name"] for f in files}) != len(files):
+            raise ValueError(f"{repo}: companion model filenames must be unique")
         entry = {"huggingface": rev, "files": files}
         if m.get("modelscope_repo"):
             entry["modelscope_repo"] = m["modelscope_repo"]
@@ -199,20 +213,13 @@ def status() -> list[dict]:
 def unused(include_pending: bool = False) -> list[dict]:
     """Superseded app-owned models. Setup may preview cleanup that waits for a verified replacement."""
     keep = {str(p) for m in CATALOG if (p := local_path(m["id"]))}
-    pending = {folder_name(m["replaces"]) for m in CATALOG if m.get("replaces") and local_path(m["id"]) is None}
-    upgrading_whisper = any(f["name"] == "ggml-large-v3-turbo-q8_0.bin"
-                            for f in lock().get("ggerganov/whisper.cpp", {}).get("files", []))
+    pending = {folder_name(old) for m in CATALOG if local_path(m["id"]) is None
+               for old in ([m["replaces"]] if isinstance(m.get("replaces"), str) else m.get("replaces", []))}
     out = []
     for d in sorted(cache().glob("*__*")) if cache().exists() else []:
         if d.is_symlink():
             continue
         if d.name in pending and not include_pending:
-            continue
-        if upgrading_whisper and d.name == folder_name("ggerganov/whisper.cpp") and cache() != LEGACY:
-            # v0.2.0's FP16 file shares a repo folder with Q8; deletion waits for Q8 verification.
-            old = d / "ggml-large-v3-turbo.bin"
-            if (include_pending or local_path("ggerganov/whisper.cpp")) and old.is_file() and not old.is_symlink():
-                out.append({"name": "Whisper large-v3-turbo (old FP16)", "path": str(old), "bytes": old.stat().st_size})
             continue
         if d.is_dir() and str(d) not in keep and cache() != LEGACY:   # the shared command-line folder is left alone
             out.append({"name": d.name.replace("__", "/"), "path": str(d), "bytes": sum(f.stat().st_size for f in d.rglob("*") if f.is_file())})
@@ -226,9 +233,6 @@ def remove_unused() -> int:
         path = Path(m["path"])
         if path.parent == cache():
             shutil.rmtree(path)
-            freed += m["bytes"]
-        elif path.parent == cache() / folder_name("ggerganov/whisper.cpp") and path.name == "ggml-large-v3-turbo.bin":
-            path.unlink()
             freed += m["bytes"]
     return freed
 
