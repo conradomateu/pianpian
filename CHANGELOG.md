@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/conradomateu/pianpian/compare/pianpian-v0.2.0...pianpian-v0.3.0) (2026-11-16)
+
+
+### Features
+
+* reduce model downloads with native speech and translation ([9fd0fa6](https://github.com/conradomateu/pianpian/commit/9fd0fa6c1bc8605390e6e96b1a08de825c67ac4c))
+
 ## [0.2.0](https://github.com/conradomateu/pianpian/compare/pianpian-v0.1.4...pianpian-v0.2.0) (2026-11-07)
 
 
