@@ -45,7 +45,8 @@ def speech_payload(folder: Path, *, windows: bool = False) -> tuple[Path, list[t
     from build_sensevoice import build
     helper = build(folder / ("pianpian-sensevoice.exe" if windows else "pianpian-sensevoice"))
     notices = [helper.with_name(name) for name in ("sensevoice-NOTICES.txt", "build-manifest.json")]
-    for path in [helper, *notices]:
+    variants = [helper.with_name("pianpian-sensevoice-avx2.exe")] if windows else []
+    for path in [helper, *variants, *notices]:
         if not path.is_file():
             raise RuntimeError(f"native speech build omitted {path.name}")
     return helper, [(str(path), "pipeline/bin") for path in notices]

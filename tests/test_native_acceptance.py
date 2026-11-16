@@ -2,6 +2,9 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -9,6 +12,31 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("native_acceptance", ROOT / "tools" / "check_native_pipeline.py")
 a = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(a)
+
+
+def test_acceptance_timeout_stops_windows_descendants_before_waiting(monkeypatch):
+    process = MagicMock()
+    process.__enter__.return_value = process
+    process.pid = 42
+    process.communicate.side_effect = [subprocess.TimeoutExpired(["pipeline"], 1), (None, None)]
+    process.poll.return_value = 0
+    start, stop = MagicMock(return_value=process), MagicMock()
+    monkeypatch.setattr(a.sys, "platform", "win32")
+    monkeypatch.setattr(a.subprocess, "Popen", start)
+    monkeypatch.setattr(a.subprocess, "run", stop)
+    with pytest.raises(subprocess.TimeoutExpired):
+        a.run_checked(["pipeline"], timeout=1)
+    stop.assert_called_once_with(["taskkill", "/F", "/T", "/PID", "42"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    assert start.call_args.kwargs["start_new_session"] is False
+    assert process.communicate.call_count == 2
+
+
+def test_acceptance_preserves_output_and_nonzero_errors():
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        a.run_checked([sys.executable, "-c", "print('native failed'); raise SystemExit(7)"],
+                      timeout=30, stdout=subprocess.PIPE, text=True)
+    assert failure.value.returncode == 7 and failure.value.output.strip() == "native failed"
 
 
 def outputs(tmp_path):

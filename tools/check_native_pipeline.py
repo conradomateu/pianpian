@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,32 @@ import wave
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = "pfnet/plamo-3-translate-0.8b-GGUF"
 PACKAGES = {"imageio-ffmpeg", "jieba", "pypinyin", "yt-dlp", "zhconv"}
+
+
+def run_checked(command, *, timeout, **kwargs):
+    """Acceptance timeouts must stop native grandchildren as well as the Python runner."""
+    with subprocess.Popen(command, start_new_session=sys.platform != "win32", **kwargs) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            if sys.platform == "win32":
+                try:
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                if process.poll() is None:
+                    process.kill()
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.communicate()
+            raise
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, command, stdout, stderr)
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def require(condition: bool, message: str) -> None:
@@ -114,8 +141,8 @@ def main() -> None:
     shutil.copyfile(source, work / "source.mp4")
     log_path = work / "pipeline.log"
     with log_path.open("w", encoding="utf-8") as log:
-        subprocess.run([sys.executable, str(pipeline / "study.py"), str(work / "source.mp4")],
-                       env=env, check=True, stdout=log, stderr=subprocess.STDOUT, timeout=1200)
+        run_checked([sys.executable, str(pipeline / "study.py"), str(work / "source.mp4")],
+                    env=env, stdout=log, stderr=subprocess.STDOUT, timeout=1200)
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     wav = work / "validation.wav"
     subprocess.run([ffmpeg, "-loglevel", "error", "-y", "-i", str(work / "source.mp4"), "-vn", "-ac", "1", "-ar", "16000", str(wav)], check=True, timeout=60)

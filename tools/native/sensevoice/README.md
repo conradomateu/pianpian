@@ -9,12 +9,23 @@ PyTorch, CUDA, CMake or an alignment model.
 `sources.lock.json` pins the required FunASR and ggml sources by immutable commit,
 size and SHA256. The builder verifies cached files too. It applies `runtime.patch`
 with exact context checking, builds static dependencies, runs CTest, and writes
-the executable, `sensevoice-NOTICES.txt` and `build-manifest.json`. Source/build
+the executables, `sensevoice-NOTICES.txt` and `build-manifest.json`. Source/build
 caches remain under `scratch/build/sensevoice`; no weights or upstream source
-tarballs are committed. The packaged CPU baseline disables machine-specific x86
-ISA flags and dynamic OpenMP dependencies. MSVC uses a static C runtime and a UTF-8
-application manifest for Chinese Windows paths. Windows execution is not yet
-locally tested; CI must build and exercise the Windows executable.
+tarballs are committed. Windows ships a portable x64 entry point and a separate
+`pianpian-sensevoice-avx2.exe`. The entry point selects the optimized sibling only
+when CPUID advertises SSE4.2, FMA, XSAVE/OSXSAVE, AVX, F16C, BMI1/2 and AVX2, and
+XGETBV confirms OS support for saving XMM/YMM registers. Otherwise it uses the
+baseline. Both helpers are static and CPU-only, without dynamic OpenMP or CUDA
+dependencies. The optimized helper adds executable bytes, not another model.
+MSVC uses a static C runtime and UTF-8 application manifests; forwarding to the
+optimized helper uses an absolute path and UTF-16 arguments without a shell.
+`--cpu-profile` prints the selected profile without loading models.
+`PIANPIAN_SENSEVOICE_CPU=baseline` disables dispatch for a diagnostic comparison;
+other values never force an unsupported instruction set.
+
+The 16 Nov 2026 Windows CI compiled the earlier baseline successfully, but timed
+out after 20 minutes during speech on the 44.8-second demo. The new AVX2 dispatch
+has not yet been executed on Windows; CI must measure both speed and output.
 The Mac build forces the macOS 14 deployment target before compiler detection;
 the builder checks the resulting Mach-O minimum version before packaging it.
 
@@ -24,7 +35,8 @@ the builder checks the resulting Mach-O minimum version before packaging it.
 document on stdout. Diagnostics stay on stderr. It contains `segments`, each with
 `start`, `end`, `text` and `words`; each word/token contains `word`, `start`, `end`.
 Times are seconds from the beginning of the original audio. Silence returns an
-empty segment array. `--threads` selects CPU threads (default 8); `--help` and
+empty segment array. `--threads` selects CPU threads (by default, detected hardware
+threads capped at 8 and at least 1); `--help` and
 `--version` succeed without weights.
 
 The neural forward pass and greedy decoded sequence are unchanged. The adapter
@@ -54,3 +66,20 @@ The 16-clip FLEURS CER remained 42/543 characters. Thus the portable build is no
 claimed bit-identical to the upstream binary, and the sample is not proof of
 unchanged accuracy on arbitrary audio. Detailed results live in ignored
 `scratch/native-sensevoice/`.
+
+The CPU optimization comparison on **16 Nov 2026**, Apple M1 Pro (10 hardware
+threads), produced byte-identical JSON before/after on all 32 clips: transcripts
+and 2,201 token intervals. The 709 seconds of audio took 29.88 vs 30.02 seconds
+at four threads. The 44.8-second demo at default threads had median wall times
+of 0.967 vs 0.955 seconds over three runs, including model loading with warm file
+caches. Mac performance is effectively unchanged; this is not a Windows speedup
+claim. The graph metadata reservation falls from 1 GiB to about 13.4 MB, but Mac
+peak resident memory stayed around 317 MB. Reports live in ignored
+`scratch/sensevoice-optimization/`.
+
+`tools/check_sensevoice.py --pipeline <packaged pipeline>` runs the short baseline
+and selected CPU profile, the full demo and silence. CI saves JSON and stderr
+logs under `scratch/native-acceptance/数据/speech/`. It rejects invalid timing,
+unexpected silence/speech, changed short-sample transcription and a 180-second
+per-case timeout; interval differences are recorded for inspection. This is a
+single-run diagnostic, not a statistical benchmark or a general accuracy score.

@@ -31,7 +31,7 @@ class BuildIntegrity(unittest.TestCase):
             native.mkdir()
             lock = {"files": [], "funasr_commit": "a", "llama_commit": "b"}
             (native / "sources.lock.json").write_text(json.dumps(lock), encoding="utf-8")
-            for name in ("runtime.patch", "timestamps.h", "CMakeLists.txt", "timestamps_test.cpp", "windows.manifest"):
+            for name in ("runtime.patch", "timestamps.h", "cpu_dispatch.h", "cpu_dispatch_test.cpp", "CMakeLists.txt", "timestamps_test.cpp", "windows.manifest"):
                 (native / name).write_text("", encoding="utf-8")
             upstream = cache / "upstream"
             fixtures = {"funasr/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp": '// ▁中文\n',
@@ -41,9 +41,11 @@ class BuildIntegrity(unittest.TestCase):
                 path = upstream / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text, encoding="utf-8")
-            executable = cache / "build/bin" / ("pianpian-sensevoice.exe" if builder.os.name == "nt" else "pianpian-sensevoice")
-            executable.parent.mkdir(parents=True)
-            executable.write_bytes(b"fake binary")
+            executable = cache / "build/bin/pianpian-sensevoice.exe"
+            for profile in ("build", "build-avx2"):
+                compiled = cache / profile / "bin/pianpian-sensevoice.exe"
+                compiled.parent.mkdir(parents=True)
+                compiled.write_bytes(b"fake binary " + profile.encode())
             original_read = Path.read_text
 
             def windows_read(path, encoding=None, **kwargs):
@@ -56,7 +58,12 @@ class BuildIntegrity(unittest.TestCase):
                     patch.object(builder.subprocess, "run"), \
                     patch.object(builder.subprocess, "check_output", return_value="test version"):
                 output = builder.build(root / "output" / executable.name, cache_dir=cache)
-            self.assertEqual(output.read_bytes(), b"fake binary")
+            self.assertEqual(output.read_bytes(), b"fake binary build")
+            optimized = output.with_name("pianpian-sensevoice-avx2.exe")
+            self.assertEqual(optimized.read_bytes(), b"fake binary build-avx2")
+            manifest = json.loads(output.with_name("build-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(manifest["variants"]), {"baseline", "avx2"})
+            self.assertEqual(manifest["variants"]["avx2"]["sha256"], hashlib.sha256(optimized.read_bytes()).hexdigest())
             self.assertEqual((cache / "build/funasr-sensevoice.cpp").read_text(encoding="utf-8"), '// ▁中文\n')
             self.assertIn("FunASR ©", output.with_name("sensevoice-NOTICES.txt").read_text(encoding="utf-8"))
 

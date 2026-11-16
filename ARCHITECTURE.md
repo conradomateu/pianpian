@@ -129,7 +129,7 @@ before running `dev.py check` with `UV_NO_SYNC=1`.
 
 ### Windows test history
 
-These are reports for earlier builds, **not acceptance of the current integrated build**:
+These reports distinguish earlier releases from **acceptance of the current integrated build**:
 
 - **24 Oct 2026:** demo pipeline on Windows 11 Pro 25H2, Ryzen 9 7940HS, 16 GB RAM, RTX 4060 Laptop
   8 GB, driver 591.74. This predates the rewritten integration; see [PR #11](https://github.com/conradomateu/pianpian/pull/11).
@@ -142,11 +142,18 @@ These are reports for earlier builds, **not acceptance of the current integrated
   installed WebView2 window/server launch and uninstall were reported successful. The installer wizard
   and SmartScreen warning were not exercised. This predates the x64-only gate, upgrade cleanup, mutex
   and isolated pinned build changes. The full first-run setup console watch was still pending.
+- **16 Nov 2026, compact build `d43a8b2`:** [Windows CI](https://github.com/conradomateu/pianpian/actions/runs/43745206869)
+  compiled the installer and launched packaged SenseVoice. The 44.8-second demo reached six of eight
+  speech segments before the 1,200-second integration timeout. Translation/alignment were not reached.
+  The subsequent change adds a safely selected AVX2 helper, adaptive CPU threads (also for VAD),
+  and a smaller graph metadata arena. Its Windows speed and output still require CI acceptance.
+  `tools/check_sensevoice.py` now records short baseline/optimized comparisons, the full demo and silence,
+  with separate logs and timings before the full pipeline test. Timeout cleanup stops descendant processes.
 
 As of **7 Nov 2026**, the integrated app, revised installer, engine repair/data migration and security
 changes have not been exercised natively on Windows. The integration reports use macOS Apple Silicon
 tests, including simulated Windows paths/processes. The SenseVoice/PLaMo integration added on 16 Nov 2026
-has not been run on Windows. OCR extraction has been removed. Anki export, Windows 10, AMD/Intel Vulkan
+has not passed full Windows acceptance (see the timeout above). OCR extraction has been removed. Anki export, Windows 10, AMD/Intel Vulkan
 inference and mainland-China Windows first-run downloads remain untested. Windows ARM64 is unsupported.
 
 Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,

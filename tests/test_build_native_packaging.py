@@ -81,6 +81,20 @@ def test_mac_bundle_collects_native_binary_notices_and_checks_launch(monkeypatch
     assert calls.index(smoke) > next(i for i, cmd in enumerate(calls) if cmd[:2] == ["codesign", "--verify"])
 
 
+def test_windows_speech_packaging_requires_both_cpu_variants(monkeypatch, tmp_path):
+    def build(output):
+        output.write_bytes(b"baseline")
+        for name in ("sensevoice-NOTICES.txt", "build-manifest.json"):
+            output.with_name(name).write_text("included")
+        return output
+    monkeypatch.setitem(sys.modules, "build_sensevoice", SimpleNamespace(build=build))
+    with pytest.raises(RuntimeError, match="pianpian-sensevoice-avx2.exe"):
+        ba.speech_payload(tmp_path, windows=True)
+    (tmp_path / "pianpian-sensevoice-avx2.exe").write_bytes(b"optimized")
+    helper, data = ba.speech_payload(tmp_path, windows=True)
+    assert helper.name == "pianpian-sensevoice.exe" and len(data) == 2
+
+
 def test_alignment_packaging_rejects_missing_notices(monkeypatch, tmp_path):
     def incomplete(output):
         output.write_bytes(b"helper")

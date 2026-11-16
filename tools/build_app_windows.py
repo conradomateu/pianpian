@@ -66,15 +66,16 @@ def pyinstaller(debug_console: bool) -> None:
         args += ["--add-data", f"{(ROOT / src) if not Path(src).is_absolute() else src};{dest}"]
     uv = uv_exe()
     args += ["--add-binary", f"{uv};.", "--add-binary", f"{speech};pipeline/bin", "--add-binary", f"{alignment};pipeline/bin"]
+    args += ["--add-binary", f"{speech.with_name('pianpian-sensevoice-avx2.exe')};pipeline/bin"]
     for path in crt:
         if path.suffix == ".dll":
             args += ["--add-binary", f"{path};pipeline/bin"]
     run(uv, "run", "--isolated", "--no-project", "--python", "3.12", "--with", PYINSTALLER, "--with", PYWEBVIEW,
         "pyinstaller", *args, ROOT / "launcher.py", cwd=ROOT)
-    for path in crt:
+    for path in [*crt, speech, speech.with_name("pianpian-sensevoice-avx2.exe")]:
         packaged = DIST / "Pianpian" / "_internal" / "pipeline" / "bin" / path.name
         if not packaged.is_file() or packaged.read_bytes() != path.read_bytes():
-            raise RuntimeError(f"Packaged Microsoft runtime differs from its verified build source: {path.name}")
+            raise RuntimeError(f"Packaged native runtime differs from its verified build source: {path.name}")
     run(DIST / "Pianpian" / "_internal" / "pipeline" / "bin" / "pianpian-sensevoice.exe", "--help")
     run(DIST / "Pianpian" / "_internal" / "pipeline" / "bin" / "pianpian-align.exe", "--help")
 

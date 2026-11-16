@@ -110,29 +110,37 @@ def build(output: Path, *, cache_dir: Path | None = None, jobs: int = 2) -> Path
         list(pool.map(lambda entry: _fetch(entry, upstream), lock["files"]))
     original = upstream / "funasr" / "sensevoice" / "funasr-sensevoice" / "funasr-sensevoice.cpp"
     modified = apply_patch(original.read_text(encoding="utf-8"), (NATIVE / "runtime.patch").read_text(encoding="utf-8"))
-    _write_changed(build_dir / "funasr-sensevoice.cpp", modified.encode("utf-8"))
-    subprocess.run(["cmake", "-S", str(NATIVE), "-B", str(build_dir),
-                    f"-DUPSTREAM={upstream}", f"-DPYTHON_FOR_BUILD={sys.executable}",
-                    "-DGIT_EXE=OFF", f"-DGGML_BUILD_COMMIT={lock['llama_commit']}",
-                    "-DCMAKE_BUILD_TYPE=Release"], check=True)
-    subprocess.run(["cmake", "--build", str(build_dir), "--config", "Release",
-                    "--target", "pianpian-sensevoice", "sensevoice-timestamps-test",
-                    "--parallel", str(jobs)], check=True)
-    subprocess.run(["ctest", "--test-dir", str(build_dir), "-C", "Release", "--output-on-failure"], check=True)
-    executable = build_dir / "bin" / ("pianpian-sensevoice.exe" if os.name == "nt" else "pianpian-sensevoice")
-    subprocess.run([str(executable), "--help"], check=True, capture_output=True)
-    version = subprocess.check_output([str(executable), "--version"], text=True).strip()
+    windows = sys.platform == "win32"
+    variants = {}
+    for profile in (("baseline", "avx2") if windows else ("baseline",)):
+        profile_dir = build_dir if profile == "baseline" else cache / "build-avx2"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        _write_changed(profile_dir / "funasr-sensevoice.cpp", modified.encode("utf-8"))
+        subprocess.run(["cmake", "-S", str(NATIVE), "-B", str(profile_dir),
+                        f"-DUPSTREAM={upstream}", f"-DPYTHON_FOR_BUILD={sys.executable}",
+                        "-DGIT_EXE=OFF", f"-DGGML_BUILD_COMMIT={lock['llama_commit']}",
+                        f"-DPIANPIAN_CPU_VARIANT={profile}", "-DCMAKE_BUILD_TYPE=Release"], check=True)
+        subprocess.run(["cmake", "--build", str(profile_dir), "--config", "Release",
+                        "--target", "pianpian-sensevoice", "sensevoice-timestamps-test", "sensevoice-cpu-test",
+                        "--parallel", str(jobs)], check=True)
+        subprocess.run(["ctest", "--test-dir", str(profile_dir), "-C", "Release", "--output-on-failure"], check=True)
+        executable = profile_dir / "bin" / ("pianpian-sensevoice.exe" if windows else "pianpian-sensevoice")
+        target = output if profile == "baseline" else output.with_name("pianpian-sensevoice-avx2.exe")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".new")
+        shutil.copy2(executable, temporary)
+        temporary.replace(target)
+        variants[profile] = {"file": target.name, "sha256": digest(target.read_bytes()), "bytes": target.stat().st_size}
+    # Launch only the baseline entry point; it selects the safe optimized sibling on this machine.
+    subprocess.run([str(output), "--help"], check=True, capture_output=True)
+    version = subprocess.check_output([str(output), "--version"], text=True).strip()
     macos_minimum = None
     if sys.platform == "darwin":
-        load_commands = subprocess.check_output(["otool", "-l", str(executable)], text=True)
+        load_commands = subprocess.check_output(["otool", "-l", str(output)], text=True)
         minimum = re.search(r"cmd LC_BUILD_VERSION\s+cmdsize \d+\s+platform \d+\s+minos ([\d.]+)", load_commands)
         if not minimum or tuple(int(n) for n in minimum[1].split(".")[:2]) > (14, 0):
             raise RuntimeError("SenseVoice executable exceeds Pianpian's macOS 14 minimum")
         macos_minimum = minimum[1]
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_name(output.name + ".new")
-    shutil.copy2(executable, temporary)
-    temporary.replace(output)
     miniaudio = (upstream / "funasr" / "funasr-common" / "miniaudio.h").read_text(encoding="utf-8")
     miniaudio_license = miniaudio[miniaudio.rindex("This software is available as a choice"):]
     notices = ("Pianpian SenseVoice native runtime\n"
@@ -144,10 +152,10 @@ def build(output: Path, *, cache_dir: Path | None = None, jobs: int = 2) -> Path
     manifest = {"version": version, "executable_sha256": digest(output.read_bytes()),
                 "executable_bytes": output.stat().st_size, "funasr_commit": lock["funasr_commit"],
                 "llama_commit": lock["llama_commit"], "cpu_only": True,
-                "macos_minimum": macos_minimum,
+                "macos_minimum": macos_minimum, "variants": variants,
                 "sources_sha256": digest((NATIVE / "sources.lock.json").read_bytes()),
                 "adapter_sha256": {name: digest((NATIVE / name).read_bytes()) for name in
-                                   ("runtime.patch", "timestamps.h", "CMakeLists.txt", "timestamps_test.cpp", "windows.manifest")}}
+                                   ("runtime.patch", "timestamps.h", "cpu_dispatch.h", "cpu_dispatch_test.cpp", "CMakeLists.txt", "timestamps_test.cpp", "windows.manifest")}}
     (output.parent / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return output
 

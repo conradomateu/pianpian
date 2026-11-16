@@ -1,14 +1,16 @@
 --- a/funasr-sensevoice.cpp
 +++ b/funasr-sensevoice.cpp
-@@ -37,6 +37,7 @@
+@@ -37,6 +37,9 @@
  #include "funasr_audio.h"
  #include "funasr_vad.h"     // built-in FSMN-VAD front end (--vad segmentation)
  #include "funasr_srt.h"
 +#include "timestamps.h"
++#include "cpu_dispatch.h"
++#include <thread>
  #include <utility>
  static const int FS=16000,WINLEN=400,SHIFT=160,NFFT=512,NMEL=80,LFR_M=7,LFR_N=6;
  static const float PREEMPH=0.97f,LOWF=20.0f,HIGHF=8000.0f;
-@@ -49,6 +50,7 @@
+@@ -49,6 +52,7 @@
        re[i+k]=ur+vr;im[i+k]=ui+vi;re[i+k+len/2]=ur-vr;im[i+k+len/2]=ui-vi;float nc=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nc;}}}
  }
  static std::vector<float> compute_fbank(std::vector<float> wav,int&T_out){
@@ -16,7 +18,7 @@
    for(auto&v:wav)v*=32768.0f; std::vector<float> win(WINLEN);
    for(int i=0;i<WINLEN;i++)win[i]=0.54f-0.46f*cosf(2.0f*M_PI*i/(WINLEN-1));
    const int NBIN=NFFT/2+1; float bw=(float)FS/NFFT,ml=melf(LOWF),mh=melf(HIGHF),dm=(mh-ml)/(NMEL+1);
-@@ -253,8 +255,9 @@
+@@ -253,8 +257,9 @@
    return sv_trim(s);
  }
  
@@ -24,26 +26,27 @@
 -  std::string gguf_path,fbank_path,wav_path,vad_path; int vad_maxseg=30000; bool ids_mode=false,keep_tags=false,srt_mode=false;
 +int pianpian_main(int argc,char**argv){
 +  std::string gguf_path,fbank_path,wav_path,vad_path; int vad_maxseg=30000; bool ids_mode=false,keep_tags=false,srt_mode=false,json_mode=false;
-+  int threads=8;
++  int threads=(int)std::max(1u,std::min(8u,std::thread::hardware_concurrency()));
    std::string backend_name="cpu";
    for(int i=1;i<argc;i++){ if(!strcmp(argv[i],"-m")&&i+1<argc)gguf_path=argv[++i];
      else if(!strcmp(argv[i],"-f")&&i+1<argc)fbank_path=argv[++i];
-@@ -265,8 +268,14 @@
+@@ -265,8 +270,15 @@
      else if(!strcmp(argv[i],"--ids"))ids_mode=true;
      else if(!strcmp(argv[i],"--keep-tags"))keep_tags=true;
      else if(!strcmp(argv[i],"--srt"))srt_mode=true;
 +    else if(!strcmp(argv[i],"--json"))json_mode=true;
 +    else if(!strcmp(argv[i],"--threads")&&i+1<argc)threads=std::stoi(argv[++i]);
-+    else if(!strcmp(argv[i],"--version")){printf("pianpian-sensevoice-1 FunASR-a57c05bfe2a91b5e0cb0983479634eba3e28ede5\n");return 0;}
++    else if(!strcmp(argv[i],"--version")){printf("pianpian-sensevoice-2 FunASR-a57c05bfe2a91b5e0cb0983479634eba3e28ede5\n");return 0;}
 +    else if(!strcmp(argv[i],"--help")||!strcmp(argv[i],"-h")){printf("Pianpian SenseVoice: -m model.gguf -a audio.wav [--vad fsmn-vad.gguf] --json [--threads N] [--backend cpu]\nJSON contains CTC-estimated word intervals in absolute seconds.\n");return 0;}
      else {fprintf(stderr,"usage: %s -m sensevoice.gguf (-a audio.wav | -f fbank.bin) [--vad fsmn-vad.gguf [--vad-maxseg ms]] [--backend cpu|cuda|vulkan] [--srt] [--ids] [--keep-tags]\n",argv[0]);return 1;} }
    if(gguf_path.empty()||(fbank_path.empty()&&wav_path.empty())){fprintf(stderr,"missing args\n");return 1;}
 +  if(threads<1||threads>128){fprintf(stderr,"threads must be 1..128\n");return 1;}
 +  if(json_mode&&(srt_mode||ids_mode||keep_tags||!fbank_path.empty())){fprintf(stderr,"--json requires audio and is incompatible with --srt/--ids/--keep-tags/-f\n");return 1;}
++  trace_stage("[sensevoice] CPU threads: %d (available: %u)",threads,std::thread::hardware_concurrency());
    graph_backend graph_be=make_graph_backend(backend_name);
  
    // load model
-@@ -300,8 +309,16 @@
+@@ -300,14 +312,25 @@
    } else {
      fprintf(stderr,"unsupported embed type: %s\n",ggml_type_name(embed->type));return 1;
    }
@@ -60,16 +63,29 @@
      int N=nq+T; std::vector<float> inp((size_t)N*F);
      for(int i=0;i<nq;i++) memcpy(&inp[(size_t)i*F], &embed_f32[(size_t)qtok[i]*F], F*sizeof(float));
      memcpy(&inp[(size_t)nq*F], fb.data(), (size_t)T*F*sizeof(float));
-@@ -321,16 +338,24 @@
+     float sc=sqrtf((float)D); for(auto&v:inp)v*=sc; add_posenc(inp,N,F);
+     trace_stage("[sensevoice] building graph: %d frames",N);
+-    ggml_init_params cp={(size_t)1024*1024*1024,nullptr,true}; ggml_context*c=ggml_init(cp);
++    // Only tensor metadata lives here; activations are allocated separately by gallocr.
++    const size_t metadata_bytes=32768*ggml_tensor_overhead()+ggml_graph_overhead_custom(32768,false);
++    ggml_init_params cp={metadata_bytes,nullptr,true}; ggml_context*c=ggml_init(cp);
++    if(!c)throw std::runtime_error("SenseVoice graph metadata allocation failed");
+     ggml_tensor*x=ggml_new_tensor_2d(c,GGML_TYPE_F32,F,N); ggml_set_input(x);
+     ggml_tensor*h=sanm_layer(c,m,"encoder.encoders0.0.",x,N,false);
+     for(int i=0;i<m.c.num_blocks-1;i++) h=sanm_layer(c,m,"encoder.encoders."+std::to_string(i)+".",h,N,true);
+@@ -321,16 +344,25 @@
      trace_stage("[sensevoice] allocating graph");
      ggml_gallocr_t ga=ggml_gallocr_new(graph_be.buffer_type); ggml_gallocr_alloc_graph(ga,gf);
      trace_stage("[sensevoice] graph allocated");
 -    ggml_backend_tensor_set(x,inp.data(),0,ggml_nbytes(x)); if(graph_be.is_cpu) ggml_backend_cpu_set_n_threads(graph_be.backend,8);
+-    trace_stage("[sensevoice] compute starting");
 +    ggml_backend_tensor_set(x,inp.data(),0,ggml_nbytes(x)); if(graph_be.is_cpu) ggml_backend_cpu_set_n_threads(graph_be.backend,threads);
-     trace_stage("[sensevoice] compute starting");
++    const int64_t compute_start=ggml_time_us();
++    trace_stage("[sensevoice] compute starting (metadata: %zu bytes)",metadata_bytes);
      enum ggml_status compute_status=ggml_backend_graph_compute(graph_be.backend,gf);
-     trace_stage("[sensevoice] compute complete: status=%d",(int)compute_status);
+-    trace_stage("[sensevoice] compute complete: status=%d",(int)compute_status);
 -    if(compute_status!=GGML_STATUS_SUCCESS){fprintf(stderr,"compute failed\n");}
++    trace_stage("[sensevoice] compute complete: status=%d, %.3fs",(int)compute_status,(ggml_time_us()-compute_start)/1e6);
 +    if(compute_status!=GGML_STATUS_SUCCESS)throw std::runtime_error("SenseVoice compute failed");
      std::vector<float> lg((size_t)V*N); ggml_backend_tensor_get(logits,lg.data(),0,ggml_nbytes(logits));
      std::vector<int> seg_ids; int prev=-1;   // greedy CTC: argmax per frame -> collapse -> drop blank
@@ -87,7 +103,15 @@
      std::string result;
      if(emit_ids){ for(int id:seg_ids){ result+=std::to_string(id); result+=" "; } }
      else { result=detok_sv(seg_ids,vocab,keep_tags); }
-@@ -353,7 +378,8 @@
+@@ -346,14 +378,15 @@
+     trace_stage("[sensevoice] audio ready: %zu samples",wav.size());
+     std::vector<std::pair<int,int>> segs;
+     trace_stage("[sensevoice] running VAD");
+-    if(!funasr_vad_segments(vad_path,wav,vad_maxseg,segs)){fprintf(stderr,"vad failed\n");return 1;}
++    if(!funasr_vad_segments(vad_path,wav,vad_maxseg,segs,threads)){fprintf(stderr,"vad failed\n");return 1;}
+     trace_stage("[sensevoice] VAD ready: %zu segments",segs.size());
+     for(auto&s:segs){ int off=(int)((int64_t)s.first*16000/1000), end=(int)((int64_t)s.second*16000/1000);
+       if(end>(int)wav.size())end=wav.size(); if(end-off<WINLEN)continue;
        std::vector<float> seg(wav.begin()+off,wav.begin()+end); int t=0; auto fb=compute_fbank(seg,t);
        std::string text=run_seg(fb,t);
        if(text.empty())continue;
@@ -97,7 +121,7 @@
        else { printf("%s",text.c_str()); }
        fflush(stdout);
      }
-@@ -373,13 +399,20 @@
+@@ -373,13 +406,23 @@
        end_ms=(int)((int64_t)T*LFR_N*SHIFT*1000/FS);
      }
      std::string text=run_seg(fb,T);
@@ -117,6 +141,9 @@
  }
 +
 +int main(int argc,char**argv){
-+  try{return pianpian_main(argc,argv);}
++  try{
++    if(auto dispatched=pianpian::dispatch_cpu(argc,argv))return *dispatched;
++    return pianpian_main(argc,argv);
++  }
 +  catch(const std::exception&e){fprintf(stderr,"SenseVoice failed: %s\n",e.what());return 1;}
 +}

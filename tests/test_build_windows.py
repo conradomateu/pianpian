@@ -16,6 +16,7 @@ def test_pyinstaller_ships_the_logo_only_and_pins_its_tools(monkeypatch, tmp_pat
         assert output.name == "pianpian-sensevoice.exe"
         output.parent.mkdir(parents=True)
         output.write_bytes(b"native helper")
+        output.with_name("pianpian-sensevoice-avx2.exe").write_bytes(b"optimized helper")
         for name in ("sensevoice-NOTICES.txt", "build-manifest.json"):
             output.with_name(name).write_text("included")
         return output
@@ -37,6 +38,8 @@ def test_pyinstaller_ships_the_logo_only_and_pins_its_tools(monkeypatch, tmp_pat
             destination.mkdir(parents=True)
             for path in (bw.STAGE / "crt").iterdir():
                 (destination / path.name).write_bytes(path.read_bytes())
+            for path in (bw.STAGE / "speech").glob("*.exe"):
+                (destination / path.name).write_bytes(path.read_bytes())
     monkeypatch.setattr(bw, "run", run)
     from test_windows_crt import bundle
     monkeypatch.setenv("PIANPIAN_VC_REDIST_DIR", str(bundle(tmp_path / "redist")))
@@ -54,6 +57,7 @@ def test_pyinstaller_ships_the_logo_only_and_pins_its_tools(monkeypatch, tmp_pat
     assert (tmp_path / "stage" / "stage" / "pipeline" / "links.py").is_file()
     assert not (tmp_path / "stage" / "stage" / "pipeline" / "benchmark-mandarin.wav").exists()
     assert f"{tmp_path / 'stage' / 'speech' / 'pianpian-sensevoice.exe'};pipeline/bin" in cmd
+    assert f"{tmp_path / 'stage' / 'speech' / 'pianpian-sensevoice-avx2.exe'};pipeline/bin" in cmd
     assert {f"{tmp_path / 'stage' / 'speech' / name};pipeline/bin" for name in
             ("sensevoice-NOTICES.txt", "build-manifest.json")} <= set(datas)
     assert f"{tmp_path / 'stage' / 'alignment' / 'pianpian-align.exe'};pipeline/bin" in cmd
