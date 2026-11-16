@@ -38,12 +38,12 @@ def test_mac_bundle_collects_native_binary_notices_and_checks_launch(monkeypatch
         if "pyinstaller" in cmd:
             (app / "Contents").mkdir(parents=True)
             (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({}))
-            binaries = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "--add-binary"]
-            assert any(arg.endswith("/pianpian-sensevoice:pipeline/bin") for arg in binaries)
-            assert any(arg.endswith("/pianpian-align:pipeline/bin") for arg in binaries)
-            data = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "--add-data"]
+            binaries = [cmd[i + 1].rsplit(":", 1) for i, arg in enumerate(cmd) if arg == "--add-binary"]
+            assert any(Path(source).name == "pianpian-sensevoice" and dest == "pipeline/bin" for source, dest in binaries)
+            assert any(Path(source).name == "pianpian-align" and dest == "pipeline/bin" for source, dest in binaries)
+            data = [cmd[i + 1].rsplit(":", 1) for i, arg in enumerate(cmd) if arg == "--add-data"]
             for name in ("sensevoice-NOTICES.txt", "build-manifest.json"):
-                source = next(arg.rsplit(":", 1)[0] for arg in data if arg.endswith(f"/{name}:pipeline/bin"))
+                source = next(source for source, dest in data if Path(source).name == name and dest == "pipeline/bin")
                 assert Path(source).is_file()
         if cmd[0] == "ditto":
             Path(cmd[-1]).write_bytes(b"zip")
