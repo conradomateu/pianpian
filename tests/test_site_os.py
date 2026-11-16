@@ -3,11 +3,13 @@ strings, the hints what Chromium's getHighEntropyValues returns; none of this is
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 from tools import build_site  # noqa: E402
 
 MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
@@ -28,6 +30,8 @@ CASES = [
     ('win-firefox', {'ua': FIREFOX_WIN}, 'windows', None),
     ('linux', {'ua': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', 'platform': 'Linux'}, 'other', False),
     ('iphone', {'ua': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1', 'touch': 5}, 'other', False),
+    ('android-platform-only', {'platform': 'Android'}, 'other', False),
+    ('ios-platform-only', {'platform': 'iOS'}, 'other', False),
     ('android', {'ua': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36', 'platform': 'Android'}, 'other', False),
 ]
 

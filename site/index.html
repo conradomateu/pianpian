@@ -40,7 +40,11 @@ section { scroll-margin-top:70px; }
 .dl:hover { transform:translateY(-1px); box-shadow:0 10px 26px -10px var(--red); }
 .dl svg { width:19px; height:19px; margin-top:-3px; }      /* the apple sits low in its box: lifted to line up with the text */
 .dl.small svg { width:15px; height:15px; margin-top:-2px; }
-/* the two big buttons are a pair: same height, type, icon size and gap */
+/* Download links stay hidden until a supported desktop OS is identified, including while hints load. */
+[data-umami-event="download"] { display:none; }
+html[data-site-os="mac"] [data-umami-event="download"]:not([data-os="windows"]),
+html[data-site-os="windows"] [data-umami-event="download"]:not([data-os="mac"]) { display:inline-flex; }
+/* The download and GitHub actions share height, type, icon size and gap. */
 .ghost { display:inline-flex; align-items:center; gap:10px; padding:12px 21px; border-radius:12px; border:1px solid var(--line-2); color:var(--fg);
   text-decoration:none; font:650 16px var(--body); transition:border-color .16s ease, color .16s ease; }
 .ghost:hover { border-color:var(--red); color:var(--red-fg); }
@@ -210,6 +214,9 @@ footer.site .grow { flex:1; }
   h2.sec { margin-top:64px; }
   .final { margin-top:64px; padding:36px 16px; }
 }
+@media (max-width:380px) {
+  html[data-site-os="mac"] header.top .name, html[data-site-os="windows"] header.top .name { display:none; }
+}
 @media (max-width:900px) { .demo iframe { height:640px; } }
 @media (max-width:600px) { .demo .window-bar { display:none; } }   /* on a phone the demo is the app itself: no fake window */
 @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .dl, .faq summary::after { transition:none; } .dl:hover { transform:none; } }
@@ -228,7 +235,7 @@ footer.site .grow { flex:1; }
   <a class="link hide-s" href="#features">Features</a>
   <a class="link hide-s" href="#anki">Anki</a>
   <a class="link hide-s" href="#faq">FAQ</a>
-  <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
+  <a class="link star" href="https://github.com/{{REPO}}">Star on GitHub</a>
   <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="#download"><svg data-platform="mac" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg><svg data-platform="windows" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{WINDOWS_ICON}}"/></svg>Download</a>
 </div></header>
 
@@ -239,8 +246,9 @@ footer.site .grow { flex:1; }
     <div class="cta" id="download">
       <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="hero" data-umami-event-os="mac" href="{{DOWNLOAD_URL}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
       {{WINDOWS:hero}}
+      <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>
-    <p class="os-note" id="os-note" role="status" hidden></p>
+    <p class="os-note" id="os-note" role="status">Available for Mac and Windows computers. Not available on phones or tablets.</p>
     <div class="meta">Free and <a href="https://github.com/{{REPO}}">open source</a> · Mac (Apple Silicon) · Windows 11 x64</div>
     <section class="platforms" aria-label="Video sources">
       <ul class="platforms-list">
@@ -376,14 +384,14 @@ footer.site .grow { flex:1; }
   <section id="faq">
     <h2 class="sec">Questions</h2>
     <div class="faq">
-      <details><summary>What do I need to install it?</summary><p><b>Mac:</b> Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, about 4 GB of disk. Open the download and drag Pianpian to Applications.</p><p><b>Windows:</b> a 64-bit (x64) PC with Windows 11 recommended; Windows 10 isn’t tested yet and Windows on ARM isn’t supported. It needs Microsoft’s WebView2, which Windows 11 includes (not checked on a clean install). The installer is for your user only and needs no admin rights. Plus space for your videos.</p></details>
-      <details><summary>What happens on first launch?</summary><p>Choose where to keep your videos and tools. Setup then downloads, with progress:</p><p><b>Mac:</b> the engine (about 0.65 GB), Whisper (1.6 GB) and Hy-MT2 (1 GB).<br><b>Windows:</b> the engine (about 0.46 GB), Whisper for whisper.cpp (1.62 GB), Hy-MT2 for llama.cpp (1.13 GB) and a runtime for your hardware: about 30 MB on the CPU, 50 MB with Vulkan, 1.35 GB with an NVIDIA GPU (CUDA).</p><p>It compares download sources and mirrors, including those reachable from mainland China.</p></details>
-      <details><summary>Which AI models does Pianpian use?</summary><p>Whisper transcribes the audio; Hy-MT2 translates the subtitles into English. Both run on your computer (MLX on a Mac; whisper.cpp and llama.cpp on Windows). Your videos stay with you, and no account or API key is needed. The app connects to download videos, models, tools and updates.</p></details>
+      <details><summary>What do I need to install it?</summary><p><b>Mac:</b> Apple Silicon (M1 or newer), macOS 14 Sonoma or newer. Allow space for the app, models, Python, temporary unpacking and your videos. Open the download and drag Pianpian to Applications.</p><p><b>Windows:</b> a 64-bit (x64) PC with Windows 11 recommended; Windows 10 isn’t tested yet and Windows on ARM isn’t supported. It needs Microsoft’s WebView2, which Windows 11 includes (not checked on a clean install). The installer is for your user only and needs no admin rights. Plus space for your videos.</p></details>
+      <details><summary>What happens on first launch?</summary><p>Choose where to keep your videos and tools. Setup downloads SenseVoice Q8 with its speech detector (256 MB) and PLaMo Q3 for translation (486 MB): <b>742 MB of models</b> on either platform.</p><p><b>Mac:</b> native translation tools add 16 MB and Python packages about 45 MB.<br><b>Windows:</b> CPU translation tools add 24 MB and Python packages about 55 MB. Optional GPU translation uses a 37 MB Vulkan or 664 MB CUDA download, plus the 24 MB CPU tools. NVIDIA acceleration is never selected automatically.</p><p>Python itself, the dictionary and the app installer are additional downloads. Installed space and temporary unpacking space are separate from download size. Speech always runs on CPU; Mac translation uses Apple Metal by default.</p><p>Setup tries alternative download sources. Upgrading from Hy-MT2 switches the translation selection to PLaMo and downloads it if missing; your saved videos and subtitles stay available.</p></details>
+      <details><summary>Which AI models does Pianpian use?</summary><p>SenseVoice transcribes the audio; PLaMo 0.8B Q3_K_M translates the subtitles into English through llama.cpp on Mac and Windows. The dictionary and PLaMo word vectors supply the clickable bilingual links. These model links are estimates and can be wrong.</p><p>Your videos stay with you, and no account or API key is needed. The app connects to download videos, models, tools and updates. The current pipeline has been tested on Mac; its Windows build and inference still need validation. PLaMo uses the <a href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF#license">PLaMo Community License</a>.</p></details>
       <details id="faq-files"><summary>Where are my videos and subtitles saved?</summary><p>In the library folder you choose during setup (default: <code>~/Movies/Pianpian</code> on a Mac, <code>Videos\Pianpian</code> on Windows). Each video has its own folder with the video and its Chinese, pinyin and English subtitle files.</p><p>Demo files: <a href="demo/library/pianpian-day/source.mp4">Video</a> · <a href="demo/library/pianpian-day/zh.srt">Chinese</a> · <a href="demo/library/pianpian-day/zh.pinyin.srt">Pinyin</a> · <a href="demo/library/pianpian-day/zh.en.srt">English</a>.</p></details>
       <details><summary>Are the subtitles always accurate?</summary><p>Transcription, translation and grammar hints can be wrong. Check them against the audio. The library’s HSK level estimates vocabulary difficulty, not listening difficulty.</p></details>
       <details><summary>Can the website demo send notes to Anki?</summary><p>No: export from the local Pianpian app, with Anki Desktop running and AnkiConnect installed. The website demo lets you try the player. Anki export isn’t tested on Windows yet.</p></details>
       <details><summary>Why does my computer warn me about the app?</summary><p>Pianpian isn’t signed with a paid certificate yet. <b>Mac:</b> after the first try to open it, go to System Settings → Privacy &amp; Security and choose Open Anyway. <b>Windows:</b> if SmartScreen stops the installer, choose More info → Run anyway. You can read the <a href="https://github.com/{{REPO}}">source code</a> first.</p></details>
-      <details><summary>How do I uninstall it?</summary><p><b>Mac:</b> move Pianpian from Applications to the Bin. <b>Windows:</b> uninstall it from Settings → Apps. Both keep your library and the tools folder (engine and models, several GB; by default <code>~/Library/Application Support/Pianpian</code> on a Mac, <code>%LOCALAPPDATA%\Pianpian</code> on Windows). Delete that folder to free the space.</p></details>
+      <details><summary>How do I uninstall it?</summary><p><b>Mac:</b> move Pianpian from Applications to the Bin. <b>Windows:</b> uninstall it from Settings → Apps. Both keep your library and the tools folder (engine and installed models; by default <code>~/Library/Application Support/Pianpian</code> on a Mac, <code>%LOCALAPPDATA%\Pianpian</code> on Windows). Delete that folder to free the space.</p></details>
       <details><summary>Is there a phone or Linux app?</summary><p>No. Pianpian runs on Mac and Windows computers.</p></details>
       <details><summary>What is planned?</summary><p>Audio-only import.</p></details>
     </div>
@@ -398,6 +406,7 @@ footer.site .grow { flex:1; }
       {{WINDOWS:bottom}}
       <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>
+    <p class="os-note" data-os-note hidden></p>
   </div>
 
   <footer class="site">

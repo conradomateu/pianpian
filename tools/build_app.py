@@ -1,9 +1,9 @@
 """Build Pianpian.app, the one people download: dist/Pianpian.app, Pianpian-macOS.dmg and Pianpian-macOS.zip.
 
-    python3 dev.py build          # needs macOS on Apple Silicon, uv, and Xcode's command-line tools (swiftc)
+    python3 dev.py build          # needs macOS on Apple Silicon, uv, CMake and Xcode's command-line tools
 
 The window (launcher.py with pywebview) is frozen with PyInstaller, with the server, the pages, the
-pipeline scripts, both locks, the compiled OCR helper, uv and the version inside. The engine and the
+pipeline scripts, both locks, the compiled speech helper, uv and the version inside. The engine and the
 models are not: the app installs them on first run (engine.py, setup.html), which keeps the download
 small. The bundle is signed ad hoc, which Apple Silicon needs to run it at all; without a paid Developer
 ID, macOS asks once before opening it (System Settings → Privacy & Security → Open Anyway).
@@ -40,6 +40,29 @@ def version() -> str:
         return re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M)[1]
 
 
+def speech_payload(folder: Path, *, windows: bool = False) -> tuple[Path, list[tuple[str, str]]]:
+    """Build on the packaging machine; users receive the executable and its upstream notices."""
+    from build_sensevoice import build
+    helper = build(folder / ("pianpian-sensevoice.exe" if windows else "pianpian-sensevoice"))
+    notices = [helper.with_name(name) for name in ("sensevoice-NOTICES.txt", "build-manifest.json")]
+    variants = [helper.with_name("pianpian-sensevoice-avx2.exe")] if windows else []
+    for path in [helper, *variants, *notices]:
+        if not path.is_file():
+            raise RuntimeError(f"native speech build omitted {path.name}")
+    return helper, [(str(path), "pipeline/bin") for path in notices]
+
+
+def alignment_payload(folder: Path, *, windows: bool = False) -> tuple[Path, list[tuple[str, str]]]:
+    """A small helper loads the already downloaded llama runtime and translation model."""
+    from build_alignment import build
+    helper = build(folder / ("pianpian-align.exe" if windows else "pianpian-align"))
+    notices = [helper.with_name(name) for name in ("alignment-NOTICES.txt", "alignment-build-manifest.json")]
+    for path in [helper, *notices]:
+        if not path.is_file():
+            raise RuntimeError(f"native alignment build omitted {path.name}")
+    return helper, [(str(path), "pipeline/bin") for path in notices]
+
+
 def icon(tmp: Path) -> Path:
     """AppIcon.icns from the SVG logo, with what macOS has (tools/svg2png.swift and iconutil)."""
     run("swiftc", "-O", ROOT / "tools" / "svg2png.swift", "-o", tmp / "svg2png")
@@ -74,22 +97,23 @@ def main() -> None:
         sys.exit("needs uv (brew install uv)")
     shutil.rmtree(APP, ignore_errors=True)
     BUILD.mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory() as t:
+    with tempfile.TemporaryDirectory(dir=BUILD, prefix="app-stage-") as t:
         tmp = Path(t)
         icns = icon(tmp)
+        speech, speech_data = speech_payload(tmp / "speech")
+        alignment, alignment_data = alignment_payload(tmp / "alignment")
         # the files the app reads at run time, laid out as in the repository
         stage = tmp / "stage"
         shutil.copytree(ROOT / "pipeline", stage / "pipeline", ignore=PIPELINE_SKIP)
-        (stage / "pipeline" / "bin").mkdir()
-        run("swiftc", "-O", "-target", "arm64-apple-macosx14.0", ROOT / "pipeline" / "ocr_frames.swift", "-o", stage / "pipeline" / "bin" / "ocr_frames")
         (stage / "VERSION").write_text(ver + "\n")
         datas = [("app.html", "."), ("setup.html", "."), ("assets", "assets"), (str(ICON), "design/icons"),
-                 (str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), ".")]
+                 (str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), "."), ("LICENSE", "."), *speech_data, *alignment_data]
         args = ["--noconfirm", "--clean", "--windowed", "--name", "Pianpian", "--icon", icns,
                 "--osx-bundle-identifier", "app.pianpian", "--distpath", DIST, "--workpath", BUILD / "pyi", "--specpath", BUILD]
         for src, dest in datas:
             args += ["--add-data", f"{(ROOT / src) if not Path(src).is_absolute() else src}:{dest}"]
-        args += ["--add-binary", f"{uv}:."]
+        # Binary collection lets PyInstaller inspect dependencies and sign the native helper on macOS.
+        args += ["--add-binary", f"{uv}:.", "--add-binary", f"{speech}:pipeline/bin", "--add-binary", f"{alignment}:pipeline/bin"]
         for mod in EXCLUDE:
             args += ["--exclude-module", mod]
         # a clean, throwaway environment with just what the window needs, pinned as in tools/build_app_windows.py
@@ -105,6 +129,8 @@ def main() -> None:
     plist.write_bytes(plistlib.dumps(info))
     run("codesign", "--force", "--deep", "--sign", "-", APP)       # ad hoc: required on Apple Silicon
     run("codesign", "--verify", "--deep", "--strict", APP)          # fail here, not on someone's Mac
+    run(APP / "Contents" / "Resources" / "pipeline" / "bin" / "pianpian-sensevoice", "--help")
+    run(APP / "Contents" / "Resources" / "pipeline" / "bin" / "pianpian-align", "--help")
     zip_path = DIST / "Pianpian-macOS.zip"
     zip_path.unlink(missing_ok=True)
     run("ditto", "-c", "-k", "--keepParent", APP, zip_path)       # ditto keeps the bundle's links and signature

@@ -1,0 +1,54 @@
+{
+  "release": "b11851",
+  "commit": "edc353842c1be9b4ebc27460a1da4526a026d3a9",
+  "files": [
+    {
+      "name": "llama.h",
+      "path": "include/llama.h",
+      "size": 90731,
+      "sha256": "961430f89e2553dbcd99e3e6c59826af9ec143f05911520c74f804d986ff3cd2"
+    },
+    {
+      "name": "ggml.h",
+      "path": "ggml/include/ggml.h",
+      "size": 117754,
+      "sha256": "349e1ea995dffbf900ce4345e0b2786c8a9b778035a66d6118b702f52b3af13f"
+    },
+    {
+      "name": "ggml-backend.h",
+      "path": "ggml/include/ggml-backend.h",
+      "size": 27570,
+      "sha256": "0e5e8e1f16d11ebbf501e38bc6705d79eee819b5f0b17476533f2100ed9674e2"
+    },
+    {
+      "name": "ggml-alloc.h",
+      "path": "ggml/include/ggml-alloc.h",
+      "size": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d"
+    },
+    {
+      "name": "ggml-opt.h",
+      "path": "ggml/include/ggml-opt.h",
+      "size": 14040,
+      "sha256": "3586de1bc8a934b5c72339e2b6937b0641e8f149b512231e666f67de0736eea2"
+    },
+    {
+      "name": "gguf.h",
+      "path": "ggml/include/gguf.h",
+      "size": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4"
+    },
+    {
+      "name": "LICENSE",
+      "path": "LICENSE",
+      "size": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "name": "ggml-cpu.h",
+      "path": "ggml/include/ggml-cpu.h",
+      "size": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e"
+    }
+  ]
+}

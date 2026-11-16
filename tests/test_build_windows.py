@@ -12,18 +12,57 @@ import build_app_windows as bw  # noqa: E402
 
 def test_pyinstaller_ships_the_logo_only_and_pins_its_tools(monkeypatch, tmp_path):
     calls = []
+    def build_speech(output):
+        assert output.name == "pianpian-sensevoice.exe"
+        output.parent.mkdir(parents=True)
+        output.write_bytes(b"native helper")
+        output.with_name("pianpian-sensevoice-avx2.exe").write_bytes(b"optimized helper")
+        for name in ("sensevoice-NOTICES.txt", "build-manifest.json"):
+            output.with_name(name).write_text("included")
+        return output
+    def build_alignment(output):
+        output.parent.mkdir(parents=True)
+        output.write_bytes(b"alignment helper")
+        for name in ("alignment-NOTICES.txt", "alignment-build-manifest.json"):
+            output.with_name(name).write_text("included")
+        return output
+    monkeypatch.setitem(sys.modules, "build_sensevoice", SimpleNamespace(build=build_speech))
+    monkeypatch.setitem(sys.modules, "build_alignment", SimpleNamespace(build=build_alignment))
     monkeypatch.setattr(bw, "STAGE", tmp_path / "stage")
     monkeypatch.setattr(bw, "uv_exe", lambda: Path("uv.exe"))
-    monkeypatch.setattr(bw, "run", lambda *cmd, **kw: calls.append([str(c) for c in cmd]))
+    monkeypatch.setattr(bw, "DIST", tmp_path / "dist")
+    def run(*cmd, **kw):
+        calls.append([str(c) for c in cmd])
+        if "pyinstaller" in cmd:
+            destination = bw.DIST / "Pianpian/_internal/pipeline/bin"
+            destination.mkdir(parents=True)
+            for path in (bw.STAGE / "crt").iterdir():
+                (destination / path.name).write_bytes(path.read_bytes())
+            for path in (bw.STAGE / "speech").glob("*.exe"):
+                (destination / path.name).write_bytes(path.read_bytes())
+    monkeypatch.setattr(bw, "run", run)
+    from test_windows_crt import bundle
+    monkeypatch.setenv("PIANPIAN_VC_REDIST_DIR", str(bundle(tmp_path / "redist")))
     bw.pyinstaller(debug_console=False)
-    [cmd] = calls
+    [cmd, smoke, align_smoke] = calls
+    assert "--noupx" in cmd
+    assert {f"{bw.STAGE / 'crt' / name};pipeline/bin" for name in bw.windows_crt.NAMES} <= set(cmd)
     assert cmd[:4] == ["uv.exe", "run", "--isolated", "--no-project"]
     assert {bw.PYINSTALLER, bw.PYWEBVIEW} <= set(cmd) and "==" in bw.PYINSTALLER and "==" in bw.PYWEBVIEW
     datas = [cmd[i + 1] for i, c in enumerate(cmd) if c == "--add-data"]
     design = [d for d in datas if ";design" in d]
     assert design == [f"{ROOT / 'design' / 'icons' / '20-pianpian-watermelon.svg'};design/icons"]
     assert "links" not in cmd                                 # pipeline/ ships as data, not as hidden imports
+    assert "ctypes" in [cmd[i + 1] for i, c in enumerate(cmd) if c == "--hidden-import"]
     assert (tmp_path / "stage" / "stage" / "pipeline" / "links.py").is_file()
+    assert not (tmp_path / "stage" / "stage" / "pipeline" / "benchmark-mandarin.wav").exists()
+    assert f"{tmp_path / 'stage' / 'speech' / 'pianpian-sensevoice.exe'};pipeline/bin" in cmd
+    assert f"{tmp_path / 'stage' / 'speech' / 'pianpian-sensevoice-avx2.exe'};pipeline/bin" in cmd
+    assert {f"{tmp_path / 'stage' / 'speech' / name};pipeline/bin" for name in
+            ("sensevoice-NOTICES.txt", "build-manifest.json")} <= set(datas)
+    assert f"{tmp_path / 'stage' / 'alignment' / 'pianpian-align.exe'};pipeline/bin" in cmd
+    assert align_smoke[-1] == "--help" and align_smoke[0].endswith("pianpian-align.exe")
+    assert smoke == [str(bw.DIST / "Pianpian" / "_internal" / "pipeline" / "bin" / "pianpian-sensevoice.exe"), "--help"]
 
 
 def test_an_old_installer_is_neither_kept_nor_reported(monkeypatch, tmp_path, capsys):

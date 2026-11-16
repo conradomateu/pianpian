@@ -92,24 +92,27 @@ def test_stop_closes_http_worker_and_job_admission(tmp_path, monkeypatch):
 
 def test_windows_status_never_probes_gpu(monkeypatch):
     monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
     monkeypatch.setattr(server.engine, "config", lambda: {})
     monkeypatch.setattr(server.engine.runtimes, "backend_for", lambda tool: (_ for _ in ()).throw(AssertionError("GPU probe ran")))
     handler = server.Handler.__new__(server.Handler)
     handler.path, handler.headers = "/api/status", {}
     handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
     handler.do_GET()
-    assert handler.response[0] == 200 and handler.response[1]["accel"] == "auto"
+    assert handler.response[0] == 200 and handler.response[1]["accel"] == "SenseVoice CPU · translation CPU"
 
 
 def test_windows_report_never_probes_gpu(tmp_path, monkeypatch):
     monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
     monkeypatch.setattr(server.engine.models, "status", lambda: [])
     monkeypatch.setattr(server.engine.runtimes, "backend_for", lambda tool: (_ for _ in ()).throw(AssertionError("GPU probe ran")))
     monkeypatch.setattr(server, "JOBS", [])
     monkeypatch.setenv("PIANPIAN_RUNTIME", str(tmp_path))
     monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
     result = server.problem_report({})
-    assert "auto (GPU detected during setup)" in result["details"]
+    assert "llama.cpp: CPU" in result["details"]
+    assert "whisper.cpp" not in result["details"]
 
 
 def test_library_poster_and_thumbnail(tmp_path, monkeypatch):
@@ -166,6 +169,7 @@ def test_windows_drive_paths_cannot_escape_app_or_library(tmp_path, monkeypatch)
     outside.write_text("1\tORIGINAL\n")
     monkeypatch.setattr(server, "Path", WindowsFiles)
     monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
     monkeypatch.setattr(server, "HERE", WindowsFiles("C:/app"))
     monkeypatch.setitem(server.CFG, "library", WindowsFiles("C:/library"))
     calls = []
@@ -192,6 +196,7 @@ def test_windows_drive_paths_cannot_escape_app_or_library(tmp_path, monkeypatch)
 @pytest.mark.skipif(sys.platform == "win32", reason="colons are valid filenames on macOS, not Windows")
 def test_mac_library_names_with_colons_remain_accessible(tmp_path, monkeypatch):
     monkeypatch.setattr(server.engine, "WINDOWS", False)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "darwin")
     monkeypatch.setitem(server.CFG, "library", tmp_path)
     clip = tmp_path / "Lesson: 1_study"
     clip.mkdir()
@@ -291,13 +296,16 @@ def test_links_in_the_library_do_not_lead_out_of_it(tmp_path, monkeypatch):
 @pytest.mark.parametrize("name", ["CON", "nul.mp4", "Com1.srt", "lpt9", "AUX .txt", "CONIN$", "x.mp4.", "zh.srt "])
 def test_windows_device_names_are_not_safe(monkeypatch, name):
     monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
     assert not server.safe_name(name)
     monkeypatch.setattr(server.engine, "WINDOWS", False)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "darwin")
     assert server.safe_name(name) == (not name.startswith(".")), "macOS keeps every one of these names"
 
 
 def test_windows_names_that_only_look_like_devices_are_safe(monkeypatch):
     monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
     for name in ("CONSOLE.mp4", "COM10.srt", "nullable", "lpt.txt", "zh.srt", "con_study"):
         assert server.safe_name(name), name
 
@@ -615,3 +623,93 @@ def test_setup_cannot_change_library_during_import(tmp_path, monkeypatch):
     assert names == ["clip.mp4"] and not starts
     assert setup()[0] == 200 and len(starts) == 1
     assert server.IMPORTS_ACTIVE == 0 and not server.IMPORT_TARGETS
+
+
+def test_setup_gpu_probe_does_not_start_an_install(monkeypatch):
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
+    monkeypatch.setattr(server.engine.runtimes, "detect", lambda: {"backend": "cuda", "message": "driver detected"})
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("probe started setup"))
+    handler = server.Handler.__new__(server.Handler)
+    handler.path, handler.headers = "/api/setup-gpu", {}
+    handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+    handler.do_GET()
+    assert handler.response == (200, {"backend": "cuda", "message": "driver detected"})
+
+
+def test_setup_rejects_unknown_acceleration_before_saving(monkeypatch):
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("invalid choice started setup"))
+    handler = server.Handler.__new__(server.Handler)
+    body = json.dumps({"accel": "auto-download-everything"}).encode()
+    handler.path, handler.headers = "/api/setup", {"X-Kit": "1", "Content-Length": str(len(body))}
+    handler.rfile = io.BytesIO(body)
+    handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+    handler.do_POST()
+    assert handler.response[0] == 400 and "acceleration" in handler.response[1]["error"]
+
+
+@pytest.fixture
+def benchmark_requests(monkeypatch, tmp_path):
+    """Real request handlers and queue, with no worker, binaries, downloads or settings changes."""
+    monkeypatch.setattr(server, "CLOSING", False)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "QUEUE", server.queue.Queue())
+    monkeypatch.setattr(server, "ANKI_ACTIVE", 0)
+    monkeypatch.setattr(server, "IMPORTS_ACTIVE", 0)
+    monkeypatch.setattr(server.engine, "WINDOWS", True)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32")
+    monkeypatch.setattr(server.engine, "STATE", {"engine": True, "current": True})
+    monkeypatch.setattr(server.engine.SETUP, "state", "idle")
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("benchmark changed setup"))
+    monkeypatch.setattr(server.engine, "python", lambda: "installed-engine-python")
+    monkeypatch.setattr(server.engine, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(server.engine, "pipeline_env", lambda: {"PIANPIAN_ACCEL": "cpu"})
+
+    def request(path="/api/setup-benchmark", authenticated=True):
+        handler = server.Handler.__new__(server.Handler)
+        handler.path, handler.headers = path, {"X-Kit": "1"} if authenticated else {}
+        handler.body = lambda: {}
+        handler.send_json = lambda body, status=200, **kwargs: setattr(handler, "response", (status, body))
+        handler.do_POST()
+        return handler.response
+
+    return request
+
+
+@pytest.mark.parametrize("windows,engine,code", [(False, True, 400), (True, False, 409), (True, None, 409)])
+def test_speed_test_requires_windows_and_an_installed_engine(benchmark_requests, monkeypatch, windows, engine, code):
+    monkeypatch.setattr(server.engine, "WINDOWS", windows)
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", "win32" if windows else "darwin")
+    monkeypatch.setitem(server.engine.STATE, "engine", engine)
+    status, _ = benchmark_requests()
+    assert status == code and not server.JOBS and server.QUEUE.empty()
+
+
+def test_speed_test_uses_the_job_queue_and_deduplicates_requests(benchmark_requests):
+    existing = server.Job("video pipeline", ["unused"], ".")
+    server.enqueue(existing)
+    status, first = benchmark_requests()
+    again, duplicate = benchmark_requests()
+    assert status == again == 200 and first["id"] == duplicate["id"]
+    assert len(server.JOBS) == server.QUEUE.qsize() == 2
+    assert server.QUEUE.get_nowait() is existing
+    job = server.QUEUE.get_nowait()
+    assert job.kind == "benchmark" and job.state == "queued"
+    assert Path(job.cmd[1]).name == "acceleration.py"
+    assert job.env["PIANPIAN_ACCEL"] == "cpu"  # measuring does not change the user's acceleration choice
+
+
+def test_speed_test_and_setup_exclude_each_other(benchmark_requests, monkeypatch):
+    assert benchmark_requests()[0] == 200
+    status, body = benchmark_requests("/api/setup")
+    assert status == 409 and "speed test" in body["error"]
+    server.JOBS[0].state = "done"
+    monkeypatch.setattr(server.engine.SETUP, "state", "running")
+    status, body = benchmark_requests()
+    assert status == 409 and body["error"] == server.SETUP_RUNS
+    assert len(server.JOBS) == 1
+
+
+def test_speed_test_cannot_start_without_csrf_header(benchmark_requests):
+    assert benchmark_requests(authenticated=False)[0] == 403
+    assert not server.JOBS and server.QUEUE.empty()

@@ -34,7 +34,7 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 | <img src="site/shots/practice.png" alt="The Playback menu: lines, replay, loop, pause after line, speed" width="420"> | **Practise line by line.** <kbd>←</kbd> <kbd>→</kbd> jump between lines, <kbd>R</kbd> replays, <kbd>L</kbd> loops, <kbd>P</kbd> pauses after every line so you can say it yourself, and playback speed goes down to 0.5×. Click any line in the transcript to jump there. |
 | <img src="site/shots/grammar.png" alt="The grammar cheat sheet with word order in colours" width="420"> | **See how a sentence is built.** A cheat sheet for word order, every part in its own colour with pinyin above, and optional marks under 了, 过, 在 and 要 that say past, now or later. |
 
-- **Links or files:** Bilibili, YouTube and other sites supported by yt-dlp, or a video you drop on the window. It uses available Chinese subtitles, Whisper speech recognition or OCR for burned-in subtitles (macOS Vision; Windows RapidOCR remains untested as of 7 Nov 2026).
+- **Links or files:** Bilibili, YouTube and other sites supported by yt-dlp, or a video you drop on the window. It uses available Chinese subtitle tracks or SenseVoice speech recognition. Text burned into the video image is not extracted.
 - **Tone colours** on the pinyin, which can also sit right above each character.
 - **Follow the voice:** the word being said lights up as it is spoken.
 - **Your level:** each video in your library shows the HSK level that covers 90% of its words.
@@ -46,27 +46,35 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 
 1. Download **Pianpian-macOS.dmg** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest), open the DMG and drag **Pianpian** onto the Applications folder in the window.
 2. Open Pianpian. Pianpian isn't signed with a paid Apple developer certificate yet, so the first time macOS says it can't check it: go to **System Settings → Privacy & Security** and press **Open Anyway**.
-3. The first start asks where to keep your videos and tools, then downloads the engine (about 650 MB), Whisper (1.6 GB) and Hy-MT2 (1 GB) once, with progress. From mainland China Pianpian picks faster mirrors by itself.
+3. Choose where to keep videos and tools, then let setup download the selected models.
 
-**Needs** a Mac with Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, about 4 GB of free disk for Pianpian and its models, plus space for your videos.
+**Needs** Apple Silicon (M1 or newer) and macOS 14 Sonoma or newer. Translation uses Apple Metal by default.
 
 ### Windows
 
 1. Download **Pianpian-Windows-Setup.exe** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest) and run the installer. Installation is per user (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If SmartScreen warns about the unsigned installer: **More info → Run anyway**.
-2. The first start asks where to keep your videos and tools, then downloads the engine and models once, with progress. From mainland China Pianpian picks faster mirrors by itself.
+2. Choose where to keep videos and tools, then let setup download the selected models.
 
-**Needs** 64-bit Windows (x64) and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/). Windows 11 is recommended and includes WebView2; the installer also allows Windows 10 (untested) and rejects Windows ARM64 and 32-bit Windows. The models plus the NVIDIA CUDA runtime total about 4.1 GB to download; CPU and Vulkan runtimes are smaller. Allow additional space for Python, packages and your videos.
-NVIDIA uses CUDA; other detected Vulkan GPUs use Vulkan for translation and CPU for speech. GPU startup failures retry once on CPU. Windows word links use the dictionary; model-based alignment is macOS-only. [Download sources and runtime details](ARCHITECTURE.md#two-python-environments).
+**Needs** Windows x64 and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/). Windows 11 is recommended; Windows 10 is allowed but untested. Windows ARM64 and 32-bit Windows are unsupported. Installation does not require administrator access, and the app includes its Microsoft C++ runtime libraries.
 
-**Windows test scope, 7 Nov 2026:** earlier source and installer builds ran on Windows 11 25H2 x64; the source acceptance machine had a Ryzen 9 7940HS and RTX 4060 Laptop. **The build integrated on 7 Nov 2026 and its revised installer have not been tested on Windows.** RapidOCR, Anki export, AMD/Intel Vulkan inference and mainland-China first-run downloads remain untested there. [Dated test history](ARCHITECTURE.md#windows-test-history).
+**CPU is the default**, even on NVIDIA computers. SenseVoice selects AVX2 when supported. CUDA/Vulkan acceleration is optional for translation; detecting a GPU does not select or download it. No CUDA Toolkit is needed. [Acceleration options and costs](ARCHITECTURE.md#compact-installation-accounting).
 
-The app announces new versions and keeps its video downloader updated. To update a source checkout instead, close Pianpian and run:
+**Test status, 16 Nov 2026:** the packaged CPU pipeline passes Windows CI. Interactive installation and upgrades on a Windows desktop still need testing. [Evidence and remaining checks](ARCHITECTURE.md#windows-test-history).
 
-```powershell
-git pull --ff-only
-python dev.py engine
-python dev.py app
-```
+### First-run downloads and updates
+
+Both platforms use **SenseVoice Q8 + its speech detector (256 MB)** and **PLaMo Q3_K_M (486 MB)**: **742 MB of models**. Speech and bilingual word links run on CPU.
+
+| Download | Mac | Windows, CPU default |
+|---|---:|---:|
+| Model weights | 742 MB | 742 MB |
+| Translation runtime | 16 MB | 24 MB |
+| Five Python packages, compressed | about 45 MB | about 55 MB |
+| **Subtotal** | **about 803 MB** | **about 821 MB** |
+
+**Python itself, the dictionary and the app installer are additional downloads.** Installed and temporary unpacking space are separate; allow space for your videos too. Setup shows the selected downloads and tries alternative sources. [Exact component sizes](ARCHITECTURE.md#compact-installation-accounting).
+
+The app announces new versions and updates its video downloader separately. Upgrading from Hy-MT2 switches translation to PLaMo and downloads missing weights; saved videos and subtitles stay available. For source checkouts, see [Updating a checkout](CONTRIBUTING.md#updating-a-checkout).
 
 ## Use
 
@@ -74,7 +82,7 @@ python dev.py app
 2. Wait for processing; the video opens when ready. Processing time depends on the video, hardware and downloads.
 3. Hover over or click words, and loop subtitle lines. Menus under the video: **Subtitles**, **Playback**, **Grammar**, **Video**, **Resources**, **Anki**. Keys: <kbd>B</kbd> library, <kbd>T</kbd> transcript, <kbd>?</kbd> all shortcuts.
 
-Subtitle lines too long? **Video ▾ → Lines** cuts them again from Whisper's word timings. Wrong pinyin for a word? Add the word to [`pipeline/pinyin_fixes.txt`](pipeline/pinyin_fixes.txt) and press **Video ▾ → Rebuild**.
+Subtitle lines too long? **Video ▾ → Lines** cuts them again from the speech recognizer's word timings. Wrong pinyin for a word? Add the word to [`pipeline/pinyin_fixes.txt`](pipeline/pinyin_fixes.txt) and press **Video ▾ → Rebuild**.
 
 Something went wrong? Pianpian explains the problem; **Report** opens GitHub's issue form with redacted details. Opening the issue form sends those details to GitHub; pressing Submit publishes the issue.
 
@@ -95,28 +103,9 @@ Word times are estimates: preview and listen before saving; missing or invalid t
 
 ## Development
 
-Needs Python 3.12 or newer, Git and uv (`python3 -m pip install uv`); Node.js enables JavaScript syntax checks. [ARCHITECTURE.md](ARCHITECTURE.md) describes the pipeline, APIs, packaging and test scope.
+[CONTRIBUTING.md](CONTRIBUTING.md#set-up) has the prerequisites, setup commands and checks for Mac and Windows. Downloaded apps include the native helpers; source builds require CMake and a C++17 compiler.
 
-```bash
-git clone https://github.com/conradomateu/pianpian && cd pianpian
-python3 dev.py engine     # the pipeline's environment in .venv (uv; no torch, about 650 MB)
-python3 dev.py serve      # the app in your browser at http://127.0.0.1:8770
-python3 dev.py check      # lint and tests, the same as CI
-```
-
-On Windows use `python` instead of `python3`; `dev.py engine` installs the Windows dependency group (including RapidOCR, without MLX), and `dev.py app` opens the native window. Development resolves dependencies from `pyproject.toml`; packaged setup uses the hashed requirements files.
-
-| Command | Does |
-|---|---|
-| `python3 dev.py app` | A dev `Pianpian.app` in `~/Applications` that runs this checkout (Windows: `launcher.py`) |
-| `python3 dev.py build` | Release files in `dist/`: app, DMG and ZIP (macOS); app and ZIP, plus installer with Inno Setup 6 (Windows) |
-| `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8766 (AnkiConnect uses 8765) |
-| `python3 dev.py shots` | The screenshots above, taken from the demo |
-| `python3 dev.py lock` | Pin the engine's packages (both platforms) and the models again |
-| `python3 dev.py version` | Preview the next release: its version, and which commits decide it |
-
-From mainland China, set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple` first.
-Commit and pull request titles use `feat:`, `fix:`, `docs:` or `chore:`; [AGENTS.md](AGENTS.md#rules) has the release rules.
+[ARCHITECTURE.md](ARCHITECTURE.md) describes the pipeline, APIs, packaging and test scope. Model inference runs locally; Python orchestrates it using five packages.
 
 ## Contributing
 
@@ -130,11 +119,12 @@ if you make your own version, give it another name.
 
 Pianpian stands on other people's work, used under their terms:
 
-- **Models**, downloaded on first run, not shipped: [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo) by OpenAI (MIT) and [Hy-MT2-1.8B](https://huggingface.co/Tencent-Hunyuan/Hy-MT2-1.8B) by Tencent (Apache-2.0), in the MLX builds by [mlx-community](https://huggingface.co/mlx-community) and the GGUF/GGML builds by [ggerganov](https://huggingface.co/ggerganov) and [Tencent](https://huggingface.co/tencent).
+- **Models**, downloaded on first run, not shipped: [SenseVoiceSmall GGUF](https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF) and [FSMN-VAD GGUF](https://huggingface.co/FunAudioLLM/fsmn-vad-GGUF) by FunAudioLLM (Apache-2.0), and [PLaMo 3 Translate 0.8B GGUF](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF) by Preferred Networks, under the [PLaMo Community License](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF#license). Consult that license for commercial-use terms.
+- **Native speech runtime:** pinned [FunASR](https://github.com/modelscope/FunASR) and [llama.cpp](https://github.com/ggml-org/llama.cpp) source with Pianpian's timing adapter. Their notices and included third-party licences ship beside the helper in `pipeline/bin/sensevoice-NOTICES.txt`.
 - **CC-CEDICT** meanings (CC BY-SA 4.0), downloaded on first run, not shipped.
 - **HSK 3.0 word levels** from [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) (MIT, [`hsk3.LICENSE`](pipeline/data/hsk3.LICENSE)).
 - **The demo** is made from scratch: the script, the drawings and the music are in [`tools/demo/`](tools/demo), and the voice is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0).
 - **Anki logo** © Alex Fraser, used unmodified under its [limited alternative licence](assets/anki-logo-license.txt).
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp), [jieba](https://github.com/fxsjy/jieba), [pypinyin](https://github.com/mozillazg/python-pinyin), [MLX](https://github.com/ml-explore/mlx), [whisper.cpp](https://github.com/ggml-org/whisper.cpp), [llama.cpp](https://github.com/ggml-org/llama.cpp), [RapidOCR](https://github.com/RapidAI/RapidOCR), [pywebview](https://github.com/r0x0r/pywebview) and [uv](https://github.com/astral-sh/uv).
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp), [jieba](https://github.com/fxsjy/jieba), [pypinyin](https://github.com/mozillazg/python-pinyin), [llama.cpp](https://github.com/ggml-org/llama.cpp), [pywebview](https://github.com/r0x0r/pywebview) and [uv](https://github.com/astral-sh/uv).
 
 Only download videos you are allowed to watch, and don't re-upload them.

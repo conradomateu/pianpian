@@ -4,7 +4,7 @@
 # and Pianpian-Windows.zip attached; run it by hand (Actions → windows → Run workflow) to try a build:
 # the files are kept as a workflow artifact for a week either way. Only the release job may write.
 # Checks are ci.yml's job.
-# Inno Setup 6 is preinstalled on the windows-latest runners.
+# Inno Setup 6, CMake and Visual Studio C++ tools are preinstalled on windows-latest runners.
 name: windows
 on:
   workflow_call:
@@ -13,6 +13,11 @@ on:
         type: string
         required: true
   workflow_dispatch:
+    inputs:
+      benchmark_speech:
+        description: Run the additional SenseVoice CPU comparison
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -28,7 +33,30 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.13.7"          # this uv.exe ships inside the app and installs every user's engine: keep it exact
-      - run: python dev.py build
+      - run: cmake --version
+      - run: python dev.py build  # compiles pinned CPU speech helper, bundles notices, checks packaged --help
+      - name: Exercise packaged native pipeline on CPU
+        shell: pwsh
+        run: |
+          uv venv scratch/native-acceptance/engine --python 3.12
+          uv pip sync --python scratch/native-acceptance/engine/Scripts/python.exe --require-hashes pipeline/requirements-windows.txt
+          scratch/native-acceptance/engine/Scripts/python.exe tools/check_native_pipeline.py --pipeline dist/Pianpian/_internal/pipeline
+      - name: Compare SenseVoice CPU performance (manual only)
+        if: github.event_name == 'workflow_dispatch' && inputs.benchmark_speech
+        shell: pwsh
+        run: scratch/native-acceptance/engine/Scripts/python.exe tools/check_sensevoice.py --pipeline dist/Pianpian/_internal/pipeline
+      - name: Keep native acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Windows-native-acceptance
+          path: |
+            scratch/native-acceptance/**/acceptance.json
+            scratch/native-acceptance/**/pipeline.log
+            scratch/native-acceptance/**/speech/*.json
+            scratch/native-acceptance/**/speech/*.log
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: Pianpian-Windows

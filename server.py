@@ -258,6 +258,9 @@ def enqueue(job: Job) -> Job:
             raise RuntimeError("Pianpian is closing")
         if engine.SETUP.state == "running":
             raise RuntimeError(SETUP_RUNS)
+        if job.kind == "benchmark":
+            if existing := next((j for j in JOBS if j.kind == "benchmark" and j.state in ("queued", "running")), None):
+                return existing
         JOBS.append(job)
         del JOBS[:-30]
         QUEUE.put(job)
@@ -359,14 +362,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/status":
                 busy = any(j.state in ("queued", "running") for j in JOBS)
-                accel = "mlx"
-                if engine.WINDOWS:                    # status never probes hardware: use the saved choice or "auto"
-                    accel = "auto"
-                    choice = engine.PATH_OVERRIDES["PIANPIAN_ACCEL"] or engine.config().get("accel")
-                    if choice in ("cpu", "vulkan", "cuda"):
-                        bw = choice if ("whisper", choice) in engine.runtimes.ASSETS else "cpu"
-                        bl = choice if ("llama", choice) in engine.runtimes.ASSETS else "cpu"
-                        accel = bw if bw == bl else f"whisper.cpp {bw} · llama.cpp {bl}"
+                # Status reads the saved choice only: it never probes hardware.
+                choice = (engine.PATH_OVERRIDES["PIANPIAN_ACCEL"] or engine.config().get("accel") or engine.runtimes.default_backend()).lower()
+                choice = choice if choice in engine.runtimes.available_backends() else engine.runtimes.default_backend()
+                accel = f"SenseVoice CPU · translation {choice.upper()}"
                 origin = self.headers.get("Origin")
                 if origin and origin.lower().removeprefix("http://") not in self.own_origins():
                     # another site (or a page from disk) may only learn that the app runs, never the library path
@@ -388,6 +387,8 @@ class Handler(BaseHTTPRequestHandler):
                     info["lines"] = read(p / "zh.lines.txt")
                     info["english"] = read(p / "en.lines.txt")
                 return self.send_json(info)
+            if path == "/api/setup-gpu":
+                return self.send_json(engine.runtimes.detect())
             if path == "/api/setup":                       # what the first-run setup would do, and how it is going
                 return self.send_json({**engine.SETUP.plan(), "progress": engine.SETUP.public()})
             if path == "/api/report":                      # ?job=<id>, or the setup's failure, or a general report
@@ -501,7 +502,9 @@ class Handler(BaseHTTPRequestHandler):
                 if browser and browser not in engine.BROWSERS:
                     return self.fail(400, "unknown browser")
                 cmd = [engine.python(), str(SCRIPT), url] + ([browser] if browser else [])
-                env = {**({"HARDSUBS": "1"} if data.get("burned") else {}), **({"AUTO_EN": "1"} if data.get("translate") else {})}
+                if data.get("burned"):
+                    return self.fail(400, "OCR is no longer supported. Use existing subtitles or speech recognition.")
+                env = {"AUTO_EN": "1"} if data.get("translate") else {}
                 job = Job(f"Download · {url}", cmd, str(CFG["library"]), env)
                 job.kind = "add"
                 return self.send_json(enqueue(job).public())
@@ -511,6 +514,8 @@ class Handler(BaseHTTPRequestHandler):
                 for d in (library, folder):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
+                if data.get("accel") not in (None, "cpu", "cuda", "vulkan"):
+                    return self.fail(400, "unknown acceleration choice")
                 with STARTING:
                     if ANKI_ACTIVE:
                         return self.fail(409, "Wait for Anki audio and word processing to finish, then run the setup.")
@@ -519,12 +524,21 @@ class Handler(BaseHTTPRequestHandler):
                     if busy := next((j for j in JOBS if j.state in ("queued", "running")), None):
                         return self.fail(409, f"Wait for “{busy.label}” to finish, then run the setup.")
                     try:
-                        engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")))
+                        engine.SETUP.start(library, folder, [str(m) for m in data.get("models") or []], cleanup=bool(data.get("cleanup")), accel=data.get("accel"))
                     except RuntimeError as e:
                         return self.fail(409, str(e))
                 CFG["library"] = Path(engine.config()["library"]).expanduser()
                 CFG["library"].mkdir(parents=True, exist_ok=True)
                 return self.send_json(engine.SETUP.public())
+            if path == "/api/setup-benchmark":
+                if not engine.WINDOWS:
+                    return self.fail(400, "The CUDA speed test is for Windows.")
+                if not engine.STATE["engine"]:
+                    return self.fail(409, "Install the engine before measuring speed.")
+                job = Job("CPU / CUDA speed test", [engine.python(), str(HERE / "pipeline" / "acceleration.py"),
+                          "--work-dir", str(engine.cache_dir() / "benchmark")], str(HERE), engine.pipeline_env())
+                job.kind = "benchmark"
+                return self.send_json(enqueue(job).public())
             if path == "/api/update-downloader":           # sites change; yt-dlp follows them
                 job = downloader_job()
                 return self.send_json(job.public()) if job else self.fail(409, "uv was not found, so the downloader can't be updated")
@@ -595,7 +609,7 @@ def problem_report(q: dict) -> dict:
     problem = report.explain(log) or {"code": "SETUP-FAILED" if setup else "JOB-FAILED" if job else "", "hint": ""}
     st = engine.STATE
     models = ", ".join(f"{m['id'].split('/')[-1]} {'ready' if m['ready'] else 'missing'}" for m in engine.models.status())
-    runtime = engine.runtimes.status(probe=False) if engine.WINDOWS else None
+    runtime = engine.runtimes.status(probe=False)
     summary = [f"Pianpian {VERSION}", f"engine: {'ok' if st['engine'] else 'not working' if st['engine'] is False else 'not checked'}"
                f"{'' if st['current'] in (None, True) else ', out of date'}", f"models: {models}",
                *([f"runtime: {runtime['label']} ({', '.join(k + ' ' + ('ready' if v['ready'] else 'missing') for k, v in runtime['tools'].items())})"]

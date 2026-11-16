@@ -6,7 +6,6 @@
     python pipeline/study.py ~/Movies/clip.mp4                            # a file: works in clip_study/
 
     AUTO_EN=1     also translate to English with the local model (FORCE_EN=1 replaces existing English)
-    HARDSUBS=1    the Chinese is burned into the picture: read it with OCR (macOS Vision, Windows RapidOCR) instead of Whisper
     RESPLIT=1 SPLIT_MAX=12   cut the lines again (0 = as transcribed)
 
 Run it with the app's Python environment (pyproject.toml, group "runtime"): every step calls the
@@ -31,7 +30,7 @@ import links  # noqa: E402
 import models  # noqa: E402
 
 PY = sys.executable
-MODEL = os.environ.get("WHISPER_MODEL") or models.default("transcribe")
+MODEL = os.environ.get("ASR_MODEL") or models.default("transcribe")
 FIXES = HERE / "pinyin_fixes.txt"
 os.environ.setdefault("PYTHONWARNINGS", "ignore::SyntaxWarning")   # jieba 0.42 on Python 3.12+
 
@@ -177,22 +176,17 @@ def main() -> None:
     work = get_video(src, browser)
     os.chdir(work)
     print(f"folder: {work}", flush=True)                     # server.py reads this line
-    if env("HARDSUBS"):
-        Path(".hardsubs").touch()                            # remembered for rebuilds
     hardsubs = Path(".hardsubs").exists()
     video = next(str(p) for p in sorted(Path(".").glob("source.*")) if p.suffix not in (".srt", ".vtt", ".xml", ".json"))
     auto_en, resplit = bool(env("AUTO_EN")), bool(env("RESPLIT"))
     split_max = env("SPLIT_MAX") or (Path(".split").read_text().strip() if Path(".split").exists() else "18")
 
-    # Chinese: the platform's subtitles, else OCR (burned in) or Whisper; zh.long.srt as made, zh.srt cut short
+    # Chinese: existing platform subtitles, otherwise SenseVoice. Preserve legacy .hardsubs layout only.
     if not Path("zh.srt").exists():
         existing = next((p for p in sorted(Path(".").glob("source.*.srt")) if "danmaku" not in p.name), None)
         if existing:
             print(f"using the platform's subtitles: {existing}", flush=True)
             shutil.copy2(existing, "zh.long.srt")
-        elif hardsubs:
-            print("Chinese is burned into the picture: reading it with OCR (check zh.srt afterwards)", flush=True)
-            run(PY, HERE / "hardsubs_to_srt.py", video, "zh.long.srt", "--crop", "0.15", "--fps", "4")
         else:
             print("no Chinese subtitles found", flush=True)
             transcribe(video)
