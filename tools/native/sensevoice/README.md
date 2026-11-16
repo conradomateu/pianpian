@@ -23,13 +23,8 @@ optimized helper uses an absolute path and UTF-16 arguments without a shell.
 `PIANPIAN_SENSEVOICE_CPU=baseline` disables dispatch for a diagnostic comparison;
 other values never force an unsupported instruction set.
 
-The 16 Nov 2026 Windows CI compiled the earlier baseline successfully, but timed
-out after 20 minutes during speech on the 44.8-second demo. The optimized build
-`90ef920` then passed on Windows Server 2025 with four logical CPUs: automatic
-AVX2 selection, 3.21 seconds for the full demo, and complete packaged pipeline
-acceptance. A short single-thread comparison measured 3.42 seconds baseline vs
-0.59 seconds AVX2; text matched, with one token interval shifted by 60 ms. These
-are single-run diagnostics with file-cache effects, not general accuracy claims.
+Windows execution evidence, including the resolved CI timeout, is
+recorded in the [Windows test history](../../../ARCHITECTURE.md#windows-test-history).
 The Mac build forces the macOS 14 deployment target before compiler detection;
 the builder checks the resulting Mach-O minimum version before packaging it.
 
@@ -61,14 +56,10 @@ still belongs to Pianpian.
 are not evidence of manually verified phonetic boundary accuracy or equality to
 Whisper timing. Tests cover repeated labels, blanks, query offsets, invalid paths,
 Chinese Unicode, byte fallback, absolute offsets, clipping and JSON escaping.
-The local Mac smoke on 16 Nov 2026 preserved the demo transcript and produced
-8 segments and 116 token intervals. All 32 exploratory clips passed the pipeline's
-coverage, ordering and bounds validator (2,201 tokens). Four transcripts differed
-slightly from the upstream prebuilt executable; `--srt` and `--json` agreed in
-those four cases on this build, and changing 4 to 8 threads did not change them.
-The 16-clip FLEURS CER remained 42/543 characters. Thus the portable build is not
-claimed bit-identical to the upstream binary, and the sample is not proof of
-unchanged accuracy on arbitrary audio. Detailed results live in ignored
+The 16-clip FLEURS sample scored 42 edits over 543 reference characters (7.73% CER).
+This small sample is not a general accuracy estimate or evidence of equality to
+Whisper. Earlier upstream-binary comparisons differed on four exploratory clips;
+`--srt` and `--json` agreed on this build. Detailed results remain in ignored
 `scratch/native-sensevoice/`.
 
 The CPU optimization comparison on **16 Nov 2026**, Apple M1 Pro (10 hardware

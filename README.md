@@ -46,29 +46,35 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 
 1. Download **Pianpian-macOS.dmg** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest), open the DMG and drag **Pianpian** onto the Applications folder in the window.
 2. Open Pianpian. Pianpian isn't signed with a paid Apple developer certificate yet, so the first time macOS says it can't check it: go to **System Settings → Privacy & Security** and press **Open Anyway**.
-3. The first start asks where to keep your videos and tools, then downloads the selected models once, with progress: SenseVoice Small in 8 bits with its speech detector (0.256 GB together) and PLaMo 0.8B Q3_K_M for translation (486 MB): **742 MB of models in total**. The native translation runtime adds 16 MB; Python, its five packages (about 45 MB compressed) and the dictionary are additional downloads. Speech and word-link generation run on CPU; translation uses Apple Metal by default. From mainland China Pianpian tries alternative download sources automatically.
+3. Choose where to keep videos and tools, then let setup download the selected models.
 
-**Needs** a Mac with Apple Silicon (M1 or newer), macOS 14 Sonoma or newer. Setup shows the model/tool downloads separately from estimated installed engine space; allow additional disk space for unpacking and your videos.
+**Needs** Apple Silicon (M1 or newer) and macOS 14 Sonoma or newer. Translation uses Apple Metal by default.
 
 ### Windows
 
 1. Download **Pianpian-Windows-Setup.exe** from the [latest release](https://github.com/conradomateu/pianpian/releases/latest) and run the installer. Installation is per user (no admin) into `%LOCALAPPDATA%\Programs\Pianpian`. If SmartScreen warns about the unsigned installer: **More info → Run anyway**.
-2. The first start asks where to keep your videos and tools, then downloads the engine and models once, with progress. From mainland China Pianpian picks faster mirrors by itself.
+2. Choose where to keep videos and tools, then let setup download the selected models.
 
-**Needs** 64-bit Windows (x64) and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/). Windows 11 is recommended and includes WebView2; the installer also allows Windows 10 (untested) and rejects Windows ARM64 and 32-bit Windows. SenseVoice Q8 with its speech detector (256 MB) and PLaMo 0.8B Q3_K_M (486 MB) total **742 MB of models**. With the translation CPU runtime (24 MB), that is **766 MB**, before Python, its five packages (about 55 MB compressed), the dictionary and the installer. Setup shows those costs separately. Allow additional disk space for unpacking and your videos.
-**CPU is the default**, including on NVIDIA computers. Speech recognition runs on CPU without CUDA. Setup automatically checks the NVIDIA driver and existing CUDA tools without downloading anything or changing your choice. **Resources → Models & acceleration → Compare CPU / CUDA speed** is an optional local translation test using installed models and tools; it shows measured sample times and rough estimates. Translation GPU acceleration remains optional: its CUDA archives total 664 MB, or Vulkan uses about 37 MB. GPU installations also include the 24 MB CPU runtime for word links and fallback. Existing saved choices are kept. No CUDA Toolkit is required; having an NVIDIA driver does not mean the runtime libraries are installed. Translation GPU startup failures retry once on CPU. Bilingual word links combine the dictionary with PLaMo model vectors on both platforms; vector links are heuristic associations. [Download sources and runtime details](ARCHITECTURE.md#two-python-environments).
+**Needs** Windows x64 and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/). Windows 11 is recommended; Windows 10 is allowed but untested. Windows ARM64 and 32-bit Windows are unsupported. Installation does not require administrator access, and the app includes its Microsoft C++ runtime libraries.
 
-The installer includes the app-local Microsoft C++ libraries needed by the native engines; no separate system-wide C++ installer is required.
+**CPU is the default**, even on NVIDIA computers. SenseVoice selects AVX2 when supported. CUDA/Vulkan acceleration is optional for translation; detecting a GPU does not select or download it. No CUDA Toolkit is needed. [Acceleration options and costs](ARCHITECTURE.md#compact-installation-accounting).
 
-**Windows test scope, 16 Nov 2026:** the optimized SenseVoice/PLaMo build passed packaged CPU pipeline acceptance on the Windows Server 2025 GitHub runner, including Chinese paths, pinyin, word times and bilingual links. The 44.8-second demo transcribed in 3.21 seconds with AVX2. **The new installer still needs interactive installation and upgrade testing on a Windows desktop.** Anki export, AMD/Intel Vulkan inference and mainland-China first-run downloads remain untested there. [Dated test history](ARCHITECTURE.md#windows-test-history).
+**Test status, 16 Nov 2026:** the packaged CPU pipeline passes Windows CI. Interactive installation and upgrades on a Windows desktop still need testing. [Evidence and remaining checks](ARCHITECTURE.md#windows-test-history).
 
-The app announces new versions and keeps its video downloader updated. When upgrading from Hy-MT2, setup carries your translation selection over to PLaMo and downloads the new model if needed. Existing videos and saved subtitles remain readable. Hy-MT2 is no longer an inference option. To update a source checkout instead, close Pianpian and run:
+### First-run downloads and updates
 
-```powershell
-git pull --ff-only
-python dev.py engine
-python dev.py app
-```
+Both platforms use **SenseVoice Q8 + its speech detector (256 MB)** and **PLaMo Q3_K_M (486 MB)**: **742 MB of models**. Speech and bilingual word links run on CPU.
+
+| Download | Mac | Windows, CPU default |
+|---|---:|---:|
+| Model weights | 742 MB | 742 MB |
+| Translation runtime | 16 MB | 24 MB |
+| Five Python packages, compressed | about 45 MB | about 55 MB |
+| **Subtotal** | **about 803 MB** | **about 821 MB** |
+
+**Python itself, the dictionary and the app installer are additional downloads.** Installed and temporary unpacking space are separate; allow space for your videos too. Setup shows the selected downloads and tries alternative sources. [Exact component sizes](ARCHITECTURE.md#compact-installation-accounting).
+
+The app announces new versions and updates its video downloader separately. Upgrading from Hy-MT2 switches translation to PLaMo and downloads missing weights; saved videos and subtitles stay available. For source checkouts, see [Updating a checkout](CONTRIBUTING.md#updating-a-checkout).
 
 ## Use
 
@@ -97,31 +103,9 @@ Word times are estimates: preview and listen before saving; missing or invalid t
 
 ## Development
 
-Needs Python 3.12 or newer, Git and uv (`python3 -m pip install uv`); Node.js enables JavaScript syntax checks.
-Building the native speech and word-link helpers from a checkout also needs CMake and a C++17 compiler (Xcode command-line
-tools on macOS, Visual Studio C++ tools on Windows). Downloaded apps already contain those helpers.
-[ARCHITECTURE.md](ARCHITECTURE.md) describes the pipeline, APIs, packaging and test scope.
+[CONTRIBUTING.md](CONTRIBUTING.md#set-up) has the prerequisites, setup commands and checks for Mac and Windows. Downloaded apps include the native helpers; source builds require CMake and a C++17 compiler.
 
-```bash
-git clone https://github.com/conradomateu/pianpian && cd pianpian
-python3 dev.py engine     # the five-package pipeline environment and native helpers (no Python ML stack)
-python3 dev.py serve      # the app in your browser at http://127.0.0.1:8770
-python3 dev.py check      # lint and tests, the same as CI
-```
-
-On Windows use `python` instead of `python3`; `dev.py engine` installs the same five pipeline packages used on macOS, and `dev.py app` opens the native window. Development resolves dependencies from `pyproject.toml`; packaged setup uses the hashed requirements files.
-
-| Command | Does |
-|---|---|
-| `python3 dev.py app` | A dev `Pianpian.app` in `~/Applications` that runs this checkout (Windows: `launcher.py`) |
-| `python3 dev.py build` | Release files in `dist/`: app, DMG and ZIP (macOS); app and ZIP, plus installer with Inno Setup 6 (Windows) |
-| `python3 dev.py preview` | The website with the live demo, at http://127.0.0.1:8766 (AnkiConnect uses 8765) |
-| `python3 dev.py shots` | The screenshots above, taken from the demo |
-| `python3 dev.py lock` | Pin the engine's packages (both platforms) and the models again |
-| `python3 dev.py version` | Preview the next release: its version, and which commits decide it |
-
-From mainland China, set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple` first.
-Commit and pull request titles use `feat:`, `fix:`, `docs:` or `chore:`; [AGENTS.md](AGENTS.md#rules) has the release rules.
+[ARCHITECTURE.md](ARCHITECTURE.md) describes the pipeline, APIs, packaging and test scope. Model inference runs locally; Python orchestrates it using five packages.
 
 ## Contributing
 

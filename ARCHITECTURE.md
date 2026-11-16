@@ -105,11 +105,13 @@ with PyInstaller 6.22.3 and pywebview 6.2.1; CI bundles uv 0.13.7. Both call
 tools on macOS, Visual Studio C++ tools on Windows). The helper is collected as a binary, so PyInstaller
 checks its dependencies and signs it on macOS. It lives at `pipeline/bin/pianpian-sensevoice` or
 `pipeline/bin/pianpian-sensevoice.exe`, beside `sensevoice-NOTICES.txt` and `build-manifest.json`.
+Windows also bundles `pianpian-sensevoice-avx2.exe`, selected only after CPU and OS capability checks;
+[the native speech README](tools/native/sensevoice/README.md) describes dispatch and timing.
 Packaging fails if the notices are missing, and runs the packaged helper's `--help` before making the
 archives. `tools/build_alignment.py` likewise builds the small `pianpian-align[.exe]` helper, which
 loads the separately installed runtime's libllama. Startup checks do not validate model inference. End users do not need CMake, a compiler,
 PyTorch or CUDA to run speech recognition. The Windows build needs Inno Setup 6
-for the installer; without it (or with `--no-installer`) it produces the app folder and zip only.
+for the installer; a normal build fails if it is missing. The explicit `--no-installer` development option produces only the app folder and zip.
 The installer is per-user (no admin), allows x64 Windows 10 or newer, and rejects ARM64 and 32-bit Windows.
 It replaces `{app}\_internal` on upgrade and checks the `PianpianApp` mutex held by the frozen app,
 which also refuses a second instance. Engine, models and user data live outside the installation folder;

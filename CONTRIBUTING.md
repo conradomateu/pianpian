@@ -21,8 +21,49 @@ python3 dev.py serve      # the app in your browser at http://127.0.0.1:8770
 python3 dev.py check      # lint and tests: the same as CI
 ```
 
+On Windows use `python` instead of `python3`. Development resolves dependencies from
+`pyproject.toml`; packaged setup uses the platform's hashed requirements file.
+
+| Command | Does |
+|---|---|
+| `python3 dev.py app` | Opens a dev app: `~/Applications/Pianpian.app` on Mac, `launcher.py` on Windows |
+| `python3 dev.py native` | Rebuilds the pinned speech and word-link helpers |
+| `python3 dev.py build` | Builds the app, DMG and ZIP on Mac; app, installer and ZIP on Windows (Inno Setup 6 required) |
+| `python3 dev.py preview` | Serves the website and demo at http://127.0.0.1:8766 (AnkiConnect uses 8765) |
+| `python3 dev.py shots` | Takes screenshots using the self-authored demo |
+| `python3 dev.py lock` | Regenerates package and model pins; review the resulting changes |
+| `python3 dev.py version` | Previews the version implied by the commits |
+
 From mainland China set `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple` first.
 [`ARCHITECTURE.md`](ARCHITECTURE.md) explains how the pieces fit; [`AGENTS.md`](AGENTS.md) has the full rules.
+
+### Updating a checkout
+
+Close Pianpian before updating. From the checkout, run:
+
+```bash
+git pull --ff-only
+python3 dev.py engine
+python3 dev.py app
+```
+
+Use `python` on Windows. `dev.py engine` rebuilds native helpers and syncs the pipeline packages.
+
+### CI and optional measurements
+
+Routine CI runs code checks and, on Windows, builds the installer and exercises the packaged
+CPU pipeline with the self-authored demo. That checks transcription, pinyin, translation, word
+times, bilingual links and the output video.
+
+Additional SenseVoice performance comparisons are **manual and off by default**. In GitHub Actions,
+run the `windows` workflow with `benchmark_speech` enabled, or use:
+
+```bash
+gh workflow run windows.yml --ref YOUR_BRANCH -f benchmark_speech=true
+```
+
+Use this when changing the speech engine or investigating performance. The
+[native speech README](tools/native/sensevoice/README.md) describes the diagnostic and its limits.
 
 ## A pull request
 

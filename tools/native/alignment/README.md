@@ -37,8 +37,10 @@ On 16 Nov 2026, the macOS Apple Silicon build passed both CTest cases and produc
 six complete prompt results whose token bytes exactly reconstructed the inputs.
 All vectors were finite and had 1,536 dimensions. A separate 1,201-token prompt
 verified accumulation across 512-token microbatches. The executable was 58,864 bytes
-in this build; code signing may change its size. Windows compilation/inference was
-not run locally.
+in this build; code signing may change its size. On 16 Nov 2026, the Windows packaged
+CPU pipeline also produced 41 model links on the self-authored demo; this validates
+execution and output structure, not linguistic accuracy. See the
+[Windows test history](../../../ARCHITECTURE.md#windows-test-history) for the CI run and remaining checks.
 
 Layer 7 was selected from a small exploratory comparison of six self-authored
 Chinese/English sentence pairs. It produced useful links such as 天气↔weather,
