@@ -60,7 +60,7 @@ The name is 片片 (piànpiàn), "piece by piece". The motto is 一天一片: on
 
 The installer includes the app-local Microsoft C++ libraries needed by the native engines; no separate system-wide C++ installer is required.
 
-**Windows test scope, 16 Nov 2026:** CI compiled the SenseVoice/PLaMo installer and started native speech, but the full pipeline timed out during transcription. **The subsequent CPU optimizations still need Windows acceptance; the release is not validated.** Earlier source and installer builds ran on Windows 11 25H2 x64. Anki export, AMD/Intel Vulkan inference and mainland-China first-run downloads remain untested there. [Dated test history](ARCHITECTURE.md#windows-test-history).
+**Windows test scope, 16 Nov 2026:** the optimized SenseVoice/PLaMo build passed packaged CPU pipeline acceptance on the Windows Server 2025 GitHub runner, including Chinese paths, pinyin, word times and bilingual links. The 44.8-second demo transcribed in 3.21 seconds with AVX2. **The new installer still needs interactive installation and upgrade testing on a Windows desktop.** Anki export, AMD/Intel Vulkan inference and mainland-China first-run downloads remain untested there. [Dated test history](ARCHITECTURE.md#windows-test-history).
 
 The app announces new versions and keeps its video downloader updated. When upgrading from Hy-MT2, setup carries your translation selection over to PLaMo and downloads the new model if needed. Existing videos and saved subtitles remain readable. Hy-MT2 is no longer an inference option. To update a source checkout instead, close Pianpian and run:
 

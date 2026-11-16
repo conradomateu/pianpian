@@ -45,8 +45,6 @@ jobs:
         run: |
           uv venv scratch/native-acceptance/engine --python 3.12
           uv pip sync --python scratch/native-acceptance/engine/Scripts/python.exe --require-hashes pipeline/requirements-windows.txt
-          scratch/native-acceptance/engine/Scripts/python.exe tools/check_sensevoice.py --pipeline dist/Pianpian/_internal/pipeline
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           scratch/native-acceptance/engine/Scripts/python.exe tools/check_native_pipeline.py --pipeline dist/Pianpian/_internal/pipeline
       - name: Keep native acceptance evidence
         if: always()
@@ -56,8 +54,6 @@ jobs:
           path: |
             scratch/native-acceptance/**/acceptance.json
             scratch/native-acceptance/**/pipeline.log
-            scratch/native-acceptance/**/speech/*.json
-            scratch/native-acceptance/**/speech/*.log
           if-no-files-found: warn
           retention-days: 7
       - uses: actions/upload-artifact@v7

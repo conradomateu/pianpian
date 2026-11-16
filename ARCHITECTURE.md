@@ -146,14 +146,22 @@ These reports distinguish earlier releases from **acceptance of the current inte
   compiled the installer and launched packaged SenseVoice. The 44.8-second demo reached six of eight
   speech segments before the 1,200-second integration timeout. Translation/alignment were not reached.
   The subsequent change adds a safely selected AVX2 helper, adaptive CPU threads (also for VAD),
-  and a smaller graph metadata arena. Its Windows speed and output still require CI acceptance.
-  `tools/check_sensevoice.py` now records short baseline/optimized comparisons, the full demo and silence,
-  with separate logs and timings before the full pipeline test. Timeout cleanup stops descendant processes.
+  and a smaller graph metadata arena.
+- **16 Nov 2026, optimized build `90ef920`:** [Windows CI](https://github.com/conradomateu/pianpian/actions/runs/43814673891)
+  passed on Windows Server 2025 with four logical CPUs and automatic AVX2 selection. Speech on the
+  44.8-second demo took 3.21 seconds. The short single-thread comparison took 3.42 seconds on baseline
+  vs 0.59 seconds on AVX2, with identical text and a 60 ms shift in one token's interval. These are
+  single-run diagnostics with file-cache effects, not general accuracy or speed benchmarks.
+  Full packaged acceptance produced nine cues, 72 word intervals, 41 bilingual links and six subtitle
+  tracks, preserving the source video. Interactive desktop installation/upgrades are still untested.
+  `tools/check_sensevoice.py` records the additional comparison, demo and silence tests. It is now
+  opt-in via the Windows workflow's `benchmark_speech` manual input (default false); routine CI and
+  release builds run only the complete pipeline smoke check. Timeout cleanup stops descendant processes.
 
-As of **7 Nov 2026**, the integrated app, revised installer, engine repair/data migration and security
-changes have not been exercised natively on Windows. The integration reports use macOS Apple Silicon
-tests, including simulated Windows paths/processes. The SenseVoice/PLaMo integration added on 16 Nov 2026
-has not passed full Windows acceptance (see the timeout above). OCR extraction has been removed. Anki export, Windows 10, AMD/Intel Vulkan
+The current packaged CPU pipeline passed Windows CI on **16 Nov 2026** as described above; interactive
+desktop installation, upgrades, engine repair and data migration still need native acceptance. Those
+paths also have tests on macOS, including simulated Windows paths/processes.
+OCR extraction has been removed. Anki export, Windows 10, AMD/Intel Vulkan
 inference and mainland-China Windows first-run downloads remain untested. Windows ARM64 is unsupported.
 
 Website visits and Download clicks are counted by [Umami Cloud](https://cloud.umami.is) (no cookies): its script is in `site/index.html` only,

@@ -24,8 +24,12 @@ optimized helper uses an absolute path and UTF-16 arguments without a shell.
 other values never force an unsupported instruction set.
 
 The 16 Nov 2026 Windows CI compiled the earlier baseline successfully, but timed
-out after 20 minutes during speech on the 44.8-second demo. The new AVX2 dispatch
-has not yet been executed on Windows; CI must measure both speed and output.
+out after 20 minutes during speech on the 44.8-second demo. The optimized build
+`90ef920` then passed on Windows Server 2025 with four logical CPUs: automatic
+AVX2 selection, 3.21 seconds for the full demo, and complete packaged pipeline
+acceptance. A short single-thread comparison measured 3.42 seconds baseline vs
+0.59 seconds AVX2; text matched, with one token interval shifted by 60 ms. These
+are single-run diagnostics with file-cache effects, not general accuracy claims.
 The Mac build forces the macOS 14 deployment target before compiler detection;
 the builder checks the resulting Mach-O minimum version before packaging it.
 
@@ -79,7 +83,10 @@ peak resident memory stayed around 317 MB. Reports live in ignored
 
 `tools/check_sensevoice.py --pipeline <packaged pipeline>` runs the short baseline
 and selected CPU profile, the full demo and silence. CI saves JSON and stderr
-logs under `scratch/native-acceptance/数据/speech/`. It rejects invalid timing,
+logs under `scratch/native-acceptance/数据/speech/` when the Windows workflow's
+manual `benchmark_speech` input is enabled (default false). Routine CI and release
+builds keep the complete pipeline smoke check without this extra comparison.
+The diagnostic rejects invalid timing,
 unexpected silence/speech, changed short-sample transcription and a 180-second
 per-case timeout; interval differences are recorded for inspection. This is a
 single-run diagnostic, not a statistical benchmark or a general accuracy score.

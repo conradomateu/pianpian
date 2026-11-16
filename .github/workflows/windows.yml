@@ -13,6 +13,11 @@ on:
         type: string
         required: true
   workflow_dispatch:
+    inputs:
+      benchmark_speech:
+        description: Run the additional SenseVoice CPU comparison
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -35,9 +40,11 @@ jobs:
         run: |
           uv venv scratch/native-acceptance/engine --python 3.12
           uv pip sync --python scratch/native-acceptance/engine/Scripts/python.exe --require-hashes pipeline/requirements-windows.txt
-          scratch/native-acceptance/engine/Scripts/python.exe tools/check_sensevoice.py --pipeline dist/Pianpian/_internal/pipeline
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           scratch/native-acceptance/engine/Scripts/python.exe tools/check_native_pipeline.py --pipeline dist/Pianpian/_internal/pipeline
+      - name: Compare SenseVoice CPU performance (manual only)
+        if: github.event_name == 'workflow_dispatch' && inputs.benchmark_speech
+        shell: pwsh
+        run: scratch/native-acceptance/engine/Scripts/python.exe tools/check_sensevoice.py --pipeline dist/Pianpian/_internal/pipeline
       - name: Keep native acceptance evidence
         if: always()
         uses: actions/upload-artifact@v7
