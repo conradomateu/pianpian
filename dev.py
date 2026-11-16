@@ -45,6 +45,7 @@ def lint() -> None:
 
 
 def test() -> None:
+    (ROOT / "scratch").mkdir(exist_ok=True)
     run(UV, "run", "--group", "dev", "pytest", "-q", "--basetemp", str(ROOT / "scratch" / "pytest-check"))
 
 
