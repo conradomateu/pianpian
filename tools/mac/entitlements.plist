@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Both are needed under the hardened runtime that notarization requires. Measured on 23 Oct 2026 with an
+       ad hoc signature (no Apple account yet): with neither, or with only the first, the app does not start
+       (libpython3.12.dylib "not valid for use in process"); with both it starts and serves. To re-check with a
+       real Developer ID, where every library has the same Team ID, library validation may turn out not to be needed. -->
+  <!-- Python's ctypes and PyObjC (the window) build small pieces of executable code at run time -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <!-- the bundle's Python libraries are signed by us, but not as one unit with the main executable -->
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+</dict>
+</plist>

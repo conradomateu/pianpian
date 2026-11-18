@@ -11,6 +11,7 @@
     python dev.py native      # build the native CPU speech helper (developers only)
     python dev.py app         # a dev app that runs this checkout (macOS: ~/Applications; Windows: launcher.py)
     python dev.py build       # the release build in dist/: Pianpian.app + zip on macOS, installer + zip on Windows
+    python dev.py build-signed # macOS Developer ID signing and notarization (credentials in Keychain)
     python dev.py site        # the website into _site/ (landing page + live demo)
     python dev.py preview     # build it and serve it at http://127.0.0.1:8766
     python dev.py shots       # README and website screenshots from the demo (needs Chrome or Brave)
@@ -96,6 +97,7 @@ TASKS = {
     "serve": lambda: run(sys.executable, "server.py"),
     "app": app,
     "build": build,
+    "build-signed": lambda: run(sys.executable, "tools/build_app.py", "--signed"),
     "site": lambda: run(sys.executable, "tools/build_site.py"),
     "preview": lambda: run(sys.executable, "tools/build_site.py", "--serve"),
     "shots": lambda: run(sys.executable, "tools/shots.py"),
