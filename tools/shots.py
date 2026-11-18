@@ -28,16 +28,19 @@ W, H = 1440, 760
 SHOTS = {
     "app-dark": (13.2, "dark", None, False),
     "app-light": (24.6, "light", None, False),
-    "word": (13.2, "dark", ("hover", "三个"), True),
-    "grammar": (13.2, "light", ("open", "Grammar"), True),
+    "word": (13.2, "dark", ("hover", "包子"), True),
+    "grammar": (13.2, "dark", ("open", "Grammar"), True),
     "practice": (24.6, "dark", ("open", "Playback"), True),
 }
 # the middle column's box, from the video's top edge to below whichever menu is open
 CROP = """(() => {
   const m = document.getElementById('main').getBoundingClientRect(), v = player.stage.getBoundingClientRect();
   const open = document.querySelector('details.dd[open] > .ddp'), b = open ? Math.max(open.getBoundingClientRect().bottom, v.bottom) : v.bottom;
-  const top = Math.min(v.top, open ? open.getBoundingClientRect().top : v.top) - 16;
-  return {x: m.left, y: Math.max(0, top), width: m.width, height: Math.min(innerHeight, b + 70) - Math.max(0, top), scale: 1};
+  const panel = open ? open.getBoundingClientRect() : m;
+  const left = Math.max(0, Math.min(m.left, panel.left));
+  const right = Math.min(innerWidth, Math.max(m.right, panel.right));
+  const top = Math.max(0, Math.min(v.top, panel.top) - 16);
+  return {x: left, y: top, width: right - left, height: Math.min(innerHeight, b + 70) - top, scale: 1};
 })()"""
 # resolves once the video has painted the frame at time T (or after 3 s, whatever happens)
 READY = """new Promise(done => {
@@ -123,6 +126,7 @@ def main() -> None:
                 c.js("new Promise(r => setTimeout(r, 300))")
                 c.call("Page.reload", ignoreCache=False)        # the hash alone would not reload the page
                 c.js("new Promise(r => (document.readyState === 'complete' ? r() : addEventListener('load', r)))")
+                c.js("setPanel('left', true, false); setPanel('right', true, false)")
                 c.js(READY.replace("T", str(t)))
                 if action and action[0] == "hover":
                     box = c.js(FIND.replace("WORD", action[1]))
@@ -130,7 +134,9 @@ def main() -> None:
                         sys.exit(f"{name}: no word {action[1]} on screen at {t} s")
                     c.call("Input.dispatchMouseEvent", type="mouseMoved", x=box[0], y=box[1])
                 elif action and action[0] == "open":
-                    c.js(f"[...document.querySelectorAll('details.dd > summary')].find(s => s.textContent.trim() === '{action[1]}').click()")
+                    box = c.js(f"(() => {{ const r = [...document.querySelectorAll('details.dd > summary')].find(s => s.textContent.trim() === '{action[1]}').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }})()")
+                    for event in ("mousePressed", "mouseReleased"):
+                        c.call("Input.dispatchMouseEvent", type=event, x=box[0], y=box[1], button="left", clickCount=1)
                 c.js("new Promise(r => setTimeout(r, 500))")      # menus and cards fade in
                 clip = c.js(CROP) if crop else None
                 png = c.call("Page.captureScreenshot", format="png", **({"clip": clip} if clip else {}))["data"]
