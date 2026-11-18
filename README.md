@@ -2,12 +2,19 @@
 
 <img src="design/icons/20-pianpian-watermelon.svg" width="96" height="96" alt="Pianpian logo">
 
-# Pianpian 片片
+# 🍉 Pianpian 片片
 
 **Learn Chinese from the videos you love ❤️**
 
-Turn Bilibili, YouTube and your own videos into Chinese, pinyin and English subtitles.
+Turn Bilibili, YouTube, RedNote, Weibo and your own videos into Chinese, pinyin and English subtitles.
 Look up words, practise sentences and send them to Anki. Speech recognition and translation run on your computer.
+
+[![CI](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml/badge.svg)](https://github.com/conradomateu/pianpian/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/conradomateu/pianpian?sort=semver&color=DE3B26)](https://github.com/conradomateu/pianpian/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/conradomateu/pianpian/total?color=0E8A63)](https://github.com/conradomateu/pianpian/releases)
+[![macOS 14+ · Apple Silicon](https://img.shields.io/badge/macOS_14+-Apple_Silicon-17130F?logo=apple)](https://pianpian.app/#download)
+[![Windows 11 · x64](https://img.shields.io/badge/Windows_11-x64-17130F)](https://pianpian.app/#download)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-8A7F74)](LICENSE)
 
 [**Download**](https://pianpian.app/) · [**Try the demo**](https://pianpian.app/#demo)
 
