@@ -637,6 +637,30 @@ def test_setup_gpu_probe_does_not_start_an_install(monkeypatch):
     assert handler.response == (200, {"backend": "cuda", "message": "driver detected"})
 
 
+@pytest.mark.parametrize("platform,accel,accepted", [
+    ("darwin", "metal", True), ("darwin", "cpu", True), ("darwin", None, True),
+    ("darwin", "cuda", False), ("darwin", "vulkan", False),
+    ("win32", "cpu", True), ("win32", "cuda", True), ("win32", "vulkan", True),
+    ("win32", None, True), ("win32", "metal", False),
+])
+def test_setup_accepts_only_platform_acceleration(monkeypatch, tmp_path, platform, accel, accepted):
+    monkeypatch.setattr(server.engine.runtimes.platform_backend, "NAME", platform)
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "ANKI_ACTIVE", 0)
+    monkeypatch.setattr(server, "IMPORTS_ACTIVE", 0)
+    monkeypatch.setattr(server.engine, "config", lambda: {"library": str(tmp_path)})
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+    starts = []
+    monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: starts.append(kwargs))
+    handler = server.Handler.__new__(server.Handler)
+    handler.path, handler.headers = "/api/setup", {"X-Kit": "1"}
+    handler.body = lambda: {"accel": accel}
+    handler.send_json = lambda body, status=200: setattr(handler, "response", (status, body))
+    handler.do_POST()
+    assert handler.response[0] == (200 if accepted else 400)
+    assert starts == ([{"cleanup": False, "accel": accel}] if accepted else [])
+
+
 def test_setup_rejects_unknown_acceleration_before_saving(monkeypatch):
     monkeypatch.setattr(server.engine.SETUP, "start", lambda *args, **kwargs: pytest.fail("invalid choice started setup"))
     handler = server.Handler.__new__(server.Handler)

@@ -250,7 +250,7 @@ def test_resources_reopens_models_and_acceleration_but_link_is_absent_from_demo(
     assert not c.js("!!document.querySelector('#toolslink')")
 
 
-def test_mac_setup_shows_shared_metal_cpu_download_without_nvidia_controls(browser, monkeypatch):  # noqa: F811
+def test_mac_setup_shows_shared_metal_cpu_download_without_nvidia_controls(browser, monkeypatch, tmp_path):  # noqa: F811
     """Real browser clicks, Mac runtime prices; no models or runtimes are installed."""
     import runtimes
     c, url, handler = browser
@@ -290,3 +290,30 @@ def test_mac_setup_shows_shared_metal_cpu_download_without_nvidia_controls(brows
     assert c.js("document.querySelector('#runtime-size').textContent") == "not needed"
     click(c, "input[value=translation]")
     assert c.js("document.querySelector('#sum').textContent.startsWith('503 MB models')")
+
+    import server
+    starts = []
+    monkeypatch.setattr(server, "JOBS", [])
+    monkeypatch.setattr(server, "ANKI_ACTIVE", 0)
+    monkeypatch.setattr(server, "IMPORTS_ACTIVE", 0)
+    monkeypatch.setattr(server.engine, "config", lambda: {"library": str(tmp_path)})
+    monkeypatch.setitem(server.CFG, "library", tmp_path)
+
+    def start(library, data, models, **kwargs):
+        starts.append({"models": models, **kwargs})
+        payload["progress"] = {"state": "running", "steps": [], "log": [], "error": ""}
+
+    def post(self):
+        request = server.Handler.__new__(server.Handler)
+        request.path, request.headers, request.rfile = self.path, self.headers, self.rfile
+        request.send_json = lambda body, status=200: server.Handler.send_json(self, body, status)
+        request.do_POST()
+
+    monkeypatch.setattr(server.engine.SETUP, "start", start)
+    monkeypatch.setattr(server.engine.SETUP, "public", lambda: payload["progress"])
+    monkeypatch.setattr(handler, "do_POST", post, raising=False)
+    c.js("document.querySelector('#go').scrollIntoView({block:'center',behavior:'instant'})")
+    click(c, "#go")
+    wait(c, "document.querySelector('#plan').hidden && !document.querySelector('#run').hidden")
+    assert c.js("document.querySelector('#err').hidden")
+    assert starts == [{"models": ["translation"], "cleanup": False, "accel": "metal"}]
