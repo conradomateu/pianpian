@@ -1,16 +1,19 @@
 """Build Pianpian.app, the one people download: dist/Pianpian.app, Pianpian-macOS.dmg and Pianpian-macOS.zip.
 
     python3 dev.py build          # needs macOS on Apple Silicon, uv, CMake and Xcode's command-line tools
+    python3 dev.py build-signed   # Developer ID + notarization; credentials in the pianpian-notary Keychain profile
 
 The window (launcher.py with pywebview) is frozen with PyInstaller, with the server, the pages, the
 pipeline scripts, both locks, the compiled speech helper, uv and the version inside. The engine and the
 models are not: the app installs them on first run (engine.py, setup.html), which keeps the download
-small. The bundle is signed ad hoc, which Apple Silicon needs to run it at all; without a paid Developer
-ID, macOS asks once before opening it (System Settings → Privacy & Security → Open Anyway).
+small. The default build signs ad hoc; --signed uses Developer ID and Apple's notary service instead.
+Without Developer ID and notarization, users must approve the app in System Settings → Privacy & Security.
 The DMG (window and arrow: tools/dmg/) is what people open and drag to Applications; the zip is what the app's
 updater and package managers will take. The GitHub release workflow runs this and attaches both to each release.
 """
+import argparse
 import json
+import os
 import plistlib
 import re
 import shutil
@@ -23,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DIST, BUILD = ROOT / "dist", ROOT / "build"
 APP = DIST / "Pianpian.app"
 ICON = ROOT / "design" / "icons" / "20-pianpian-watermelon.svg"
+ENTITLEMENTS = ROOT / "tools" / "mac" / "entitlements.plist"
 PIPELINE_SKIP = shutil.ignore_patterns("__pycache__", "*.pyc", "*.sh", "bin")
 PYINSTALLER, PYWEBVIEW = "pyinstaller==6.22.3", "pywebview==6.2.1"   # the Windows build imports these: one pair for both apps
 EXCLUDE = ["tkinter", "unittest", "pydoc_data", "lib2to3", "test", "idlelib", "ensurepip", "distutils"]
@@ -30,7 +34,44 @@ EXCLUDE = ["tkinter", "unittest", "pydoc_data", "lib2to3", "test", "idlelib", "e
 
 def run(*cmd, **kw):
     print("$", " ".join(str(c) for c in cmd), flush=True)
-    subprocess.run([str(c) for c in cmd], check=True, **kw)
+    try:
+        return subprocess.run([str(c) for c in cmd], check=True, **kw)
+    except subprocess.CalledProcessError as error:
+        if error.stdout:
+            print(error.stdout, file=sys.stderr)
+        if error.stderr:
+            print(error.stderr, file=sys.stderr)
+        raise
+
+
+def signing_identity() -> str:
+    result = run("security", "find-identity", "-v", "-p", "codesigning", capture_output=True, text=True)
+    identities = dict(re.findall(r'\b([A-Fa-f0-9]{40})\s+"(Developer ID Application:[^"]+)"', result.stdout))
+    requested = os.environ.get("PIANPIAN_SIGNING_IDENTITY", "")
+    if requested:
+        identities = {key: name for key, name in identities.items() if requested in (key, name)}
+    if len(identities) != 1:
+        sys.exit("Need one valid Developer ID Application identity in Keychain. Create it in Xcode > Settings > Apple Accounts > "
+                 "Manage Certificates, or select its full name/SHA-1 with PIANPIAN_SIGNING_IDENTITY if you have several.")
+    return next(iter(identities))
+
+
+def notarize(archive: Path, target: Path, profile: str) -> None:
+    result = run("xcrun", "notarytool", "submit", archive, "--keychain-profile", profile,
+                 "--wait", "--output-format", "json", capture_output=True, text=True)
+    status = json.loads(result.stdout)
+    print(f"Notarization: {status.get('status')} · {status.get('id')}", flush=True)
+    if status.get("status") != "Accepted":
+        if status.get("id"):
+            run("xcrun", "notarytool", "log", status["id"], "--keychain-profile", profile)
+        sys.exit("Apple has not accepted this build. Do not distribute it; see the notarization log above.")
+    run("xcrun", "stapler", "staple", target)
+    run("xcrun", "stapler", "validate", target)
+
+
+def make_zip(path: Path) -> None:
+    path.unlink(missing_ok=True)
+    run("ditto", "-c", "-k", "--keepParent", APP, path)
 
 
 def version() -> str:
@@ -88,13 +129,18 @@ def make_dmg() -> Path:
     return dmg
 
 
-def main() -> None:
+def main(signed: bool = False) -> None:
     if sys.platform != "darwin":
         sys.exit("Pianpian.app is built on macOS")
     ver = version()
     uv = shutil.which("uv")
     if not uv:
         sys.exit("needs uv (brew install uv)")
+    identity = signing_identity() if signed else "-"
+    profile = os.environ.get("PIANPIAN_NOTARY_PROFILE", "pianpian-notary")
+    if signed:
+        # Check credentials before removing a previous build; passwords stay in Keychain.
+        run("xcrun", "notarytool", "history", "--keychain-profile", profile, stdout=subprocess.DEVNULL)
     shutil.rmtree(APP, ignore_errors=True)
     BUILD.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=BUILD, prefix="app-stage-") as t:
@@ -110,6 +156,8 @@ def main() -> None:
                  (str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), "."), ("LICENSE", "."), *speech_data, *alignment_data]
         args = ["--noconfirm", "--clean", "--windowed", "--name", "Pianpian", "--icon", icns,
                 "--osx-bundle-identifier", "app.pianpian", "--distpath", DIST, "--workpath", BUILD / "pyi", "--specpath", BUILD]
+        if signed:
+            args += ["--codesign-identity", identity, "--osx-entitlements-file", ENTITLEMENTS]
         for src, dest in datas:
             args += ["--add-data", f"{(ROOT / src) if not Path(src).is_absolute() else src}:{dest}"]
         # Binary collection lets PyInstaller inspect dependencies and sign the native helper on macOS.
@@ -127,18 +175,33 @@ def main() -> None:
                  "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True, "LSApplicationCategoryType": "public.app-category.education",
                  "NSHumanReadableCopyright": "Pianpian 片片 · MIT licence"})
     plist.write_bytes(plistlib.dumps(info))
-    run("codesign", "--force", "--deep", "--sign", "-", APP)       # ad hoc: required on Apple Silicon
+    if signed:
+        # PyInstaller signs the nested code. Re-seal only the app after changing Info.plist.
+        run("codesign", "--force", "--sign", identity, "--options", "runtime", "--timestamp", "--entitlements", ENTITLEMENTS, APP)
+    else:
+        run("codesign", "--force", "--deep", "--sign", "-", APP)
     run("codesign", "--verify", "--deep", "--strict", APP)          # fail here, not on someone's Mac
     run(APP / "Contents" / "Resources" / "pipeline" / "bin" / "pianpian-sensevoice", "--help")
     run(APP / "Contents" / "Resources" / "pipeline" / "bin" / "pianpian-align", "--help")
+    if signed:
+        submission = BUILD / "Pianpian-notarization.zip"
+        make_zip(submission)
+        notarize(submission, APP, profile)
+        run("spctl", "--assess", "--type", "execute", "--verbose=2", APP)
     zip_path = DIST / "Pianpian-macOS.zip"
-    zip_path.unlink(missing_ok=True)
-    run("ditto", "-c", "-k", "--keepParent", APP, zip_path)       # ditto keeps the bundle's links and signature
+    make_zip(zip_path)                                           # include the stapled app, not the submission copy
     dmg = make_dmg()
+    if signed:
+        run("codesign", "--force", "--sign", identity, "--timestamp", dmg)
+        notarize(dmg, dmg, profile)
+        run("codesign", "--verify", "--strict", dmg)
+        run("spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=2", dmg)
     size = sum(f.stat().st_size for f in APP.rglob("*") if f.is_file() and not f.is_symlink())
     print(f"\n{APP.relative_to(ROOT)}: {size / 1e6:.0f} MB · {dmg.relative_to(ROOT)}: {dmg.stat().st_size / 1e6:.0f} MB · "
           f"{zip_path.relative_to(ROOT)}: {zip_path.stat().st_size / 1e6:.0f} MB · v{ver}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--signed", action="store_true", help="require Developer ID signing and Apple notarization")
+    main(parser.parse_args().signed)

@@ -514,3 +514,72 @@ def test_speech_only_setup_keeps_translation_runtime_prices_available(monkeypatc
         assert set(option["tools"]) == {"llama"}
         assert option["tools"]["llama"]["size"] > 0
     assert plan["runtimeOptions"]["cuda"]["size"] == 688046286
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Mac subprocess PATH guard")
+@pytest.mark.parametrize("failed", [False, True])
+def test_setup_uv_never_launches_system_install_name_tool(monkeypatch, tmp_path, failed):
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", False)
+    system_tools = tmp_path / "system-tools"
+    system_tools.mkdir()
+    marker = tmp_path / "developer-tools-requested"
+    tool = system_tools / "install_name_tool"
+    tool.write_text('#!/bin/sh\ntouch "$CLT_MARKER"\nexit 99\n')
+    tool.chmod(0o755)
+    env = {"PATH": str(system_tools) + os.pathsep + os.defpath, "CLT_MARKER": str(marker)}
+    original_path = os.environ.get("PATH")
+    guards = []
+
+    def execute(cmd, guarded, sid):
+        guards.append(Path(guarded["PATH"].split(os.pathsep)[0]))
+        result = subprocess.run(["install_name_tool", "-id", "unused", "unused"], env=guarded)
+        assert result.returncode == 1  # uv sees an unavailable optional rewrite, never a fake success
+        assert not marker.exists()
+        assert os.environ.get("PATH") == original_path
+        if failed:
+            raise RuntimeError("package download failed")
+
+    monkeypatch.setattr(e.SETUP, "_exec", execute)
+    if failed:
+        with pytest.raises(RuntimeError, match="package download failed"):
+            e.SETUP._uv(["uv", "venv"], env)
+    else:
+        e.SETUP._uv(["uv", "venv"], env)
+    assert all(not path.exists() for path in guards)
+    assert env["PATH"].startswith(str(system_tools)) and os.environ.get("PATH") == original_path
+
+
+def test_windows_setup_uv_keeps_its_environment(monkeypatch, tmp_path):
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", True)
+    calls = []
+    monkeypatch.setattr(e.SETUP, "_exec", lambda *args: calls.append(args))
+    env = {"PATH": "windows-tools"}
+    e.SETUP._uv(["uv", "venv"], env)
+    assert calls == [(["uv", "venv"], env, "engine")]
+    assert not list(tmp_path.glob("uv-tools-*"))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Mac subprocess PATH guard")
+def test_mac_setup_guards_python_creation_and_package_sync(monkeypatch, tmp_path):
+    e = fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(e, "WINDOWS", False)
+    fake_setup(monkeypatch, e)
+    monkeypatch.setattr(e, "python", lambda: str(e.engine_python(e.engine_dir())))
+    execute = e.SETUP._exec
+    guarded = []
+
+    def capture(cmd, env, sid):
+        if cmd[0] == "uv":
+            guarded.append(cmd[1])
+            assert Path(env["PATH"].split(os.pathsep)[0], "install_name_tool").resolve() == Path("/usr/bin/false").resolve()
+        else:
+            assert "PATH" not in env
+        execute(cmd, env, sid)
+
+    monkeypatch.setattr(e.SETUP, "_exec", capture)
+    e.check()
+    run_setup(e, None, None, [])
+    assert e.SETUP.state == "done", e.SETUP.error
+    assert guarded == ["venv", "pip"]

@@ -18,6 +18,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -423,6 +424,16 @@ class Setup:
             if p.wait():
                 raise RuntimeError(f"{Path(cmd[0]).name} stopped (exit {p.returncode}); see the log")
 
+    def _uv(self, cmd: list[str], env: dict) -> None:
+        if WINDOWS:
+            return self._exec(cmd, env, "engine")
+        # uv's optional dylib rewrite triggers Apple's developer-tools installer (#14893).
+        # Our engine builds no native extensions: leave Python's signed library untouched.
+        data_dir().mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="uv-tools-", dir=data_dir()) as folder:
+            Path(folder, "install_name_tool").symlink_to("/usr/bin/false")
+            self._exec(cmd, {**env, "PATH": folder + os.pathsep + env.get("PATH", os.environ.get("PATH", os.defpath))}, "engine")
+
     def _run(self) -> None:
         try:
             if WINDOWS and self.runtime_tools and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
@@ -462,9 +473,9 @@ class Setup:
                             raise RuntimeError(f"{eng} is not Pianpian's engine: move it away, or choose another data folder")
                         self._say(f"the engine in {eng} can't start: making it again")
                         shutil.rmtree(eng)
-                    self._exec([exe, "venv", "--python", "3.12", str(eng)], env, "engine")
+                    self._uv([exe, "venv", "--python", "3.12", str(eng)], env)
                 # sync, not install: the engine ends up exactly as pinned, packages no longer listed are removed
-                self._exec([exe, "pip", "sync", "--python", str(py), str(REQS)], env, "engine")
+                self._uv([exe, "pip", "sync", "--python", str(py), str(REQS)], env)
                 (eng / ".pianpian-requirements").write_text(requirements_id() + "\n")
                 self._say("fetching the dictionary (CC-CEDICT)")
                 self._exec([str(py), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",

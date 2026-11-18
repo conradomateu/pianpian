@@ -54,6 +54,15 @@ the server to make subtitles.
   weights are installed. Sync removes the former MLX dependency stack. Saved video files are preserved.
   Explicit model/cache/runtime environment overrides are captured at app startup; app-derived paths
   follow the chosen data folder before setup checks the catalog or starts downloads.
+- **Mac developer tools:** setup prevents uv's optional Python dylib rewrite from launching
+  Apple's Command Line Tools installer ([upstream issue](https://github.com/astral-sh/uv/issues/14893)).
+  A temporary, process-local `install_name_tool` link to `/usr/bin/false` lets uv take its warning path;
+  the interpreter's library stays untouched. This applies to Python creation and package sync only.
+  No debug switch or user action is needed. The engine builds no native Python extensions.
+  On 18 Nov 2026, a fresh engine installed with bundled uv 0.13.7 and Python 3.12.16 on Apple Silicon
+  while developer commands were blocked on PATH; package imports, pinyin and text conversion passed.
+  A Mac with Command Line Tools physically absent remains untested. Mac release builds run this
+  download-backed check before publishing; regular offline tests skip it.
 - **Repair:** setup recreates the engine only when its Python or `pyvenv.cfg` is missing, or the
   interpreter cannot launch or exits with an error on `python -c "pass"`. A slow interpreter probe
   timing out does not trigger deletion. Failed imports are repaired by package sync. A nonempty folder
@@ -85,7 +94,7 @@ the server to make subtitles.
 `tools/build_app.py` (`dev.py build`) freezes `launcher.py` with PyInstaller into `dist/Pianpian.app`:
 the window, the server, the pages, the pipeline scripts, both locks, `uv`, the native CPU speech helper,
 the native word-link helper, and a `VERSION` file. The engine and the models
-are not inside: the first run installs them. The bundle is signed ad hoc; without a paid Developer ID,
+are not inside: the first run installs them. The default `build` signs ad hoc; without a paid Developer ID,
 macOS asks once before opening it. Inside the app, `engine.python()` never falls back to
 `sys.executable` (that would open a second window), and the server checks static paths by name,
 because PyInstaller links the files from `Contents/Frameworks` into `Contents/Resources`.
@@ -94,6 +103,56 @@ because PyInstaller links the files from `Contents/Frameworks` into `Contents/Re
 works on a build server) is what people open and drag to Applications; `Pianpian-macOS.zip` is for updaters and package
 managers. The build verifies the signature, and the app never writes `.pyc` files into itself (`engine.py`): that would
 break the signature after the first run.
+
+`python3 dev.py build-signed` builds with Developer ID and the hardened runtime, notarizes and staples
+the app, then packages it into a ZIP and a separately signed, notarized and stapled DMG. It verifies
+the tickets and Gatekeeper acceptance, and stops on any failure. The first-time setup on the build Mac is:
+
+1. In Xcode → Settings → Apple Accounts → your paid team → Manage Certificates, create a
+   **Developer ID Application** certificate (including its private key in Keychain).
+2. Create an app-specific password at account.apple.com and find the Team ID at developer.apple.com/account.
+3. Run `xcrun notarytool store-credentials pianpian-notary --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID`
+   and enter that password at the secure prompt. Credentials stay in Keychain, outside the repository.
+
+The build selects the only valid Developer ID Application identity; if there are several, set
+`PIANPIAN_SIGNING_IDENTITY` to its full name or SHA-1 fingerprint. `PIANPIAN_NOTARY_PROFILE` overrides
+the default `pianpian-notary` profile. It checks the certificate and credentials before replacing a
+previous build.
+
+GitHub Actions uses the same signed build. Configure these repository secrets under Settings →
+Secrets and variables → Actions (never commit credentials or put them in a tracked `.env`):
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE_P12_BASE64` | Base64 of a password-protected PKCS#12 containing the Developer ID Application certificate, its private key and the Developer ID G2 intermediate |
+| `APPLE_CERTIFICATE_PASSWORD` | Password protecting that PKCS#12 |
+| `APPLE_API_KEY_P8` | Contents of the App Store Connect team API key downloaded once from Users and Access → Integrations → App Store Connect API → Team Keys |
+| `APPLE_API_KEY_ID` | Key ID displayed alongside that key |
+| `APPLE_API_ISSUER_ID` | Issuer ID displayed on the Team Keys page |
+
+Create the API key with the Developer role. The workflow imports the identity into a temporary
+keychain, validates the API credentials with `notarytool`, and removes the credentials after the job.
+Missing credentials or rejected notarization stop the job before publishing. A manual run through
+Actions → app → Run workflow keeps the signed DMG and ZIP as artifacts for seven days, without
+publishing a release. Release-please passes the five secrets explicitly to the reusable workflow.
+The certificate is reused across releases; each build warns when it expires within 30 days.
+CSR/key generation can be automated, but Apple's public API does not issue Developer ID certificates:
+use Apple Developer or Xcode to issue a replacement, then update the two certificate secrets.
+
+Verified on 18 Nov 2026:
+
+- On the development Mac, a fresh temporary keychain imported the protected PKCS#12 and signed
+  a disposable executable with Developer ID, hardened runtime and an Apple timestamp.
+- The initial v0.1.4 build passed real Apple notarization, stapling, strict signature checks and
+  Gatekeeper acceptance for both app and DMG. The signed app opened its setup screen on that Mac.
+- The current v0.3.2 source plus signing changes passed the complete
+  [GitHub Actions build](https://github.com/conradomateu/pianpian/actions/runs/44271008449)
+  on macOS 15 ARM64: native helper startup, signing, notarization, stapling, Gatekeeper checks,
+  first-run setup with developer commands blocked, artifact upload and credential cleanup.
+  This was a manual test run; it did not publish or replace a release.
+
+Not tested: interactive installation and launch of the final GitHub artifact on a clean Mac.
+Unit tests simulate Apple's commands; the local and GitHub builds used the real service.
 
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
