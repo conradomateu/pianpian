@@ -1,6 +1,6 @@
 # Windows signing
 
-Status on 18 Nov 2026: SignPath integration prepared; Foundation admission and a publicly trusted signing trial are pending. Do not enable release publication until that trial passes. A CI test certificate is not a public publisher identity.
+Status on 18 Nov 2026: Foundation application submitted; admission and a publicly trusted signing trial are pending. Do not enable release publication until that trial passes. A CI test certificate is not a public publisher identity.
 
 ## Provider choice
 

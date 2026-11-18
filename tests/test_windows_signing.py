@@ -98,6 +98,7 @@ def test_signpath_configurations_only_include_our_outputs():
     for config, expected in [("windows-executables", {Path(p).name for p in ws.OWN} | {"uninstaller.exe"}),
                              ("windows-installer", {"Pianpian-Windows-Setup.exe"})]:
         tree = ET.parse(root / f"tools/windows/{config}.xml")
+        assert tree.find("s:parameters/s:parameter", ns).attrib == {"name": "version", "required": "true"}
         files = tree.findall(".//s:pe-file", ns)
         assert {f.attrib["path"] for f in files} == expected
         assert all(f.attrib["product-name"] == "Pianpian" and f.attrib["product-version"] == "${version}" for f in files)
