@@ -7,6 +7,7 @@ if (!$signTool) { throw 'Windows SDK signtool.exe is required' }
 $verify = "$PSScriptRoot/verify-signatures.ps1"
 $testRoot = 'scratch/windows-signing-test'
 New-Item -ItemType Directory -Force $testRoot | Out-Null
+Write-Host 'Creating disposable code-signing certificate'
 $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Pianpian CI ONLY - NOT FOR DISTRIBUTION' `
     -CertStoreLocation Cert:/CurrentUser/My -KeyExportPolicy NonExportable -HashAlgorithm SHA256 `
     -NotAfter (Get-Date).AddDays(1)
@@ -14,6 +15,7 @@ $env:WINDOWS_SIGNING_SUBJECT = $certificate.Subject
 function Sign-Fixture([string]$File, [bool]$Timestamp = $true) {
     $arguments = @('sign', '/sha1', $certificate.Thumbprint, '/fd', 'SHA256')
     if ($Timestamp) { $arguments += @('/tr', 'http://timestamp.digicert.com', '/td', 'SHA256') }
+    Write-Host "Signing fixture: $File (timestamp=$Timestamp)"
     & $signTool.FullName @arguments $File
     if ($LASTEXITCODE -ne 0) { throw "Fixture signing failed: $File" }
 }
@@ -23,10 +25,13 @@ function Expect-Rejected([string]$File, [string]$Subject = $certificate.Subject)
     if (!$rejected) { throw "Verifier incorrectly accepted $File" }
 }
 try {
-    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('Root', 'CurrentUser')
+    # CurrentUser Root insertion shows a consent dialog; this disposable runner is already elevated.
+    Write-Host 'Trusting fixture certificate on this disposable runner'
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('Root', 'LocalMachine')
     $store.Open('ReadWrite')
     $store.Add($certificate)
     $store.Close()
+    Write-Host 'Staging fixture executables'
     python tools/windows_signing.py prepare
     if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
     $source = 'scratch/windows-signing/unsigned/Pianpian.exe'
@@ -61,6 +66,6 @@ try {
     & "$PSScriptRoot/check-signed-installer.ps1"
     Write-Host 'PASS: real Authenticode rejection cases, metadata, timestamps, install/payload verification and uninstall'
 } finally {
-    Remove-Item "Cert:/CurrentUser/Root/$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
+    Remove-Item "Cert:/LocalMachine/Root/$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
     Remove-Item "Cert:/CurrentUser/My/$($certificate.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue
 }
