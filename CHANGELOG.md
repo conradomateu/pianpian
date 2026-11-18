@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/conradomateu/pianpian/compare/pianpian-v0.3.2...pianpian-v0.3.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* sign and notarize macOS releases with Developer ID ([2dea41d](https://github.com/conradomateu/pianpian/commit/2dea41d38afc5e4df8ebe53d23690564d71a0471))
+
 ## [0.3.2](https://github.com/conradomateu/pianpian/compare/pianpian-v0.3.1...pianpian-v0.3.2) (2026-11-18)
 
 
