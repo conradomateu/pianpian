@@ -52,8 +52,9 @@ try {
     Copy-Item scratch/windows-signing/unsigned scratch/windows-signing/signed -Recurse
     $version = (Get-Content .release-please-manifest.json | ConvertFrom-Json).'.'
     foreach ($file in Get-ChildItem scratch/windows-signing/signed/*.exe) {
-        if ($file.VersionInfo.ProductName -ne 'Pianpian' -or $file.VersionInfo.ProductVersion -ne $version) {
-            throw "Missing SignPath product metadata: $($file.Name)"
+        # Inno preserves fixed-width VERSIONINFO fields, padded with spaces.
+        if ($file.VersionInfo.ProductName.Trim() -ne 'Pianpian' -or $file.VersionInfo.ProductVersion.Trim() -ne $version) {
+            throw "Unexpected metadata for $($file.Name): product='$($file.VersionInfo.ProductName)', version='$($file.VersionInfo.ProductVersion)'"
         }
         Sign-Fixture $file.FullName
         & $verify -Path $file.FullName
