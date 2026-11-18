@@ -4,7 +4,7 @@
 
 # Pianpian 片片
 
-**Learn Chinese from the videos you love.**
+**Learn Chinese from the videos you love ❤️**
 
 Turn Bilibili, YouTube and your own videos into Chinese, pinyin and English subtitles.
 Look up words, practise sentences and send them to Anki. Speech recognition and translation run on your computer.
