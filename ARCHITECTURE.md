@@ -93,8 +93,10 @@ Verified on 18 Nov 2026 on the development Mac: importing the password-protected
 a fresh temporary keychain and signing a disposable executable with Developer ID, hardened runtime
 and an Apple timestamp. Its signature, Team ID and timestamp passed verification. This tests the
 identity and import process, not the packaged app.
-Not tested yet: a complete signed build, Apple notarization, a GitHub Actions signing run, and
-launching the resulting signed app on a clean Mac; the signing tests simulate Apple's commands.
+Also verified on 18 Nov 2026 on that Mac: the complete build, Apple notarization of the app and
+DMG (both Accepted), stapled tickets, strict signature checks and Gatekeeper acceptance as
+`Notarized Developer ID`. Not tested yet: a GitHub Actions signing run and launching the resulting
+signed app on a clean Mac. Unit tests simulate Apple's commands; the local build used the real service.
 
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches

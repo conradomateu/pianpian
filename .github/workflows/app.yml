@@ -65,7 +65,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$SIGNING_KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$SIGNING_KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
           security default-keychain -d user -s "$SIGNING_KEYCHAIN"
-          openssl pkcs12 -in "$certificate" -passin env:APPLE_CERTIFICATE_PASSWORD -clcerts -nokeys -out "$RUNNER_TEMP/pianpian-signing-cert.pem"
+          /usr/bin/openssl pkcs12 -in "$certificate" -passin env:APPLE_CERTIFICATE_PASSWORD -clcerts -nokeys -out "$RUNNER_TEMP/pianpian-signing-cert.pem"
           if ! openssl x509 -in "$RUNNER_TEMP/pianpian-signing-cert.pem" -checkend 2592000 -noout; then
             echo "::warning::Developer ID certificate expires within 30 days. Issue a replacement in Apple Developer and update the certificate secrets."
           fi
