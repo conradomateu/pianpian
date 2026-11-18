@@ -26,6 +26,10 @@ jobs:
           version: "0.13.7"          # this uv ships inside the app and installs every user's engine: keep it exact
       - run: cmake --version
       - run: python3 tools/build_app.py  # compiles pinned CPU speech helper, bundles notices, checks packaged --help
+      - name: Check first-run setup without developer commands
+        run: uv run --group dev pytest -q tests/test_setup_no_xcode.py --basetemp scratch/pytest-no-xcode
+        env:
+          PIANPIAN_TEST_UV: dist/Pianpian.app/Contents/Resources/uv
       - name: Attach to the release
         if: inputs.tag
         env:

@@ -54,6 +54,15 @@ the server to make subtitles.
   weights are installed. Sync removes the former MLX dependency stack. Saved video files are preserved.
   Explicit model/cache/runtime environment overrides are captured at app startup; app-derived paths
   follow the chosen data folder before setup checks the catalog or starts downloads.
+- **Mac developer tools:** setup prevents uv's optional Python dylib rewrite from launching
+  Apple's Command Line Tools installer ([upstream issue](https://github.com/astral-sh/uv/issues/14893)).
+  A temporary, process-local `install_name_tool` link to `/usr/bin/false` lets uv take its warning path;
+  the interpreter's library stays untouched. This applies to Python creation and package sync only.
+  No debug switch or user action is needed. The engine builds no native Python extensions.
+  On 18 Nov 2026, a fresh engine installed with bundled uv 0.13.7 and Python 3.12.16 on Apple Silicon
+  while developer commands were blocked on PATH; package imports, pinyin and text conversion passed.
+  A Mac with Command Line Tools physically absent remains untested. Mac release builds run this
+  download-backed check before publishing; regular offline tests skip it.
 - **Repair:** setup recreates the engine only when its Python or `pyvenv.cfg` is missing, or the
   interpreter cannot launch or exits with an error on `python -c "pass"`. A slow interpreter probe
   timing out does not trigger deletion. Failed imports are repaired by package sync. A nonempty folder
