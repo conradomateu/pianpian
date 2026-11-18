@@ -8,6 +8,17 @@ on:
       tag:
         type: string
         required: true
+    secrets:
+      APPLE_CERTIFICATE_P12_BASE64:
+        required: true
+      APPLE_CERTIFICATE_PASSWORD:
+        required: true
+      APPLE_API_KEY_P8:
+        required: true
+      APPLE_API_KEY_ID:
+        required: true
+      APPLE_API_ISSUER_ID:
+        required: true
   workflow_dispatch:
 permissions:
   contents: write
@@ -15,6 +26,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-15            # Apple Silicon, with Xcode's swiftc for the icon and the OCR helper
+    timeout-minutes: 120
     env:
       MACOSX_DEPLOYMENT_TARGET: '14.0'
     steps:
@@ -22,7 +34,45 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
       - uses: astral-sh/setup-uv@v7
-      - run: python3 tools/build_app.py
+      - name: Install signing identity and notarization credentials
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          SIGNING_KEYCHAIN="$RUNNER_TEMP/pianpian-signing.keychain-db"
+          for name in APPLE_CERTIFICATE_P12_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          certificate="$RUNNER_TEMP/pianpian-signing.p12"
+          api_key="$RUNNER_TEMP/pianpian-notary.p8"
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$certificate"
+          printf '%s' "$APPLE_API_KEY_P8" > "$api_key"
+          keychain_password=$(openssl rand -hex 32)
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$SIGNING_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$SIGNING_KEYCHAIN"
+          security unlock-keychain -p "$keychain_password" "$SIGNING_KEYCHAIN"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -t agg -f pkcs12 -k "$SIGNING_KEYCHAIN" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$SIGNING_KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$SIGNING_KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$SIGNING_KEYCHAIN"
+          openssl pkcs12 -in "$certificate" -passin env:APPLE_CERTIFICATE_PASSWORD -clcerts -nokeys -out "$RUNNER_TEMP/pianpian-signing-cert.pem"
+          if ! openssl x509 -in "$RUNNER_TEMP/pianpian-signing-cert.pem" -checkend 2592000 -noout; then
+            echo "::warning::Developer ID certificate expires within 30 days. Issue a replacement in Apple Developer and update the certificate secrets."
+          fi
+          xcrun notarytool store-credentials pianpian-notary --key "$api_key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --keychain "$SIGNING_KEYCHAIN"
+          rm -f "$certificate" "$api_key"
+      - name: Build, sign and notarize
+        run: python3 tools/build_app.py --signed
       - name: Attach to the release
         if: inputs.tag
         env:
@@ -42,3 +92,13 @@ jobs:
             dist/Pianpian-macOS.dmg
             dist/Pianpian-macOS.zip
           retention-days: 7
+      - name: Remove signing credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          SIGNING_KEYCHAIN="$RUNNER_TEMP/pianpian-signing.keychain-db"
+          security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db"
+          if [[ -f "$SIGNING_KEYCHAIN" ]]; then
+            security delete-keychain "$SIGNING_KEYCHAIN"
+          fi
+          rm -f "$RUNNER_TEMP/pianpian-signing.p12" "$RUNNER_TEMP/pianpian-notary.p8" "$RUNNER_TEMP/pianpian-signing-cert.pem"

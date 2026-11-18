@@ -10,6 +10,7 @@
     python3 dev.py serve      # the app at http://127.0.0.1:8770
     python3 dev.py app        # a dev Pianpian.app in ~/Applications that runs this checkout (macOS)
     python3 dev.py build      # the real Pianpian.app and Pianpian-macOS.zip in dist/ (what releases ship)
+    python3 dev.py build-signed # Developer ID signed and notarized app, DMG and ZIP (credentials in Keychain)
     python3 dev.py site       # the website into _site/ (landing page + live demo)
     python3 dev.py preview    # build it and serve it at http://127.0.0.1:8766
     python3 dev.py shots      # README and website screenshots from the demo (needs Chrome or Brave)
@@ -65,6 +66,7 @@ TASKS = {
     "serve": lambda: run(sys.executable, "server.py"),
     "app": lambda: run("sh", "tools/make_app.sh"),
     "build": lambda: run(sys.executable, "tools/build_app.py"),
+    "build-signed": lambda: run(sys.executable, "tools/build_app.py", "--signed"),
     "site": lambda: run(sys.executable, "tools/build_site.py"),
     "preview": lambda: run(sys.executable, "tools/build_site.py", "--serve"),
     "shots": lambda: run(sys.executable, "tools/shots.py"),
