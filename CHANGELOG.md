@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/conradomateu/pianpian/compare/pianpian-v0.3.1...pianpian-v0.3.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* install Mac engine without Xcode developer tools ([aad8718](https://github.com/conradomateu/pianpian/commit/aad8718f1e686789531d6826aafa058b517fb1e5))
+
 ## [0.3.1](https://github.com/conradomateu/pianpian/compare/pianpian-v0.3.0...pianpian-v0.3.1) (2026-11-18)
 
 
