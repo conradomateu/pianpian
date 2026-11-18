@@ -512,3 +512,5 @@ including a 390 × 480 CSS-pixel viewport, exercised real taps, keyboard focus r
 visibility and reduced motion. Desktop clicks checked toolbar/footer hit targets. These are browser
 checks, not physical-device tests. iPhone Safari, Android browsers and native fullscreen remain untested;
 fullscreen checks cover button dispatch with the native API stubbed.
+
+Windows distribution signing: see [Windows signing](docs/windows-signing.md). Release-please creates a draft; publication waits for both platform jobs. Windows uses SignPath to sign the app's explicit executable allowlist and Inno's uninstaller before packaging, then the final installer. Signature, timestamp, publisher and payload-preservation failures block publication. Provider enrollment and the first public-certificate trial are pending; a disposable CI certificate only tests the machinery.

@@ -21,6 +21,14 @@ AppId={{6E3C9B9E-7C2A-4E2B-9F7D-5A1D7E4C8A31}
 AppName=Pianpian
 AppVersion={#MyAppVersion}
 AppVerName=Pianpian {#MyAppVersion}
+VersionInfoProductName=Pianpian
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductTextVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersion}
+#ifdef MySignedUninstallerDir
+SignedUninstaller=yes
+SignedUninstallerDir={#MySignedUninstallerDir}
+#endif
 AppPublisher=Pianpian
 AppPublisherURL=https://github.com/conradomateu/pianpian
 AppSupportURL=https://github.com/conradomateu/pianpian/issues

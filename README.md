@@ -31,3 +31,5 @@ For Apple Silicon Macs with macOS 14 or newer, and Windows 11 x64.
 | <img src="site/shots/grammar.png" alt="A grammar guide showing Chinese sentence patterns" width="420"> | **Explore the grammar.** See common sentence patterns with pinyin and examples. |
 
 [Contribute](CONTRIBUTING.md) · [Licence and credits](CREDITS.md)
+
+[Code signing policy](CODE_SIGNING.md) · [Windows signing setup](docs/windows-signing.md)

@@ -29,3 +29,6 @@ else()
   target_link_libraries(alignment-protocol-test PRIVATE ${CMAKE_DL_LIBS})
 endif()
 add_test(NAME alignment-protocol COMMAND alignment-protocol-test)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../windows/version.cmake")
+pianpian_version(pianpian-align)

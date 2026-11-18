@@ -18,6 +18,7 @@ go under build/).
 import argparse
 import os
 import shutil
+import subprocess
 import sys
 import time
 import zipfile
@@ -32,6 +33,7 @@ STAGE = BUILD / "windows"
 ICON = ROOT / "design" / "icons" / "Pianpian.ico"   # built into Pianpian.exe and Setup.exe; pywebview takes the window icon from the exe
 ISS = ROOT / "tools" / "windows" / "pianpian.iss"
 SETUP = DIST / "Pianpian-Windows-Setup.exe"
+UNINSTALLER = BUILD / "windows-uninstaller"
 # PYINSTALLER, PYWEBVIEW (tools/build_app.py): the green windows.yml run of 7 Nov 2026 logged PyInstaller 6.22.3 and
 # hooks-contrib 2026.9; pywebview's version is not printed there: 6.2.1 is what the same resolution gives on 7 Nov 2026
 DATAS = [("app.html", "."), ("setup.html", "."), ("assets", "assets"), (str(LOGO), "design/icons"), ("LICENSE", ".")]
@@ -56,9 +58,20 @@ def pyinstaller(debug_console: bool) -> None:
     (stage / "VERSION").write_text(version() + "\n", encoding="utf-8")
     datas = DATAS + [(str(stage / "pipeline"), "pipeline"), (str(stage / "VERSION"), "."), *speech_data, *alignment_data,
                      *[(str(p), "pipeline/bin") for p in crt if p.suffix != ".dll"]]
+    resource = STAGE / "version.txt"
+    ver = version()
+    numbers = tuple(map(int, ver.split("."))) + (0,)
+    resource.write_text(
+        f"VSVersionInfo(ffi=FixedFileInfo(filevers={numbers!r}, prodvers={numbers!r}, "
+        "mask=0x3f, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)), "
+        "kids=[StringFileInfo([StringTable('040904B0', ["
+        f"StringStruct('ProductName', 'Pianpian'), StringStruct('ProductVersion', {ver!r}), "
+        f"StringStruct('FileVersion', {ver!r}), StringStruct('FileDescription', 'Pianpian'), "
+        "StringStruct('OriginalFilename', 'Pianpian.exe')])]), "
+        "VarFileInfo([VarStruct('Translation', [1033, 1200])])])", encoding="utf-8")
     # pipeline/ (links, models, …) is not on PyInstaller's path: it ships as data, and engine.py puts it on sys.path
     args = ["--noconfirm", "--clean", "--noupx", "--onedir", "--name", "Pianpian", "--icon", ICON,
-            "--distpath", DIST, "--workpath", BUILD / "pyi-win", "--specpath", BUILD,
+            "--version-file", resource, "--distpath", DIST, "--workpath", BUILD / "pyi-win", "--specpath", BUILD,
             "--hidden-import", "webview.platforms.edgechromium", "--hidden-import", "ctypes"]
     if not debug_console:
         args.append("--windowed")
@@ -89,7 +102,7 @@ def zip_app() -> Path:
     return out
 
 
-def installer() -> Path:
+def installer(*, signed_uninstaller: bool = False, prepare: bool = False) -> Path:
     """dist/Pianpian-Windows-Setup.exe; a normal build fails rather than silently omitting it."""
     iscc = (shutil.which("iscc") or shutil.which("ISCC")
             or next((str(p) for p in (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
@@ -97,8 +110,21 @@ def installer() -> Path:
                                       Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Inno Setup 6" / "ISCC.exe") if p.is_file()), None))
     if not iscc:
         raise RuntimeError("Inno Setup 6 is required for the installer (winget install JRSoftware.InnoSetup), or use --no-installer")
-    run(iscc, f"/DMyAppVersion={version()}", f"/DMySourceDir={DIST / 'Pianpian'}", f"/DMyOutputDir={DIST}",
-        f"/DMyIcon={ICON}", ISS)
+    args = [iscc, f"/DMyAppVersion={version()}", f"/DMySourceDir={DIST / 'Pianpian'}", f"/DMyOutputDir={DIST}",
+            f"/DMyIcon={ICON}"]
+    if signed_uninstaller or prepare:
+        args.append(f"/DMySignedUninstallerDir={UNINSTALLER}")
+    if prepare:
+        shutil.rmtree(UNINSTALLER, ignore_errors=True)
+        UNINSTALLER.mkdir(parents=True)
+        # Inno's documented external-signing mode stops here until its generated PE is signed.
+        result = subprocess.run([*map(str, args), str(ISS)], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        files = list(UNINSTALLER.glob("uninst-*.e*"))
+        if result.returncode == 0 or len(files) != 1 or "please attach your digital signature" not in result.stdout:
+            raise RuntimeError(f"Inno did not stop at the expected uninstaller-signing boundary:\n{result.stdout}")
+        return files[0]
+    run(*args, ISS)
     return SETUP
 
 
@@ -106,17 +132,25 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--no-installer", action="store_true", help="PyInstaller and the zip only")
     ap.add_argument("--debug-console", action="store_true", help="keep a console window for logs while testing")
+    ap.add_argument("--prepare-signing", action="store_true", help="build app and stage Inno uninstaller for SignPath")
+    ap.add_argument("--package-signed", action="store_true", help="package an already verified app and signed uninstaller")
     a = ap.parse_args()
+    if a.prepare_signing and (a.package_signed or a.no_installer) or a.package_signed and a.no_installer:
+        ap.error("signing stages cannot be combined with each other or --no-installer")
     if sys.platform != "win32":
         sys.exit("the Windows build must run on Windows")
     t0 = time.time()
     DIST.mkdir(exist_ok=True)
     BUILD.mkdir(exist_ok=True)
     SETUP.unlink(missing_ok=True)       # an older installer must not pass for this run's
-    pyinstaller(a.debug_console)
+    if not a.package_signed:
+        pyinstaller(a.debug_console)
+    if a.prepare_signing:
+        installer(prepare=True)
+        return
     built = [DIST / "Pianpian" / "Pianpian.exe", zip_app()]
     if not a.no_installer:
-        built.append(installer())
+        built.append(installer(signed_uninstaller=True) if a.package_signed else installer())
     for p in filter(None, built):
         print(f"built {p.relative_to(ROOT)} ({p.stat().st_size / 1e6:.1f} MB)", flush=True)
     print(f"done in {time.time() - t0:.0f} s", flush=True)
