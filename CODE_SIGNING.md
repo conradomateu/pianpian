@@ -1,0 +1,7 @@
+# Code signing policy
+
+Windows signing through SignPath Foundation is **pending acceptance and a verified public-certificate trial**. Existing Windows releases must not be assumed signed. [Signing setup and verification](docs/windows-signing.md) describes the release gate and the artifacts covered.
+
+Proposed signing roles: [repository maintainer](https://github.com/conradomateu/pianpian) as author, reviewer and signing approver. External contributions require maintainer review. SignPath Foundation requires MFA and manual approval of signing requests. Provider attribution will be added after acceptance.
+
+The app processes video and subtitles locally. Installation and model/runtime downloads contact the selected package/model sources; requested video downloads contact their source platforms; update checks contact GitHub. Optional API translation sends the selected text to the configured endpoint. Reports are shown for review before the user shares them. These network operations are subject to the respective provider's privacy policy, including [GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement), [Hugging Face](https://huggingface.co/privacy), [ModelScope](https://modelscope.cn/protocol/privacy), and the user's chosen video/API provider. The website uses third-party analytics; this policy concerns the desktop app's signed distribution.

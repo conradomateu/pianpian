@@ -1,10 +1,4 @@
-# Builds Pianpian for Windows (tools/build_app_windows.py, through dev.py build) on windows-latest:
-# the PyInstaller onedir app, the per-user Inno Setup installer (no admin) and a zip. Called by
-# release-please.yml for each release, which then gets Pianpian-Windows-Setup.exe (what people open)
-# and Pianpian-Windows.zip attached; run it by hand (Actions → windows → Run workflow) to try a build:
-# the files are kept as a workflow artifact for a week either way. Only the release job may write.
-# Checks are ci.yml's job.
-# Inno Setup 6, CMake and Visual Studio C++ tools are preinstalled on windows-latest runners.
+# Every distribution requires SignPath; dispatch produces a trial artifact, never a release.
 name: windows
 on:
   workflow_call:
@@ -12,6 +6,9 @@ on:
       tag:
         type: string
         required: true
+    secrets:
+      SIGNPATH_API_TOKEN:
+        required: false # may come from the windows-signing environment; preflight still requires it
   workflow_dispatch:
     inputs:
       benchmark_speech:
@@ -23,7 +20,30 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 150
+    environment: windows-signing
+    permissions:
+      contents: read
+      actions: read
+    env:
+      WINDOWS_SIGNING_SUBJECT: ${{ vars.WINDOWS_SIGNING_SUBJECT }}
     steps:
+      - name: Require signing configuration
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SIGNING_TEST_RUN: ${{ vars.WINDOWS_SIGNING_TEST_RUN }}
+        run: |
+          foreach ($name in 'SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID', 'WINDOWS_SIGNING_SUBJECT') {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Missing $name; unsigned distribution is forbidden"
+            }
+          }
+          if ($env:RELEASE_TAG -and $env:SIGNING_TEST_RUN -notmatch '^https://github.com/conradomateu/pianpian/actions/runs/[0-9]+$') {
+            throw 'First verify a manual signing run and set WINDOWS_SIGNING_TEST_RUN to its URL'
+          }
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
@@ -34,7 +54,73 @@ jobs:
         with:
           version: "0.13.7"          # this uv.exe ships inside the app and installs every user's engine: keep it exact
       - run: cmake --version
-      - run: python dev.py build  # compiles pinned CPU speech helper, bundles notices, checks packaged --help
+      - name: Build app and stage the uninstaller
+        run: python tools/build_app_windows.py --prepare-signing
+      - name: Stage only Pianpian executables
+        id: metadata
+        shell: pwsh
+        run: |
+          python tools/windows_signing.py prepare
+          if ($LASTEXITCODE -ne 0) { throw 'Signing staging failed' }
+          $version = (Get-Content .release-please-manifest.json | ConvertFrom-Json).'.'
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v7
+        id: unsigned-app
+        with:
+          name: unsigned-windows-executables
+          path: scratch/windows-signing/unsigned/*.exe
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign app and uninstaller (approval in SignPath)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: pianpian
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: windows-executables
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: scratch/windows-signing/signed
+          parameters: |
+            version: ${{ toJSON(steps.metadata.outputs.version) }}
+      - name: Verify and restore signed executables
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem scratch/windows-signing/signed/*.exe)
+          if ($files.Count -ne 5) { throw 'Expected five signed executables' }
+          ./tools/windows/verify-signatures.ps1 -Path $files.FullName
+          python tools/windows_signing.py apply
+          if ($LASTEXITCODE -ne 0) { throw 'Signed payload restoration failed' }
+      - name: Package signed app and uninstaller
+        run: python tools/build_app_windows.py --package-signed
+      - uses: actions/upload-artifact@v7
+        id: unsigned-installer
+        with:
+          name: unsigned-windows-installer
+          path: dist/Pianpian-Windows-Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign final installer (approval in SignPath)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: pianpian
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: windows-installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: scratch/windows-signing/installer
+          parameters: |
+            version: ${{ toJSON(steps.metadata.outputs.version) }}
+      - name: Verify final installer, install, verify payload and uninstall
+        shell: pwsh
+        run: |
+          Copy-Item scratch/windows-signing/installer/Pianpian-Windows-Setup.exe dist/Pianpian-Windows-Setup.exe -Force
+          ./tools/windows/check-signed-installer.ps1
       - name: Exercise packaged native pipeline on CPU
         shell: pwsh
         run: |
@@ -63,6 +149,7 @@ jobs:
           path: |
             dist/Pianpian-Windows-Setup.exe
             dist/Pianpian-Windows.zip
+            dist/windows-signing-verification.json
           if-no-files-found: error
           retention-days: 7
 
@@ -81,7 +168,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ inputs.tag }}" Pianpian-Windows-Setup.exe Pianpian-Windows.zip --clobber
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release upload "$RELEASE_TAG" Pianpian-Windows-Setup.exe Pianpian-Windows.zip windows-signing-verification.json --clobber
       - name: Rebuild the website (it reads the release's files when it is built, and this job may finish after app.yml's)
         env:
           GH_TOKEN: ${{ github.token }}

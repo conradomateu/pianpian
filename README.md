@@ -128,3 +128,5 @@ Pianpian stands on other people's work, used under their terms:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp), [jieba](https://github.com/fxsjy/jieba), [pypinyin](https://github.com/mozillazg/python-pinyin), [llama.cpp](https://github.com/ggml-org/llama.cpp), [pywebview](https://github.com/r0x0r/pywebview) and [uv](https://github.com/astral-sh/uv).
 
 Only download videos you are allowed to watch, and don't re-upload them.
+
+[Code signing policy](CODE_SIGNING.md) · [Windows signing setup](docs/windows-signing.md)

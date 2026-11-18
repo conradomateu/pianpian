@@ -63,3 +63,6 @@ enable_testing()
 add_test(NAME sensevoice-timestamps COMMAND sensevoice-timestamps-test)
 add_test(NAME sensevoice-cpu-dispatch COMMAND sensevoice-cpu-test)
 add_test(NAME sensevoice-build-integrity COMMAND "${PYTHON_FOR_BUILD}" "${CMAKE_CURRENT_SOURCE_DIR}/test_builder.py")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../windows/version.cmake")
+pianpian_version(pianpian-sensevoice)

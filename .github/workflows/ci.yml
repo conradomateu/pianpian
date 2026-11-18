@@ -39,7 +39,10 @@ jobs:
         env:
           UV_NO_SYNC: "1"
       - run: cmake --version                    # runner includes CMake and Visual Studio C++ for native speech
-      - run: python dev.py build                # builds/checks bundled speech helper and installer; no publication here
+      - run: python tools/build_app_windows.py --prepare-signing
+      - name: Test signing failures and installer with a disposable CI certificate
+        shell: pwsh
+        run: ./tools/windows/test-signing.ps1
       - name: Exercise packaged native pipeline on CPU
         shell: pwsh
         run: |
@@ -58,7 +61,7 @@ jobs:
           retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
-          name: Pianpian-Windows-PR
+          name: Pianpian-Windows-PR-TEST-CERT-NOT-FOR-DISTRIBUTION
           path: |
             dist/Pianpian-Windows-Setup.exe
             dist/Pianpian-Windows.zip
