@@ -56,7 +56,6 @@ body { overflow:hidden; }
   .panel.left .panelhead { padding-left:52px; }
   .panel.right { max-height:300px; }
   .panel.right .transcript { margin-inline:-12px; }
-  .sidefoot { flex-wrap:wrap; }
   .pbar { position:relative; }
   .pbar .dd { position:static; }
   .pbar .dd > summary, .pbar > .ib { min-height:44px; }
@@ -71,6 +70,22 @@ body { overflow:hidden; }
   .vc input[type=range] { min-width:24px; }
 }
 @media (min-width:601px) and (max-width:900px) { .panel.right { max-height:300px; } }
+/* the website's demo on a phone: the video, three line switches and the transcript under it. The panel toggles,
+   the library and the menus stay in the page, only hidden (the desktop demo and the app keep them); a tapped
+   word's card opens as a sheet at the bottom, since the card on a phone-sized video would cover the lines */
+@media (max-width:600px) {
+  .demo .ptoggle, .demo .panel.left, .demo .panel.right .panelhead, .demo .pbar > :not(.quick), .demo .ov > .gl { display:none; }
+  .demo .main { padding:12px 12px 0; }
+  .demo.right-closed .panel.right { display:flex; position:static; opacity:1; transform:none; pointer-events:auto; }
+  .demo .panel.right { max-height:280px; border-top:1px solid var(--line); }
+  .demo .pbar .quick { display:flex; gap:6px; width:100%; }
+  .demo .pbar .quick .btn { flex:1; justify-content:center; min-height:44px; font-size:13px; }
+  .demo .wsheet { display:flex; }
+  /* a phone-sized video: bigger lines (the Size slider is hidden here), lifted above the control bar while it shows */
+  .demo .stage { --size:7.5 !important; }
+  .demo .ov { transition:transform .25s var(--ease); }
+  .demo .stage.awake .ov, .demo .stage:not(.loaded) .ov { transform:translateY(-44px); }
+}
 
 .panel.left > .lib { flex-shrink:1; }
 .panelhead .logo { display:block; }
@@ -106,7 +121,8 @@ body { overflow:hidden; }
 .item .chips { display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; }
 .item .pill { font-size:8.5px; padding:0 5px; }
 .item .pill.lvl { background:var(--surface-2); color:var(--fg-2); border-color:var(--line-2); }
-.sidefoot { display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; }
+.sidefoot { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; }
+.sidefoot > * { flex-shrink:0; }
 .sidefoot .grow { flex:1; }
 .sidefoot .ib { padding:4px 9px; font-size:11px; }
 
@@ -169,7 +185,7 @@ body { overflow:hidden; }
       <input id="pick" type="file" multiple hidden accept="video/*,audio/*,.srt,.vtt,.json,.mkv,.m4v">
       <span class="grow"></span>
       <span class="dot" id="status">checking…</span>
-      <button class="ib" data-report type="button" title="report a problem: opens GitHub's bug form, filled in; nothing is sent until you press Submit there">Report</button>
+      <button class="ib" data-report type="button" title="opens GitHub's form with redacted details; Submit publishes the issue">Report</button>
       <button class="ib" data-theme-toggle type="button">Auto</button>
     </div>
   </aside>
@@ -193,15 +209,16 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const OFFLINE = location.protocol === 'file:';     // opened from disk: no library, files only
 // app.html?demo: the website's demo. The library is a snapshot in demo/ (tools/build_site.py writes it with
-// the server's own code), and whatever needs the engine on a Mac points to the download instead
+// the server's own code), and whatever needs the local engine points to the download instead
 const DEMO = new URLSearchParams(location.search).has('demo');
+document.documentElement.classList.toggle('demo', DEMO);   // the phone layout of the website's demo (CSS above)
 const LIB = DEMO ? 'demo/library/' : '/library/';
 const GET_APP = 'https://github.com/conradomateu/pianpian/releases/latest';
-const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac.';
+const DEMO_SAYS = 'This is the online demo. To make subtitles for your own videos, get the app for your Mac or Windows PC.';
 const PROMPT = `Each line below is: an id, a TAB, then one subtitle in Chinese.
 Translate the Chinese into natural English. Output EXACTLY the same ids, one per line, as: id<TAB>English.
 Do not merge, split, drop or renumber lines. " / " marks a line break; keep it.
-If you think the Chinese contains a speech-recognition or OCR error, translate what was probably meant and add [?] at the end of that line.
+If you think the Chinese contains a speech-recognition error, translate what was probably meant and add [?] at the end of that line.
 
 `;
 const api = async (path, body, signal) => {
@@ -235,7 +252,8 @@ const player = SubPlayer.mount($('player'), {
     } catch {}                                     // storage can be disabled; playback still works
   },
 });
-let videos = [], current = null, lastJobs = [];
+let videos = [], current = null, lastJobs = [], PLATFORM = /Windows/.test(navigator.userAgent) ? 'win32' : 'darwin';
+const fileManager = () => PLATFORM === 'win32' ? 'Explorer' : 'Finder';
 let selection;
 const remembered = key => { try { return localStorage.getItem(key); } catch { return null; } };
 const poster = v => v && v.kind === 'folder' && v.video ? LIB + encodeURIComponent(v.id) + '/poster.jpg' : '';
@@ -266,23 +284,26 @@ setTimeout(() => document.documentElement.classList.add('ready'), 80);   // moti
 
 /* ---------- the Video menu, next to Subtitles and Playback ---------- */
 player.extra.innerHTML = '<details class="dd" data-dd id="vmenu" hidden><summary>Video</summary><div class="ddp" id="vpanel"></div></details>';
+if (!OFFLINE && !DEMO) $('player').querySelector('[data-resources]').insertAdjacentHTML('beforeend', '<a class="btn" id="toolslink" href="setup.html?again">Models &amp; acceleration</a>');
 ankiUI = AnkiExport.mount(player, { api, source: () => current, enabled: !DEMO && !OFFLINE });
 
 /* ---------- status ---------- */
 async function status() {
   try {
     const s = await api('/api/status');
+    PLATFORM = s.platform || PLATFORM;
     const broken = s.engine === false;
     $('status').className = 'dot ' + (broken ? 'off' : s.busy ? 'busy' : 'ok');
     $('status').textContent = broken ? 'engine not installed' : s.busy ? 'working' : 'ready';
-    const sel = $('add').browser;                     // the browsers this Mac has, the last choice remembered
+    $('status').title = s.accel ? `subtitles: ${s.accel}` : '';
+    const sel = $('add').browser;                     // the browsers here, the last choice remembered
     if (sel.options.length === 1 && s.browsers) {
       const NAMES = { safari: 'Safari', chrome: 'Chrome', brave: 'Brave', firefox: 'Firefox', edge: 'Edge', chromium: 'Chromium', opera: 'Opera', vivaldi: 'Vivaldi' };
       s.browsers.forEach(b => sel.add(new Option(NAMES[b] || b, b)));
       try { sel.value = localStorage.getItem('pp-browser') || ''; } catch {}
       sel.onchange = () => { try { localStorage.setItem('pp-browser', sel.value); } catch {} };
     }
-    $('libinfo').textContent = DEMO ? 'demo' : s.library.replace(/^\/Users\/[^/]+/, '~');
+    $('libinfo').textContent = DEMO ? 'demo' : s.library.replace(/^\/Users\/[^/]+/, '~').replace(/^[A-Za-z]:\\Users\\[^\\]+/, '~');
     showUpdate(s.update);
     if (DEMO) { $('status').className = 'dot ok'; $('status').textContent = 'demo'; }
   } catch { $('status').className = 'dot off'; $('status').textContent = 'server stopped'; }
@@ -295,7 +316,7 @@ function showUpdate(u) {
   if (!u) return;
   $('updtitle').textContent = `Pianpian ${u.version} is out`;
   $('updnotes').href = u.url;
-  $('upddl').href = u.download || u.url;
+  $('upddl').href = u.download || u.url;                // the server only sends this platform's file
   $('upddismiss').onclick = () => { try { localStorage.setItem('pp-update-seen', u.version); } catch {} $('upd').hidden = true; };
 }
 $('ytdlpbtn').onclick = async () => {
@@ -356,6 +377,9 @@ async function select(id, keepPlayer) {
         ]);
         if (signal.aborted) return;
         player.load({ subs, words, align, append: true });
+        // the demo opens on its first line, so the subtitles show before anyone presses play
+        const first = DEMO && !explicit && player.tracks.find(t => t.role === 'zh')?.cues[0];
+        if (first && player.video.paused && player.video.currentTime < first.s) player.video.currentTime = first.s + 0.01;
       } catch {
         if (signal.aborted) return;
         $('notes').innerHTML = '<div class="note warn">Could not load subtitles. <button class="btn" data-retry-subs>Retry</button></div>';
@@ -368,19 +392,18 @@ async function select(id, keepPlayer) {
 }
 // the demo answers buttons that need the engine with one line and the download
 function demoNote() {
-  $('notes').innerHTML = `<div class="note">${DEMO_SAYS} <a class="btn primary" href="${GET_APP}" target="_blank" rel="noopener">Download for Mac</a></div>`;
+  $('notes').innerHTML = `<div class="note">${DEMO_SAYS} <a class="btn primary" href="${GET_APP}" target="_blank" rel="noopener">Download Pianpian</a></div>`;
 }
 // one short line above the video, only when something needs doing
 function renderNotes(v) {
   const busy = busyFor(v.id), dis = busy ? 'disabled' : '', n = [];
   if (v.kind === 'file') n.push(`<div class="note warn">No subtitles yet. <button class="btn primary" data-act="rebuild" ${dis}>Make subtitles</button></div>`);
   else {
-    if (v.hardsubs && v.has.zh) n.push(`<div class="note warn">The Chinese came from OCR: fix <code>zh.srt</code> (Video ▾ → Show in Finder), then Rebuild.</div>`);
     if (v.lines && !v.has.en) n.push(`<div class="note warn">No English yet. <button class="btn primary" data-act="translate" ${dis}>Translate automatically</button> <span class="muted">or Video ▾ → by hand</span></div>`);
   }
   $('notes').innerHTML = n.join('');
 }
-// Video ▾: line length, rebuild, Finder, and the English track
+// Video ▾: line length, rebuild, the file manager, and the English track
 function renderMenu(v) {
   $('vmenu').hidden = v.kind === 'file';
   if (v.kind === 'file') return;
@@ -394,13 +417,13 @@ function renderMenu(v) {
           ${v.split == null ? '<option value="" selected>not cut yet</option>' : ''}
         </select></label>
       <button class="btn" data-act="rebuild" ${dis} title="run the pipeline again, e.g. after fixing zh.srt">Rebuild</button>
-      <button class="btn" data-act="open">Show in Finder</button>
+      <button class="btn" data-act="open">Show in ${fileManager()}</button>
       ${v.url ? `<a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Source page ↗</a>` : ''}
     </div>
     ${v.lines ? `
     <h5>English · ${v.has.en ? (v.englishAuto ? 'made by the local model' : 'made by hand') : 'none yet'}</h5>
     <div class="row"><button class="btn ${v.has.en ? '' : 'primary'}" data-act="translate" ${dis}>Translate automatically</button>
-      <span class="muted" style="font-size:12px">Hy-MT2, on this Mac, ${n} lines</span></div>
+      <span class="muted" style="font-size:12px">Local translation, on this computer, ${n} lines</span></div>
     <details><summary>By hand, with ChatGPT or Claude (better for jokes)</summary><ol style="margin-top:8px">
       <li><button class="btn" data-act="copy" type="button">Copy prompt + ${n} lines</button> and paste them into the chat.</li>
       <li>Paste the reply:<textarea class="field" id="entext" placeholder="1&#9;First line in English&#10;2&#9;Second line…" style="margin-top:6px">${esc(v.english || '')}</textarea></li>

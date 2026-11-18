@@ -60,13 +60,13 @@ pre.log { max-height:240px; overflow:auto; font-size:11px; white-space:pre-wrap;
     <div class="sum"><span class="muted" id="sum"></span><button class="btn primary go" type="submit" id="go">Install</button></div>
   </form>
 
+  <div class="err" id="err" role="alert" hidden></div>
   <div class="card" id="run" hidden>
     <h4 id="runtitle">Installing</h4>
     <div id="steps"></div>
     <div class="last" id="last"></div>
-    <div class="err" id="err" hidden></div>
     <div class="row"><button class="mini" type="button" id="logbtn">log</button><span style="flex:1"></span>
-      <button class="btn" type="button" id="report" hidden title="opens GitHub's bug form, filled in: you read it there before sending">Report</button>
+      <button class="btn" type="button" id="report" hidden title="opens GitHub's form with redacted details; Submit publishes the issue">Report</button>
       <button class="btn" type="button" id="retry" hidden>Try again</button>
       <a class="btn primary" href="app.html" id="open" hidden>Open Pianpian</a></div>
     <pre class="log" id="log" hidden></pre>
@@ -83,7 +83,7 @@ const api = async (path, body) => {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 };
-let plan = null, timer = null, lastBody = null;
+let plan = null, timer = null, lastBody = null, benchmarkTimer = null;
 
 function renderPlan() {
   const f = $('plan'), e = plan.engine, ok = e.engine && e.current;
@@ -91,22 +91,102 @@ function renderPlan() {
   const chosen = plan.config.models;
   $('items').innerHTML = `
     <label class="item"><input type="checkbox" checked disabled><span><b>Engine</b><small>Python and the tools that download videos and make pinyin${ok ? '' : e.engine ? ' (an update)' : ''}</small></span>
-      <span class="sz ${ok ? 'ready' : ''}">${ok ? 'ready' : '≈ ' + gb(plan.engineMB * 1e6)}</span></label>` +
+      <span class="sz ${ok ? 'ready' : ''}">${ok ? 'ready' : 'download varies'}</span></label>
+    ${ok ? '' : `<p class="muted">Python, packages and dictionary: additional download; size depends on what is installed. About ${gb(plan.engineMB * 1e6)} on disk (estimate).</p>`}` +
+    (plan.runtime ? `
+    <div class="item"><span></span><span><b>Processing tools</b>
+      <select class="field" name="accel" aria-label="Acceleration" ${plan.accelLocked ? 'disabled' : ''}>
+        ${Object.keys(plan.runtimeOptions).map(b => `<option value="${b}">${({cpu: 'CPU', metal: 'Apple Metal · CPU fallback included', cuda: 'NVIDIA CUDA · optional, larger download', vulkan: 'Vulkan · translation GPU, speech CPU'})[b]}</option>`).join('')}
+      </select>
+      <small id="runtime-label"></small>
+      ${plan.runtimeOptions.cuda ? `<div class="row"><button class="btn" type="button" id="detect-gpu">Check GPU again</button>
+      <button class="btn" type="button" id="benchmark-gpu" disabled>Compare CPU / CUDA speed</button></div>
+      <small id="gpu-note">SenseVoice runs on CPU. Optional GPU acceleration applies to translation only; no CUDA Toolkit installation needed.${plan.accelLocked ? ' Choice fixed by PIANPIAN_ACCEL.' : ''}</small>
+      <p class="muted">The optional speed test uses installed models and CUDA tools only. It downloads nothing and can take several minutes. Estimates appear after measuring this computer.</p>
+      <div id="gpu-speed" role="status" aria-live="polite"></div>` : '<small>SenseVoice runs on CPU. Translation uses Apple Metal or CPU from the same download; CUDA is not needed.</small>'}
+      <small id="gpu-fallback"></small>
+    </span><span class="sz" id="runtime-size"></span></div>` : '') +
     plan.models.map(m => `
-    <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${m.ready || !chosen || chosen.includes(m.id) ? 'checked' : ''} ${m.ready ? 'disabled' : ''}>
+    <label class="item"><input type="checkbox" name="m" value="${esc(m.id)}" ${!chosen || chosen.includes(m.id) ? 'checked' : ''}>
       <span><b>${m.task === 'transcribe' ? 'Speech recognition' : 'English translation'}</b><small>${esc(m.about)}${m.task === 'transcribe' ? '. Needed when a video has no Chinese subtitles' : '. You can also translate by hand'}</small></span>
-      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already on this Mac' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('') +
+      <span class="sz ${m.ready ? 'ready' : ''}">${m.ready ? 'already installed' : m.size ? gb(m.size) : 'size unknown'}</span></label>`).join('') +
     (plan.old && plan.old.length ? `
-    <label class="item"><input type="checkbox" name="cleanup" checked><span><b>Delete old models</b><small>${plan.old.map(o => esc(o.name)).join(', ')}: replaced by this version</small></span>
+    <label class="item"><input type="checkbox" name="cleanup" checked><span><b>Delete old files</b><small>${plan.old.map(o => esc(o.name)).join(', ')}: replaced models are removed only after their replacements are ready</small></span>
       <span class="sz">frees ${gb(plan.old.reduce((t, o) => t + o.bytes, 0))}</span></label>` : '');
+  if (plan.runtime) {
+    f.accel.value = plan.runtime.backend;
+    if ($('detect-gpu')) {
+      const detect = async () => {
+        const button = $('detect-gpu'); button.disabled = true; $('gpu-note').textContent = 'Checking the GPU driver…';
+        try {
+          const detected = await api('/api/setup-gpu');
+          $('gpu-note').textContent = detected.message;
+          $('benchmark-gpu').disabled = !(detected.benchmarkAvailable && ok);
+        } catch (e) { $('gpu-note').textContent = 'Could not check the GPU: ' + e.message; }
+        finally { button.disabled = false; }
+      };
+      $('detect-gpu').onclick = detect;
+      $('benchmark-gpu').onclick = async () => {
+        $('benchmark-gpu').disabled = true;
+        $('gpu-speed').textContent = 'Comparing CPU and CUDA locally. Your acceleration choice will stay unchanged.';
+        try {
+          const job = await api('/api/setup-benchmark', {});
+          watchBenchmark(job.id);
+        } catch (e) { $('gpu-speed').textContent = e.message; $('benchmark-gpu').disabled = false; }
+      };
+      detect(); // Background detection never selects an accelerator or starts a benchmark/download.
+    }
+  }
   sum();
 }
+const seconds = n => n >= 60 ? `${(n / 60).toFixed(1)} min` : `${n.toFixed(1)} s`;
+function showBenchmark(result) {
+  $('gpu-speed').innerHTML = result.tools.map(t => {
+    const title = 'Translation';
+    if (t.status !== 'measured') return `<p><b>${title}</b>: ${esc(t.reason || 'Not measured')}</p>`;
+    const comparison = t.speedup >= 1 ? `${t.speedup.toFixed(1)}× faster with CUDA` : `${(1 / t.speedup).toFixed(1)}× slower with CUDA`;
+    return `<p><b>${title}</b>: CPU ${seconds(t.cpu_seconds)} → CUDA ${seconds(t.gpu_seconds)} (${comparison} in this test).<br>
+      <small>${esc(t.workload)}. ${t.estimate ? `Approximate ${esc(t.estimate.label)}: CPU ${seconds(t.estimate.cpu_seconds)} / CUDA ${seconds(t.estimate.gpu_seconds)}.` : ''}</small></p>`;
+  }).join('') + '<small>A short local sample, not a guaranteed completion time. Downloading videos and pinyin are not included. Your acceleration choice has not changed.</small>';
+}
+async function watchBenchmark(id) {
+  clearTimeout(benchmarkTimer);
+  try {
+    const job = (await api('/api/jobs')).find(j => j.id === id);
+    if (!job) throw new Error('The speed test is no longer available. Run it again.');
+    if (job.state === 'done' || job.state === 'failed') {
+      const line = [...job.log].reverse().find(line => line.startsWith('@benchmark '));
+      if (line) showBenchmark(JSON.parse(line.slice(11)));
+      else $('gpu-speed').textContent = 'The speed test could not finish. No speed estimate is available.';
+      $('benchmark-gpu').disabled = false;
+      return;
+    }
+  } catch (e) {
+    $('gpu-speed').textContent = 'Could not read the speed test: ' + e.message;
+    $('benchmark-gpu').disabled = false;
+    return;
+  }
+  benchmarkTimer = setTimeout(() => watchBenchmark(id), 1000);
+}
 function sum() {
-  const e = plan.engine, picked = [...$('plan').querySelectorAll('input[name=m]:checked:not(:disabled)')].map(i => i.value);
-  const bytes = (e.engine && e.current ? 0 : plan.engineMB * 1e6) + plan.models.filter(m => picked.includes(m.id)).reduce((t, m) => t + (m.size || 0), 0);
-  const upd = e.engine && !e.current;                 // an update fetches only the packages that changed
-  $('sum').textContent = `${upd ? 'up to ' : ''}${gb(bytes)} to download · ${gb(plan.free)} free`;
-  $('go').textContent = !bytes ? 'Continue' : upd ? 'Update' : `Install (${gb(bytes)})`;
+  const e = plan.engine, f = $('plan');
+  const picked = [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value);
+  const selected = plan.models.filter(m => picked.includes(m.id));
+  let runtimeBytes = 0, runtimeReady = true;
+  if (plan.runtime) {
+    const runtime = plan.runtimeOptions[f.accel.value], tasks = selected.map(m => m.task);
+    const tools = Object.entries(runtime.tools).filter(([tool]) => tool === 'llama' && tasks.includes('translate'));
+    runtimeBytes = tools.reduce((t, [, r]) => t + r.size, 0);
+    runtimeReady = tools.every(([, r]) => r.ready);
+    const fallbackBytes = tools.reduce((t, [, r]) => t + (r.cpu_size || 0), 0);
+    $('gpu-fallback').textContent = fallbackBytes ? `Includes ${gb(fallbackBytes)} for CPU word links and GPU fallback.` : '';
+    $('runtime-label').textContent = tools.map(([tool, r]) => `${tool}.cpp: ${r.backend.toUpperCase()}`).join(' · ') || 'No model runtime selected';
+    $('runtime-size').textContent = runtimeBytes ? gb(runtimeBytes) : !tools.length ? 'not needed' : runtimeReady ? 'ready' : 'repair needed';
+  }
+  const bytes = runtimeBytes + selected.filter(m => !m.ready).reduce((t, m) => t + (m.size || 0), 0);
+  const engineNeeded = !(e.engine && e.current), unknownModel = selected.some(m => !m.ready && !m.size);
+  $('sum').textContent = `${gb(bytes)} models & processing tools${unknownModel ? ' + models of unknown size' : ''}${engineNeeded ? ' + Python/packages/dictionary (size varies)' : ''}. ${gb(plan.free)} free on current data drive; unpacking needs extra space.`;
+  $('go').textContent = !bytes && !engineNeeded && runtimeReady ? 'Continue' : e.engine && (!e.current || !runtimeReady) ? 'Update' : 'Install';
   $('go').disabled = bytes > plan.free;
 }
 $('plan').addEventListener('change', sum);
@@ -114,6 +194,7 @@ $('plan').onsubmit = async ev => {
   ev.preventDefault();
   const f = $('plan');
   lastBody = { library: f.library.value.trim(), data: f.data.value.trim(),
+               accel: plan.runtime ? f.accel.value : null,
                models: [...f.querySelectorAll('input[name=m]:checked')].map(i => i.value), cleanup: !!(f.cleanup && f.cleanup.checked) };
   start();
 };

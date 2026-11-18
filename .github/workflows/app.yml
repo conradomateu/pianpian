@@ -25,7 +25,7 @@ permissions:
   actions: write          # to rebuild the website once the files are attached (its download button follows them)
 jobs:
   build:
-    runs-on: macos-15            # Apple Silicon, with Xcode's swiftc for the icon and the OCR helper
+    runs-on: macos-15            # Apple Silicon; CMake and Xcode C++/Swift tools build the bundled helpers
     timeout-minutes: 120
     env:
       MACOSX_DEPLOYMENT_TARGET: '14.0'
@@ -34,6 +34,9 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
       - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.7"          # this uv ships inside the app and installs every user's engine: keep it exact
+      - run: cmake --version
       - name: Install signing identity and notarization credentials
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
@@ -73,6 +76,10 @@ jobs:
           rm -f "$certificate" "$api_key"
       - name: Build, sign and notarize
         run: python3 tools/build_app.py --signed
+      - name: Check first-run setup without developer commands
+        run: uv run --group dev pytest -q tests/test_setup_no_xcode.py --basetemp scratch/pytest-no-xcode
+        env:
+          PIANPIAN_TEST_UV: dist/Pianpian.app/Contents/Resources/uv
       - name: Attach to the release
         if: inputs.tag
         env:

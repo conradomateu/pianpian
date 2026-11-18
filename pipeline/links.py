@@ -14,6 +14,8 @@ What real links look like (checked against yt-dlp 2026.10.21's own URL patterns,
   list= on YouTube, favlist?fid= and ?sid= on Bilibili. So this removes only parameters it knows are
   tracking, never "everything after the ?".
 - m.bilibili.com (phones) is not recognised by yt-dlp; www.bilibili.com is.
+- The site's language switcher inserts a locale before the section (/ru/video/BV…, shared 7 Nov 2026);
+  yt-dlp only matches the section at the top, so the locale segment goes.
 - b23.tv and friends are short links to the real page. yt-dlp does not follow them for Bilibili.
 - Douyin links carry the video id as /share/video/<id> (where its short links lead) or ?modal_id=<id>
   (a profile page with a video open); yt-dlp only matches /video/<id>. Xiaohongshu links NEED their
@@ -72,8 +74,11 @@ def clean_url(url: str) -> str:
     if host in DOUYIN_HOSTS and (m := DOUYIN_ID.search(parts.path) or DOUYIN_ID.search(parts.query)):
         return f"https://www.douyin.com/video/{m[1] or m[2]}"          # same video, the form yt-dlp recognises
     site = SITE_TRACKING.get(site_of(host), set())
+    path = parts.path
+    if site_of(host) == "bilibili" and (m := re.match(r"^/([a-z]{2,3})(/(?:video|bangumi)/.+)$", path)):
+        path = m[2]                                                  # the language switcher's locale segment
     kept = [seg for seg in parts.query.split("&") if seg and not (seg.split("=", 1)[0] in site or GENERIC_TRACKING.match(seg.split("=", 1)[0]))]
-    return urlunsplit((parts.scheme.lower(), host + port, parts.path, "&".join(kept), parts.fragment))
+    return urlunsplit((parts.scheme.lower(), host + port, path, "&".join(kept), parts.fragment))
 
 
 class _DontFollow(urllib.request.HTTPRedirectHandler):

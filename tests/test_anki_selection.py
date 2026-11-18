@@ -248,11 +248,20 @@ def test_invalid_or_missing_times_never_use_uniform_karaoke(selection_browser):
     c.js("testSubs[0].text = testSubs[0].text.replace('我喝茶。','我喝水。'); p.load({subs:testSubs,words:testWords})")
     assert c.js("document.querySelectorAll('.w[data-anki-cue=\"0\"]').length") == 0
     assert c.js("[p.selectAnkiSentence().expression,p.ankiSelection().timing]") == ["我喝水。\n你好", "sentence"]
-    # An untokenized intermediate cue stays in a cross-cue expression.
+    # An edited intermediate cue keeps its Chinese but never borrows stale pinyin.
     c.js("testSubs[0].text = testSubs[0].text.replace('我喝水。','我喝茶。').replace('明天见。','明天喝水。'); p.load({subs:testSubs,words:testWords})")
     click(c, '.transcript .zh .w[data-anki-cue="0"][data-anki-word="4"]')
     shift_click(c, '.transcript .zh .w[data-anki-cue="2"][data-anki-word="0"]')
-    assert c.js("[p.ankiSelection().expression,p.ankiSelection().timing]") == ["你好\n明天喝水。\n谢谢", "sentence"]
+    assert c.js("[p.ankiSelection().expression,p.ankiSelection().pinyin,p.ankiSelection().timing]") == [
+        "你好\n明天喝水。\n谢谢", "nǐhǎo xièxie", "sentence"]
+    # A genuinely untokenized cue does use its own cue from the pinyin track.
+    c.js("""testWords.cues.splice(1, 1);
+      testSubs[1].text = testSubs[1].text.replace('míngtiān jiàn.', 'míngtiān hē shuǐ.');
+      p.load({subs:testSubs,words:testWords})""")
+    click(c, '.transcript .zh .w[data-anki-cue="0"][data-anki-word="4"]')
+    shift_click(c, '.transcript .zh .w[data-anki-cue="2"][data-anki-word="0"]')
+    assert c.js("[p.ankiSelection().expression,p.ankiSelection().pinyin,p.ankiSelection().timing]") == [
+        "你好\n明天喝水。\n谢谢", "nǐhǎo míngtiān hē shuǐ. xièxie", "sentence"]
 
 
 def test_begin_media_switch_and_async_append_invalidate(selection_browser):

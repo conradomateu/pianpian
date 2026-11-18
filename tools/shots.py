@@ -67,7 +67,7 @@ class Chrome:
     def __init__(self, exe: str, profile: str):
         to_r, to_w = os.pipe()
         self.from_r, from_w = os.pipe()
-        args = [exe, "--headless=new", "--remote-debugging-pipe", f"--user-data-dir={profile}", "--hide-scrollbars", "--mute-audio",
+        args = [exe, "--headless=new", "--use-mock-keychain", "--remote-debugging-pipe", f"--user-data-dir={profile}", "--hide-scrollbars", "--mute-audio",
                 "--no-first-run", f"--window-size={W},{H}", "--force-device-scale-factor=2", "about:blank"]
         # the pipes come in as stdin/stdout; sh moves them to fds 3 and 4, where Chrome looks for them
         self.proc = subprocess.Popen(["sh", "-c", 'exec "$@" 3<&0 4>&1 </dev/null >/dev/null 2>&1', "sh", *args], stdin=to_r, stdout=from_w)

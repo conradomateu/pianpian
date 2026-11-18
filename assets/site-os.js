@@ -1,0 +1,108 @@
+/* Landing page: show only the visitor's download and say whether their computer can run Pianpian.
+   Downloads appear only after desktop detection; GitHub stays available without JavaScript.
+   What browsers tell (checked 7 Nov 2026 against their docs, not on every device): Chromium gives
+   userAgentData and architecture/bitness/platformVersion hints; Safari and Firefox give none, and Safari's
+   user agent says "Intel Mac" on Apple Silicon too, so a WebGL renderer name is only a hint. */
+(() => {
+  const NEEDS_MAC = 'Needs Apple Silicon (M1 or newer) and macOS 14+.';
+  const NEEDS_WIN = 'Needs 64-bit Windows (x64). Windows 11 is recommended; Windows 10 isn’t tested yet; Windows on ARM isn’t supported yet.';
+
+  /* {ua, platform, touch, hints, gpu} → {os: 'mac'|'windows'|'other', fits: true|false|null, note}.
+     fits null = can't tell from this browser. Pure, so tests/test_site_os.py runs it over sample browsers. */
+  function classify({ ua = '', platform = '', touch = 0, hints = {}, gpu = '' } = {}) {
+    const arch = hints.architecture || '';
+    const major = parseInt(hints.platformVersion, 10);
+    if (/iPhone|iPad|iPod|Android/.test(ua) || /^(Android|iOS)$/.test(platform) || (/Macintosh/.test(ua) && touch > 1))   // iPadOS asks for the Mac page
+      return { os: 'other', fits: false, note: 'Pianpian isn’t available here: it runs on Mac and Windows computers, not phones or tablets. You can star the project on GitHub.' };
+    if (platform === 'macOS' || /Macintosh|Mac OS X/.test(ua)) {
+      if (arch === 'x86') return { os: 'mac', fits: false, note: 'Your browser reports an Intel Mac. Pianpian needs Apple Silicon (M1 or newer).' };
+      if (arch === 'arm') {
+        if (major > 0 && major < 14) return { os: 'mac', fits: false, note: `This Mac reports macOS ${major}. Pianpian needs macOS 14 or newer.` };
+        return { os: 'mac', fits: major >= 14 ? true : null, note: major >= 14 ? 'This Mac has Apple Silicon and macOS 14+.' : 'This Mac has Apple Silicon. Pianpian needs macOS 14 or newer.' };
+      }
+      if (/Apple M\d/.test(gpu)) return { os: 'mac', fits: null, note: 'This looks like an Apple Silicon Mac. Pianpian needs macOS 14 or newer.' };
+      return { os: 'mac', fits: null, note: NEEDS_MAC };
+    }
+    if (platform === 'Windows' || /Windows NT/.test(ua)) {
+      if (arch === 'arm') return { os: 'windows', fits: false, note: 'Windows on ARM isn’t supported yet. Pianpian needs a 64-bit Intel or AMD PC (x64).' };
+      if (arch === 'x86' && hints.bitness === '32') return { os: 'windows', fits: false, note: 'Pianpian needs 64-bit Windows (x64).' };
+      if (arch === 'x86' && hints.bitness === '64') {
+        if (major >= 13) return { os: 'windows', fits: true, note: 'Windows 11 x64.' };   // platformVersion 13+ is Windows 11
+        if (major >= 1) return { os: 'windows', fits: null, note: 'Windows 10 x64: the installer allows it, but it isn’t tested yet. Windows 11 is recommended.' };
+      }
+      return { os: 'windows', fits: null, note: NEEDS_WIN };
+    }
+    if (/Linux|CrOS|X11/.test(ua + platform)) return { os: 'other', fits: false, note: 'Pianpian runs on Mac (Apple Silicon) and Windows (x64); there is no Linux app.' };
+    return { os: 'other', fits: false, note: 'Pianpian runs on Mac and Windows. Open this page on your computer.' };
+  }
+
+  async function probe(nav = navigator) {
+    const data = nav.userAgentData;
+    let hints = {}, gpu = '';
+    try { if (data?.getHighEntropyValues) hints = await data.getHighEntropyValues(['architecture', 'bitness', 'platformVersion']); } catch { /* refused: no hints */ }
+    if (!hints.architecture && /Mac/.test(nav.userAgent)) {
+      try {
+        const gl = document.createElement('canvas').getContext('webgl');
+        const info = gl && gl.getExtension('WEBGL_debug_renderer_info');
+        gpu = (info && gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) || '';
+      } catch { /* no WebGL */ }
+    }
+    return { ua: nav.userAgent, platform: data?.platform || '', touch: nav.maxTouchPoints || 0, hints, gpu };
+  }
+
+  function render(seen) {
+    const cta = document.getElementById('download');
+    if (!cta) return;
+    document.documentElement.dataset.siteOs = seen.os;
+    const note = document.getElementById('os-note');
+    note.textContent = seen.note;
+    note.dataset.fits = seen.fits;
+    note.hidden = false;
+    document.querySelectorAll('[data-os-note]').forEach(el => {
+      el.textContent = seen.note;
+      el.hidden = seen.os !== 'other';
+    });
+    for (const star of document.querySelectorAll('.cta .star')) {
+      star.classList.toggle('dl', seen.os === 'other');
+      star.classList.toggle('ghost', seen.os !== 'other');
+    }
+    for (const el of document.querySelectorAll('[data-umami-event="download"]')) el.dataset.umamiEventDetected = seen.os;
+    const head = document.querySelector('header.top [data-umami-event="download"]');
+    if (head) head.hidden = seen.os === 'other';
+    head?.querySelectorAll('[data-platform]').forEach(icon => icon.toggleAttribute('hidden', icon.dataset.platform !== seen.os));
+    if (seen.os === 'other') {          // phones, tablets and Linux: explain; do not offer an incompatible download
+      document.querySelectorAll('[data-os]').forEach(a => { a.hidden = true; a.classList.replace('dl', 'ghost'); });
+      return;
+    }
+    for (const pair of document.querySelectorAll('.cta')) {
+      pair.querySelectorAll('[data-os]').forEach(a => {
+        a.hidden = a.dataset.os !== seen.os;
+        if (seen.fits === false) a.classList.replace('dl', 'ghost');
+      });
+      if (seen.fits === false) continue;  // this computer can run neither build: no button is the obvious one
+      const mine = pair.querySelector(`[data-os="${seen.os}"]`);
+      if (!mine) continue;
+      mine.classList.replace('ghost', 'dl');
+      mine.classList.remove('soon');   // a releases fallback becomes the primary Windows choice too
+      pair.prepend(mine);
+    }
+    // the header button downloads directly only when this computer is one Pianpian supports or might support
+    const button = cta.querySelector(`a[data-os="${seen.os}"]`);
+    if (button && seen.fits !== false && head) {
+      head.href = button.href;
+      head.dataset.umamiEventOs = seen.os;
+    }
+  }
+
+  async function apply() {
+    // Decide from the UA immediately; optional Chromium hints must not delay the mobile state.
+    render(classify({ ua: navigator.userAgent, platform: navigator.userAgentData?.platform || '', touch: navigator.maxTouchPoints || 0 }));
+    render(classify(await probe()));
+  }
+
+  window.PianpianOS = { classify };
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+    else apply();
+  }
+})();

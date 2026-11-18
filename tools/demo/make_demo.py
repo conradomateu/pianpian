@@ -27,7 +27,7 @@ EN_FIXES = {"1": "Hello, my name is Pianpian. I'm a slice of watermelon."}
 LEAD, GAP, TAIL, FADE, FPS = 1.2, 0.9, 3.0, 0.5, 25     # the tail lets the music's last chord ring
 MUSIC = 0.20                                             # the music's level under the voice (it also ducks when he speaks)
 KEEP = {"source.mp4", "title.txt", "thumb.jpg", "poster.jpg", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "zh.words.json", "zh.align.json",
-        "zh.lines.txt", "en.lines.txt", ".english-auto", ".from-whisper", ".split"}
+        "zh.lines.txt", "en.lines.txt", "zh.whisper.json", ".english-auto", ".from-whisper", ".split"}
 BROWSERS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
             "/Applications/Chromium.app/Contents/MacOS/Chromium"]
 
@@ -61,7 +61,7 @@ def main():
     print("drawing the scenes", flush=True)
     run(sys.executable, HERE / "scenes.py", tmp)
     for i in range(1, len(lines) + 1):
-        run(chrome(), "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
+        run(chrome(), "--headless=new", "--use-mock-keychain", f"--user-data-dir={tmp / 'chrome-profile'}", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
             "--window-size=1280,720", f"--screenshot={tmp / f'{i}.png'}", (tmp / f"{i}.svg").as_uri(), stderr=subprocess.DEVNULL)
 
     print("voicing the lines", flush=True)

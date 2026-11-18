@@ -4,16 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pianpian 片片 · Learn Mandarin from real videos</title>
-<meta name="description" content="Learn Mandarin with Chinese, pinyin and English subtitles. AI transcription and translation run locally on your Mac. Pianpian is free and open source.">
+<meta name="description" content="Watch Chinese videos with Chinese, pinyin and English subtitles, and click any word. AI transcription and translation run on your computer. Pianpian is free and open source.">
 <meta property="og:title" content="Pianpian 片片 · Learn Mandarin from real videos">
-<meta property="og:description" content="Chinese, pinyin and English subtitles. Local AI transcription and translation on your Mac. Free and open source.">
+<meta property="og:description" content="Learn Chinese from the videos you love. Chinese, pinyin and English subtitles, with AI transcription and translation on your computer. Free and open source.">
 <meta property="og:image" content="{{SITE}}shots/app-dark.png">
 <meta property="og:url" content="{{SITE}}">
 <link rel="canonical" href="{{SITE}}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="design/icons/20-pianpian-watermelon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<!-- fonts and analytics never hold the page: Google and Umami are slow or blocked from mainland China -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap" onload="this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Archivo:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap"></noscript>
 <link rel="stylesheet" href="assets/kit.css">
 <link rel="stylesheet" href="assets/platforms.css">
 <style>
@@ -30,19 +32,29 @@ header.top .dl.small { padding:7px 14px; font-size:14px; margin-left:6px; box-sh
 section { scroll-margin-top:70px; }
 
 .hero { text-align:center; padding:58px 0 34px; }
-.hero h1 { font-size:clamp(34px,6vw,64px); line-height:1.02; margin:0 auto 18px; max-width:15ch; }
-.hero p.lede { font-size:clamp(16px,2vw,19px); color:var(--fg-2); max-width:56ch; margin:0 auto 28px; }
+.hero h1 { font-size:clamp(34px,6vw,64px); line-height:1.02; margin:0 auto 18px; max-width:15ch; text-wrap:balance; }
+.hero p.lede { font-size:clamp(16px,2vw,19px); color:var(--fg-2); max-width:56ch; margin:0 auto 28px; text-wrap:balance; }
 .cta { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; }
 .dl { display:inline-flex; align-items:center; gap:10px; padding:13px 22px; border-radius:12px; background:#D93825; color:#fff;
   font:650 16px var(--body); text-decoration:none; box-shadow:0 6px 20px -8px var(--red); transition:transform .16s var(--ease), box-shadow .16s ease; }
 .dl:hover { transform:translateY(-1px); box-shadow:0 10px 26px -10px var(--red); }
 .dl svg { width:19px; height:19px; margin-top:-3px; }      /* the apple sits low in its box: lifted to line up with the text */
 .dl.small svg { width:15px; height:15px; margin-top:-2px; }
-/* the two big buttons are a pair: same height, type, icon size and gap */
+/* Download links stay hidden until a supported desktop OS is identified, including while hints load. */
+[data-umami-event="download"] { display:none; }
+html[data-site-os="mac"] [data-umami-event="download"]:not([data-os="windows"]),
+html[data-site-os="windows"] [data-umami-event="download"]:not([data-os="mac"]) { display:inline-flex; }
+/* The download and GitHub actions share height, type, icon size and gap. */
 .ghost { display:inline-flex; align-items:center; gap:10px; padding:12px 21px; border-radius:12px; border:1px solid var(--line-2); color:var(--fg);
   text-decoration:none; font:650 16px var(--body); transition:border-color .16s ease, color .16s ease; }
 .ghost:hover { border-color:var(--red); color:var(--red-fg); }
 .ghost svg { width:19px; height:19px; margin-top:-2px; transition:color .16s ease; }
+[data-os="windows"] svg { width:16px; height:16px; margin-top:0; }
+.dl.small[data-umami-event-os="windows"] svg { width:13px; height:13px; margin-top:0; }
+.cta .soon { font-size:14px; color:var(--fg-2); }
+#download { scroll-margin-top:120px; }
+.os-note { margin:14px auto 0; max-width:60ch; font-size:14px; color:var(--fg-2); text-wrap:balance; }
+.os-note[data-fits="false"] { color:var(--fg); }
 .meta { margin-top:14px; font:12.5px var(--mono); color:var(--fg-2); }
 a:focus-visible, summary:focus-visible, button:focus-visible { outline:2px solid var(--red-fg); outline-offset:4px; }
 
@@ -79,6 +91,7 @@ a:focus-visible, summary:focus-visible, button:focus-visible { outline:2px solid
 .pp-preview .l { line-height:1.8; overflow-wrap:anywhere; }
 .pp-preview .l.zh { font-size:28px; }
 .pp-preview .l.pinyin, .pp-preview .l.en { font-size:18px; }
+.pp-preview .l.zh .w + .w { margin-left:.14em; }   /* + .08em padding on each side = 0.3em between words, as in the app */
 .pp-preview button.w { padding:0 .08em; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 .pp-preview .w:hover { background:var(--red-tint); }
 .pp-preview .w.hl.say { background:var(--red-tint); box-shadow:none; }
@@ -122,27 +135,31 @@ h2.sec { font-size:clamp(26px,3.4vw,38px); margin:110px 0 6px; }
 #anki > p { max-width:75ch; color:var(--fg-2); }
 .anki-brand { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; vertical-align:bottom; }
 .anki-brand img { width:1em; height:auto; }
-.anki-figure { margin:26px 0 0; padding:24px; border:1px dashed var(--line-2); border-radius:16px; }
-.anki-flow { display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:32px; list-style:none; padding:0; margin:24px 0; }
+.anki-figure { margin:26px 0 0; padding:20px 24px; border:1px solid var(--line); border-radius:16px; }
+.anki-flow { display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:32px; list-style:none; padding:0; margin:0 0 16px; }
 .anki-flow > li { min-width:0; }
 .anki-flow h3 { display:flex; align-items:center; gap:8px; margin:0 0 10px; color:var(--fg); font:700 17px var(--display); letter-spacing:normal; text-transform:none; }
 .anki-flow h3 span { font:600 13px var(--mono); color:var(--red-fg); }
 .anki-flow p { font-size:14px; color:var(--fg-2); margin:8px 0 16px; }
 .anki-flow mark { background:var(--red-tint); color:var(--fg); border-bottom:2px solid var(--red-fg); padding:2px 3px; }
-.anki-source { font-size:25px; line-height:2.3; margin:20px 0 12px; }
+.anki-source { font-size:25px; line-height:2.3; margin:0; }
+/* word boundaries: 0.3em between words (the app uses the same), each word's pinyin centred over it by <ruby> */
+.anki-source ruby:not(:first-child) { margin-left:.3em; }
+.anki-source mark { margin-left:calc(.3em - 3px); }   /* its 3px padding is part of the gap */
+.anki-legend { margin:0 0 10px; font-size:12px; color:var(--fg-2); }
 .anki-source rt { font:12px var(--body); color:var(--fg-2); }
 .anki-choices { margin:0; font-size:14px; }
 .anki-choices > div { display:grid; grid-template-columns:68px 1fr; align-items:baseline; gap:8px; margin:8px 0; }
 .anki-choices dt { color:var(--fg-2); font-size:12px; }
 .anki-choices dd { margin:0; }
 .anki-choices small { display:block; font-size:12px; color:var(--fg-2); }
-.anki-audio { width:100%; height:auto; display:block; margin:24px 0 8px; overflow:visible; }
+.anki-audio { width:100%; height:auto; display:block; margin:8px 0 8px; overflow:visible; }
 .anki-audio text { fill:var(--fg); font:16px var(--body); }
 .anki-audio .boundary { stroke:var(--red-fg); stroke-width:2; }
 .anki-flow .anki-schematic { font-size:12px; }
-.anki-transfer { display:flex; align-items:center; gap:8px; margin-top:20px; font-size:12px; color:var(--fg-2); }
+.anki-transfer { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:12px; color:var(--fg-2); }
 .anki-transfer svg { width:24px; height:16px; flex:none; }
-.anki-note { margin-top:18px; padding:18px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); }
+.anki-note { margin-top:0; padding:18px; background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); }
 .anki-note-head { display:flex; align-items:center; gap:10px; font:700 17px var(--display); }
 .anki-note-head img { width:40px; height:auto; flex:none; }
 .anki-note-head small { display:block; font:12px var(--body); color:var(--fg-2); }
@@ -197,12 +214,17 @@ footer.site .grow { flex:1; }
   h2.sec { margin-top:64px; }
   .final { margin-top:64px; padding:36px 16px; }
 }
+@media (max-width:380px) {
+  html[data-site-os="mac"] header.top .name, html[data-site-os="windows"] header.top .name { display:none; }
+}
 @media (max-width:900px) { .demo iframe { height:640px; } }
+@media (max-width:600px) { .demo .window-bar { display:none; } }   /* on a phone the demo is the app itself: no fake window */
 @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .dl, .faq summary::after { transition:none; } .dl:hover { transform:none; } }
 </style>
-<script defer src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
+<script async src="https://cloud.umami.is/script.js" data-website-id="c068f9a6-fcbe-4721-a52d-970ab9ca9970"></script>
 <script defer src="assets/player.js"></script>
 <script defer src="assets/site-interactions.js"></script>
+<script defer src="assets/site-os.js"></script>
 </head>
 <body>
 <header class="top"><div class="wrap in">
@@ -213,23 +235,21 @@ footer.site .grow { flex:1; }
   <a class="link hide-s" href="#features">Features</a>
   <a class="link hide-s" href="#anki">Anki</a>
   <a class="link hide-s" href="#faq">FAQ</a>
-  <a class="link hide-s" href="https://github.com/{{REPO}}">GitHub</a>
-  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download</a>
+  <a class="link star" href="https://github.com/{{REPO}}">Star on GitHub</a>
+  <a class="dl small" data-umami-event="download" data-umami-event-where="header" href="#download"><svg data-platform="mac" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg><svg data-platform="windows" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{WINDOWS_ICON}}"/></svg>Download</a>
 </div></header>
 
 <main class="wrap">
   <div class="hero">
-    <h1>Learn Mandarin, one video at a time.</h1>
-    <p class="lede">Chinese, pinyin and English subtitles.<br>AI transcription and translation, entirely on your Mac.</p>
-    <div class="cta">
-      <a class="dl" id="download" data-umami-event="download" data-umami-event-where="hero" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
-        Download for Mac
-      </a>
-      <a class="ghost" href="#demo">Try the demo</a>
+    <h1>Learn Chinese from the videos you love.</h1>
+    <p class="lede">Chinese, pinyin and English subtitles for the videos you choose.<br>AI transcription and translation, on your computer.</p>
+    <div class="cta" id="download">
+      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="hero" data-umami-event-os="mac" href="{{DOWNLOAD_URL}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
+      {{WINDOWS:hero}}
+      <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>
-    <div class="meta">Free and <a href="https://github.com/{{REPO}}">open source</a> · Apple Silicon · macOS 14+</div>
+    <p class="os-note" id="os-note" role="status">Available for Mac and Windows computers. Not available on phones or tablets.</p>
+    <div class="meta">Free and <a href="https://github.com/{{REPO}}">open source</a> · Mac (Apple Silicon) · Windows 11 x64</div>
     <section class="platforms" aria-label="Video sources">
       <ul class="platforms-list">
         <li><img src="assets/platforms/bilibili.svg" width="36" height="36" alt="Bilibili"></li>
@@ -321,6 +341,7 @@ footer.site .grow { flex:1; }
         <li>
           <h3><span aria-hidden="true">1</span> Select words</h3>
           <div class="anki-source" lang="zh-Hans"><ruby>我<rt><span class="t3">wǒ</span></rt></ruby><ruby>每天<rt><span class="t3">měi</span><span class="t1">tiān</span></rt></ruby><mark><ruby>学习<rt><span class="t2">xué</span><span class="t2">xí</span></rt></ruby><ruby>中文<rt><span class="t1">Zhōng</span><span class="t2">wén</span></rt></ruby></mark>。</div>
+          <p class="anki-legend">Pinyin colours = tones · underline = your selection</p>
           <p>I study Chinese every day.</p>
           <dl class="anki-choices">
             <div><dt>Word</dt><dd lang="zh-Hans">学习</dd></div>
@@ -355,7 +376,7 @@ footer.site .grow { flex:1; }
           <div class="anki-destination">Choose <strong>an existing or new deck</strong>.</div>
         </li>
       </ol>
-      <figcaption id="anki-caption">In this Pianpian example, the selected words, audio and sentence context stay together in one Anki note. Pinyin colours indicate tones; the underline marks your selection.</figcaption>
+      <figcaption id="anki-caption">One Anki note keeps the words, their audio and the sentence together.</figcaption>
     </figure>
   </section>
 
@@ -363,14 +384,16 @@ footer.site .grow { flex:1; }
   <section id="faq">
     <h2 class="sec">Questions</h2>
     <div class="faq">
-      <details><summary>What do I need to install it?</summary><p>A Mac with Apple Silicon (M1 or newer), macOS 14 Sonoma or newer, and about 4 GB of disk for the app, tools and models, plus space for your videos. Download the app and move it to Applications.</p></details>
-      <details><summary>What happens on first launch?</summary><p>Choose where to keep your videos and tools. Setup downloads the engine (about 0.65 GB), Whisper speech model (about 1.6 GB) and Hy-MT2 translation model (about 1 GB), with progress. It compares download sources and mirrors, including those reachable from mainland China.</p></details>
-      <details><summary>Which AI models does Pianpian use?</summary><p>Whisper transcribes the audio; Hy-MT2 translates the subtitles into English. Both run locally on your Mac. Your videos stay on your computer, and no account or API key is needed. The app connects to download videos, models, tools and updates.</p></details>
-      <details id="faq-files"><summary>Where are my videos and subtitles saved?</summary><p>In the library folder you choose during setup (default: <code>~/Movies/Pianpian</code>). Each video has its own folder with the video and its Chinese, pinyin and English subtitle files.</p><p>Demo files: <a href="demo/library/pianpian-day/source.mp4">Video</a> · <a href="demo/library/pianpian-day/zh.srt">Chinese</a> · <a href="demo/library/pianpian-day/zh.pinyin.srt">Pinyin</a> · <a href="demo/library/pianpian-day/zh.en.srt">English</a>.</p></details>
+      <details><summary>What do I need to install it?</summary><p><b>Mac:</b> Apple Silicon (M1 or newer), macOS 14 Sonoma or newer. Allow space for the app, models, Python, temporary unpacking and your videos. Open the download and drag Pianpian to Applications.</p><p><b>Windows:</b> a 64-bit (x64) PC with Windows 11 recommended; Windows 10 isn’t tested yet and Windows on ARM isn’t supported. It needs Microsoft’s WebView2, which Windows 11 includes (not checked on a clean install). The installer is for your user only and needs no admin rights. Plus space for your videos.</p></details>
+      <details><summary>What happens on first launch?</summary><p>Choose where to keep your videos and tools. Setup downloads SenseVoice Q8 with its speech detector (256 MB) and PLaMo Q3 for translation (486 MB): <b>742 MB of models</b> on either platform.</p><p><b>Mac:</b> native translation tools add 16 MB and Python packages about 45 MB.<br><b>Windows:</b> CPU translation tools add 24 MB and Python packages about 55 MB. Optional GPU translation uses a 37 MB Vulkan or 664 MB CUDA download, plus the 24 MB CPU tools. NVIDIA acceleration is never selected automatically.</p><p>Python itself, the dictionary and the app installer are additional downloads. Installed space and temporary unpacking space are separate from download size. Speech always runs on CPU; Mac translation uses Apple Metal by default.</p><p>Setup tries alternative download sources. Upgrading from Hy-MT2 switches the translation selection to PLaMo and downloads it if missing; your saved videos and subtitles stay available.</p></details>
+      <details><summary>Which AI models does Pianpian use?</summary><p>SenseVoice transcribes the audio; PLaMo 0.8B Q3_K_M translates the subtitles into English through llama.cpp on Mac and Windows. The dictionary and PLaMo word vectors supply the clickable bilingual links. These model links are estimates and can be wrong.</p><p>Your videos stay with you, and no account or API key is needed. The app connects to download videos, models, tools and updates. The current pipeline has been tested on Mac; its Windows build and inference still need validation. PLaMo uses the <a href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF#license">PLaMo Community License</a>.</p></details>
+      <details id="faq-files"><summary>Where are my videos and subtitles saved?</summary><p>In the library folder you choose during setup (default: <code>~/Movies/Pianpian</code> on a Mac, <code>Videos\Pianpian</code> on Windows). Each video has its own folder with the video and its Chinese, pinyin and English subtitle files.</p><p>Demo files: <a href="demo/library/pianpian-day/source.mp4">Video</a> · <a href="demo/library/pianpian-day/zh.srt">Chinese</a> · <a href="demo/library/pianpian-day/zh.pinyin.srt">Pinyin</a> · <a href="demo/library/pianpian-day/zh.en.srt">English</a>.</p></details>
       <details><summary>Are the subtitles always accurate?</summary><p>Transcription, translation and grammar hints can be wrong. Check them against the audio. The library’s HSK level estimates vocabulary difficulty, not listening difficulty.</p></details>
-      <details><summary>Can the website demo send notes to Anki?</summary><p>Export from the local Pianpian app, with Anki Desktop running and AnkiConnect installed. The website demo lets you try the player.</p></details>
-      <details><summary>How do I open the unsigned Mac app?</summary><p>Pianpian is not yet signed with an Apple developer certificate. After trying to open it, go to System Settings → Privacy &amp; Security and choose Open Anyway. You can inspect the <a href="https://github.com/{{REPO}}">source code</a> before installing.</p></details>
-      <details><summary>What is planned?</summary><p>A Windows app and audio-only import. The current app processes video on Apple Silicon Macs.</p></details>
+      <details><summary>Can the website demo send notes to Anki?</summary><p>No: export from the local Pianpian app, with Anki Desktop running and AnkiConnect installed. The website demo lets you try the player. Anki export isn’t tested on Windows yet.</p></details>
+      <details><summary>Why does my computer warn me about the app?</summary><p><b>Mac:</b> signed and notarized builds can open when macOS allows apps from the App Store and identified developers. You may still be asked to confirm opening a downloaded app. “App Store only” excludes downloads from this website; older unsigned releases may also show a warning. See <a href="https://support.apple.com/en-us/102445">Apple’s guidance</a>.</p><p><b>Windows:</b> the installer is still unsigned. If SmartScreen stops it, choose More info → Run anyway. You can read the <a href="https://github.com/{{REPO}}">source code</a> first.</p></details>
+      <details><summary>How do I uninstall it?</summary><p><b>Mac:</b> move Pianpian from Applications to the Bin. <b>Windows:</b> uninstall it from Settings → Apps. Both keep your library and the tools folder (engine and installed models; by default <code>~/Library/Application Support/Pianpian</code> on a Mac, <code>%LOCALAPPDATA%\Pianpian</code> on Windows). Delete that folder to free the space.</p></details>
+      <details><summary>Is there a phone or Linux app?</summary><p>No. Pianpian runs on Mac and Windows computers.</p></details>
+      <details><summary>What is planned?</summary><p>Audio-only import.</p></details>
     </div>
   </section>
 
@@ -379,12 +402,11 @@ footer.site .grow { flex:1; }
     <h2>One slice a day.</h2>
     <p lang="zh-Hans">一天一片。</p>
     <div class="cta">
-      <a class="dl" data-umami-event="download" data-umami-event-where="bottom" href="https://github.com/{{REPO}}/releases/latest/download/{{DOWNLOAD}}">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>
-        Download for Mac
-      </a>
+      <a class="dl" data-os="mac" data-umami-event="download" data-umami-event-where="bottom" data-umami-event-os="mac" href="{{DOWNLOAD_URL}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="{{APPLE}}"/></svg>Download for Mac</a>
+      {{WINDOWS:bottom}}
       <a class="ghost star" href="https://github.com/{{REPO}}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92z"/></svg>Star on GitHub</a>
     </div>
+    <p class="os-note" data-os-note hidden></p>
   </div>
 
   <footer class="site">
@@ -413,9 +435,24 @@ demoFrame.addEventListener('load', () => {
   if (!shell) return;
   new ResizeObserver(fitDemo).observe(shell);
   doc.addEventListener('toggle', () => requestAnimationFrame(fitDemo), true);
+  doc.addEventListener('player-reveal', e => requestAnimationFrame(() => {
+    if (e.target.hidden || !e.target.getClientRects().length) return;
+    // The iframe cannot see the phone viewport or the sticky header: reveal the card or its returning focus here.
+    const target = e.target.getBoundingClientRect(), frame = demoFrame.getBoundingClientRect();
+    const top = (visualViewport?.offsetTop || 0) + document.querySelector('header.top').getBoundingClientRect().height + 8;
+    const bottom = (visualViewport?.offsetTop || 0) + (visualViewport?.height || innerHeight) - 8;
+    const delta = frame.top + target.bottom > bottom ? frame.top + target.bottom - bottom
+      : frame.top + target.top < top ? frame.top + target.top - top : 0;
+    if (delta) scrollBy({ top: delta, behavior: 'instant' });
+  }));
   fitDemo();
 });
 addEventListener('resize', fitDemo);
+/* a tap anywhere else on the page closes the demo's word sheet, as a tap outside it inside the demo does */
+addEventListener('click', e => {
+  const doc = demoFrame.contentDocument;
+  if (doc && !demoFrame.contains(e.target) && doc.querySelector('.wsheet:not([hidden])')) doc.body.click();
+});
 /* the header gets a hairline once the page scrolls */
 const head = document.querySelector('header.top');
 addEventListener('scroll', () => { head.style.borderBottomColor = scrollY > 8 ? 'var(--line)' : 'transparent'; }, { passive: true });

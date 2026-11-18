@@ -1,0 +1,959 @@
+{
+  "description": "Pinned minimal CPU build sources. No model weights. SHA256 checked on every build; source files identified by immutable commit.",
+  "funasr_commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+  "llama_commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+  "files": [
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/CMakeLists.txt",
+      "local": "llama/ggml/CMakeLists.txt",
+      "size": 21567,
+      "sha256": "1858523f1703dc31505447a3e162de5f56b6cc5325f9eaad2e0cc8688769737f"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/cmake/FindNCCL.cmake",
+      "local": "llama/ggml/cmake/FindNCCL.cmake",
+      "size": 964,
+      "sha256": "496ad9fbb75ce307f8142ed2dc8fa1ea1baaaef70e51b8d0b153ebd191b650f8"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/cmake/GitVars.cmake",
+      "local": "llama/ggml/cmake/GitVars.cmake",
+      "size": 717,
+      "sha256": "411507be4e991f2afc0007905a95bbf848176a282189d0e27d7df1d48974290d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/cmake/common.cmake",
+      "local": "llama/ggml/cmake/common.cmake",
+      "size": 2125,
+      "sha256": "438c57ef81c63b3b7b7a3078965ba081d53c3c2e9f9986c512e6f11b4937e816"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/cmake/ggml-config.cmake.in",
+      "local": "llama/ggml/cmake/ggml-config.cmake.in",
+      "size": 7459,
+      "sha256": "2e63c0151de13892cc56fcdae4bcfdc4a0c059c4c46ab18d0b607fe6d104df4c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-alloc.h",
+      "local": "llama/ggml/include/ggml-alloc.h",
+      "size": 3753,
+      "sha256": "94e4cd069b9313b2ceb35dacec901981e0bb478d8bb31035b7126be091998c23"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-backend.h",
+      "local": "llama/ggml/include/ggml-backend.h",
+      "size": 25306,
+      "sha256": "a620e815b43a44cc72d5f216629a3a91980335b61bc37eb6b2d0813368c3704f"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-blas.h",
+      "local": "llama/ggml/include/ggml-blas.h",
+      "size": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-cann.h",
+      "local": "llama/ggml/include/ggml-cann.h",
+      "size": 4553,
+      "sha256": "2cdb134f27fe5c4ec19d52f1eb58f5355aa42b8f54bf385f0e487501c5df7362"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-cpp.h",
+      "local": "llama/ggml/include/ggml-cpp.h",
+      "size": 1652,
+      "sha256": "bc15ba002c68685df23faae42df0d2b3d58032011f88b649021ab92485862c72"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-cpu.h",
+      "local": "llama/ggml/include/ggml-cpu.h",
+      "size": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-cuda.h",
+      "local": "llama/ggml/include/ggml-cuda.h",
+      "size": 1565,
+      "sha256": "9cbfcea49f6da4d07f41dc22fa8dbf870825faaa2a68e34e65fe30ea6c41e042"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-et.h",
+      "local": "llama/ggml/include/ggml-et.h",
+      "size": 887,
+      "sha256": "33118c0642b8059a99ea930fd4e4a045e78ccb41760b173ede221f1297c35977"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-hexagon.h",
+      "local": "llama/ggml/include/ggml-hexagon.h",
+      "size": 351,
+      "sha256": "b2c12bac390f14707b16bdd27c8c75ce4f075ed509c729ee28fd4f03b17e7375"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-metal.h",
+      "local": "llama/ggml/include/ggml-metal.h",
+      "size": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-opencl.h",
+      "local": "llama/ggml/include/ggml-opencl.h",
+      "size": 581,
+      "sha256": "8e443e1aa9c8bc6e0cf116c4cc3f42f4858938fa15e65b06bc07b26686e1233a"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-openvino.h",
+      "local": "llama/ggml/include/ggml-openvino.h",
+      "size": 1034,
+      "sha256": "c2e3f301e28ad815b4285888aad6130808a77e6acb4e8b558de63a648cf9743e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-opt.h",
+      "local": "llama/ggml/include/ggml-opt.h",
+      "size": 14040,
+      "sha256": "3586de1bc8a934b5c72339e2b6937b0641e8f149b512231e666f67de0736eea2"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-rpc.h",
+      "local": "llama/ggml/include/ggml-rpc.h",
+      "size": 1184,
+      "sha256": "7dc6f23a8b5c593bd6a3e02803aeb8861744d8c8219d0a544fa844879677ba1f"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-sycl.h",
+      "local": "llama/ggml/include/ggml-sycl.h",
+      "size": 2312,
+      "sha256": "58429f8045b335f5e740faa2198caf72ba3beb04df0eb970103b932340daca8b"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-virtgpu.h",
+      "local": "llama/ggml/include/ggml-virtgpu.h",
+      "size": 194,
+      "sha256": "ed231e7db3f0f58b84073f5ee67f9ec9d63046d1a7ed091c36a6cfe9f685a463"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-vulkan.h",
+      "local": "llama/ggml/include/ggml-vulkan.h",
+      "size": 952,
+      "sha256": "7eae5dad2cc7bb4d3eca828539f441816d5fd59fdc7b224d49aa229fc7b7248c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-webgpu.h",
+      "local": "llama/ggml/include/ggml-webgpu.h",
+      "size": 328,
+      "sha256": "a91d855313a9e85e75ba597ff869a267247dea936a2c0faef03aeb7f1ea6e79c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-zdnn.h",
+      "local": "llama/ggml/include/ggml-zdnn.h",
+      "size": 292,
+      "sha256": "ee1d79c95ade45ba195a6b71f59a05c18617de4a596d2b2b03ecf38975a9a448"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml-zendnn.h",
+      "local": "llama/ggml/include/ggml-zendnn.h",
+      "size": 498,
+      "sha256": "2cb034b842438281616ce647232d922fb224450323f0d422d2af567c334aa8ff"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/ggml.h",
+      "local": "llama/ggml/include/ggml.h",
+      "size": 112178,
+      "sha256": "5dd0551fcd1a3992c1acd31870315b9e7222ed4e71e8b439b60d60d91c7671ac"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/include/gguf.h",
+      "local": "llama/ggml/include/gguf.h",
+      "size": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/CMakeLists.txt",
+      "local": "llama/ggml/src/CMakeLists.txt",
+      "size": 20034,
+      "sha256": "b4210d3aded4f4d217209624f981ecb5c65b1592eca7e049ff14b13c60743cb5"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-alloc.c",
+      "local": "llama/ggml/src/ggml-alloc.c",
+      "size": 47819,
+      "sha256": "881083e2f5d0126738ffe5b246d60cacf7db7b524f1ea471f116697c3211026a"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-backend-dl.cpp",
+      "local": "llama/ggml/src/ggml-backend-dl.cpp",
+      "size": 1051,
+      "sha256": "acd76df8b83bcdef6807bc7b0520f57b379d61b4ff1027c04aa4d140d16ad07f"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-backend-dl.h",
+      "local": "llama/ggml/src/ggml-backend-dl.h",
+      "size": 791,
+      "sha256": "225bd83a197c4e8b5f985717176824d1144e2b74a79f04838f51b84115c14dc5"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-backend-impl.h",
+      "local": "llama/ggml/src/ggml-backend-impl.h",
+      "size": 13643,
+      "sha256": "d9c62d72b13bff67ef7ada8feccf90c9cd1b6d176eae85df3ed1d4f3d2240e52"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-backend-meta.cpp",
+      "local": "llama/ggml/src/ggml-backend-meta.cpp",
+      "size": 106929,
+      "sha256": "c3f160a03ecfc4346aaaf5a512604b9e7de9030538f430f78340ccf00c562cb2"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-backend-reg.cpp",
+      "local": "llama/ggml/src/ggml-backend-reg.cpp",
+      "size": 18002,
+      "sha256": "c0a61f47e7af0359cfff41317ae8e68717960483d141983bba914733b1f68906"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-backend.cpp",
+      "local": "llama/ggml/src/ggml-backend.cpp",
+      "size": 96019,
+      "sha256": "507577061d22e673a4f002bb215c65aa9c63b88a4e6d1586f52c74ca0b98fa07"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-common.h",
+      "local": "llama/ggml/src/ggml-common.h",
+      "size": 135128,
+      "sha256": "af255601767325f087313fa84b9435cb77aeec37df6b61b98d9ecc65f29fb4a0"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/CMakeLists.txt",
+      "local": "llama/ggml/src/ggml-cpu/CMakeLists.txt",
+      "size": 36419,
+      "sha256": "8f540fdf899f1de3e9b08b2768c8546a9416794a9b290615d50bbec80f5fc84c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/amx/amx.cpp",
+      "local": "llama/ggml/src/ggml-cpu/amx/amx.cpp",
+      "size": 8265,
+      "sha256": "636d1e4b858a86ad6568100bbdb4bf9715d9dfb25d3831415d55e04e39acad86"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/amx/amx.h",
+      "local": "llama/ggml/src/ggml-cpu/amx/amx.h",
+      "size": 202,
+      "sha256": "9d098ceee6a8114d4a660ff269064a27aa25b8a4f205d1e6984d17bec5104f0d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/amx/common.h",
+      "local": "llama/ggml/src/ggml-cpu/amx/common.h",
+      "size": 2675,
+      "sha256": "c694f6bb066a820b717f986914b0d112dca0d8d3a1e239e958fce30c864751c3"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/amx/mmq.cpp",
+      "local": "llama/ggml/src/ggml-cpu/amx/mmq.cpp",
+      "size": 108216,
+      "sha256": "0f95c80e0300eca3b3a3df07272042fee708425e19cd5f2c4cba7b253b26d226"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/amx/mmq.h",
+      "local": "llama/ggml/src/ggml-cpu/amx/mmq.h",
+      "size": 397,
+      "sha256": "bd33d0713b12daf9eedea1619dd715619baaa36b98c44ec754d532909d80933a"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch-fallback.h",
+      "local": "llama/ggml/src/ggml-cpu/arch-fallback.h",
+      "size": 21654,
+      "sha256": "2dc6b116f732329effe45d3f9384d5ebae628f3c19e2f2ac69551fd2e3721917"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp",
+      "size": 2565,
+      "sha256": "44cc14fd5e2a1579a5b97327bf01dece8638be286321f212b31d713058e2b9a9"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/arm/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/arm/quants.c",
+      "size": 216963,
+      "sha256": "9fccd3897db24c9df89b8431b588175894e5f54697cf45768d0c6e6c5544093e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/arm/repack.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/arm/repack.cpp",
+      "size": 255596,
+      "sha256": "2e7ba6aaf10834601315fc8f5e7f52a1638076bf6c0435542247c3de1ee4cce7"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/loongarch/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/loongarch/quants.c",
+      "size": 94730,
+      "sha256": "6adfe8a7ef75113fff1eba93e7fa52affd156f5f6f9f0adb2c53557909b02d4c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/powerpc/cpu-feats.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/powerpc/cpu-feats.cpp",
+      "size": 2074,
+      "sha256": "cbee31db1ec3b93278f6b4724d26fa07c8641359c25a40ffc464617632859c47"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/powerpc/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/powerpc/quants.c",
+      "size": 97985,
+      "sha256": "5a7d65d4cae3cb46adac6cb151349e1a18d571f15306bc46bc9a65eddc8f1c2d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/riscv/cpu-feats.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/riscv/cpu-feats.cpp",
+      "size": 807,
+      "sha256": "6187bf810718647068814020407d25ecb89ccd96d40135a064029e5c1f3cd60f"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/riscv/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/riscv/quants.c",
+      "size": 294126,
+      "sha256": "acf089ff8b39c1eeb7cb8f67df8ab49055a5b82a530b9c4871ea7ab732cf390f"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/riscv/repack.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/riscv/repack.cpp",
+      "size": 97889,
+      "sha256": "57b1362562ec0dfe8475e49a639783468da3ddbf7a5f009adcd01a7e4ed61fbf"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/s390/cpu-feats.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/s390/cpu-feats.cpp",
+      "size": 1017,
+      "sha256": "177c1d60be3487bc8635180fd43c2ed2be456a81c6260e6a1c30f2c16c7df3ea"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/s390/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/s390/quants.c",
+      "size": 54047,
+      "sha256": "3afa9d6315f299a6c935f28713e914a6706e729bb69902b02472655741de26c8"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/wasm/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/wasm/quants.c",
+      "size": 46731,
+      "sha256": "defc3f28aa882d52a390d4573f5308ddc3aa95c5f487bbdaf311e7b0874493b3"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/x86/cpu-feats.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/x86/cpu-feats.cpp",
+      "size": 10727,
+      "sha256": "b0f6aaaeb0b12a4f3e15ceec14d0c2031633f91e864a6c15954a001d6390f6d4"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/x86/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/arch/x86/quants.c",
+      "size": 197407,
+      "sha256": "3c489fdc77e3ab484a5f188bff9c60c0e9483c951ed65c1a562a04c249d5628e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/arch/x86/repack.cpp",
+      "local": "llama/ggml/src/ggml-cpu/arch/x86/repack.cpp",
+      "size": 665038,
+      "sha256": "c69735f83caf854172cac78eed2cbc022ef81c077e5f6aca55a49d3404a02331"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/binary-ops.cpp",
+      "local": "llama/ggml/src/ggml-cpu/binary-ops.cpp",
+      "size": 6709,
+      "sha256": "2df261aadce36a20f5e3bf6961d4ca27b8c2d461afc41488361ee6ad09c1730d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/binary-ops.h",
+      "local": "llama/ggml/src/ggml-cpu/binary-ops.h",
+      "size": 518,
+      "sha256": "5915519c4e2227db28239b2a5d3b8a5f9022730cc0ddb7880b24748ee78cd1f9"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/cmake/FindSIMD.cmake",
+      "local": "llama/ggml/src/ggml-cpu/cmake/FindSIMD.cmake",
+      "size": 2651,
+      "sha256": "c36807121bb1452dfb1ab39a7b366bd49f454c49b43b1df4b7c54f038c824d49"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/cmake/FindSMTIME.cmake",
+      "local": "llama/ggml/src/ggml-cpu/cmake/FindSMTIME.cmake",
+      "size": 2075,
+      "sha256": "81fc6290d1b2fdc30746c222fe993cc7403942ca388f9db0c5885ef568929adb"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/common.h",
+      "local": "llama/ggml/src/ggml-cpu/common.h",
+      "size": 2333,
+      "sha256": "db7c19747a28c819d18922aa43b91b224df3730e424e6d8a4cf4fd16bfb1db14"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/ggml-cpu-impl.h",
+      "local": "llama/ggml/src/ggml-cpu/ggml-cpu-impl.h",
+      "size": 13723,
+      "sha256": "e7008069e3e46f1db5e3d2eaafb4ddec3c7d0ece5c0454f99c5a8e33a50f20ba"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/ggml-cpu.c",
+      "local": "llama/ggml/src/ggml-cpu/ggml-cpu.c",
+      "size": 130294,
+      "sha256": "f2abcaf7f627a2d8a4b7744a7128b210dad0d147fc92cb94ce9cbaed2945e84a"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "local": "llama/ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "size": 24389,
+      "sha256": "7b65efb904da22c4053f8c053034b2a2af8d35057495867cc7c06ebf19330484"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/hbm.cpp",
+      "local": "llama/ggml/src/ggml-cpu/hbm.cpp",
+      "size": 2003,
+      "sha256": "3c75b5aaf9b51d17060ecfb93cb5f8b22ce3974d7eff3d76dec2156d2f194b80"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/hbm.h",
+      "local": "llama/ggml/src/ggml-cpu/hbm.h",
+      "size": 155,
+      "sha256": "340c84ac6a1c83d2218a15d6d71c1efb6ba1a5517162c2fde4baa0a9204af26b"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/kleidiai/kernels.cpp",
+      "local": "llama/ggml/src/ggml-cpu/kleidiai/kernels.cpp",
+      "size": 75768,
+      "sha256": "70341a23474f26f6cd1b1b1b67eb4e0ed332d1205f8c0a8699a07edc121f4b30"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/kleidiai/kernels.h",
+      "local": "llama/ggml/src/ggml-cpu/kleidiai/kernels.h",
+      "size": 3378,
+      "sha256": "6a5d361a49acb385050badb9871533c152083ec156ce22e0018e524f1f138361"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/kleidiai/kleidiai.cpp",
+      "local": "llama/ggml/src/ggml-cpu/kleidiai/kleidiai.cpp",
+      "size": 71405,
+      "sha256": "2428612bb86ff2446ca3b1206d33f1571066db9737afdebbdcecfda57869841c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/kleidiai/kleidiai.h",
+      "local": "llama/ggml/src/ggml-cpu/kleidiai/kleidiai.h",
+      "size": 323,
+      "sha256": "bea31f009d2c471a7f6cd7a0ecf31ecaf08691914305a9ef7f986740e39f0910"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/llamafile/sgemm.cpp",
+      "local": "llama/ggml/src/ggml-cpu/llamafile/sgemm.cpp",
+      "size": 162829,
+      "sha256": "e226380b05393302ba91b38d22718d9521700ee2cb7943f83ad316a7a9dcd597"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/llamafile/sgemm.h",
+      "local": "llama/ggml/src/ggml-cpu/llamafile/sgemm.h",
+      "size": 524,
+      "sha256": "6ec12aa9244a8ffb13ae56b2e391f905b1d152ae25ff45da6a66e18daf650b3b"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/ops.cpp",
+      "local": "llama/ggml/src/ggml-cpu/ops.cpp",
+      "size": 411225,
+      "sha256": "dd7265a7402515002d4679f18d5d1d423456e87f256f7cc11af3bbb4148bf773"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/ops.h",
+      "local": "llama/ggml/src/ggml-cpu/ops.h",
+      "size": 10103,
+      "sha256": "15c27f1127f0c9edd9dcd4e684eb8b2bd5d2038b4b32594d4a4b8b827407d33a"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/quants.c",
+      "local": "llama/ggml/src/ggml-cpu/quants.c",
+      "size": 45124,
+      "sha256": "a61f1011e49d05b5f99d352b158d5b8e36cf008294bb0db309f72bdd7f1d4e35"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/quants.h",
+      "local": "llama/ggml/src/ggml-cpu/quants.h",
+      "size": 10862,
+      "sha256": "918d6755b3e601ec7bb83c7dbf1d73304490651ccbb4072b0d31a2b45df751da"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/repack.cpp",
+      "local": "llama/ggml/src/ggml-cpu/repack.cpp",
+      "size": 195909,
+      "sha256": "4ff9c018a0514664a5df0e65bebac47be27f6becf0c81145b372ee80dad5ed89"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/repack.h",
+      "local": "llama/ggml/src/ggml-cpu/repack.h",
+      "size": 19905,
+      "sha256": "fe472315b4106400d7890fca308659c74bcdedad1b011a9ba60c02dcd5bef57b"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/simd-gemm.h",
+      "local": "llama/ggml/src/ggml-cpu/simd-gemm.h",
+      "size": 7471,
+      "sha256": "ce613195325cea048ede4c7a86c382ac6abf4c701c91eee640bd3cc78b39ce5e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/simd-mappings.h",
+      "local": "llama/ggml/src/ggml-cpu/simd-mappings.h",
+      "size": 54522,
+      "sha256": "c8371bfb028ccee0e5af76bf47a9ae1d029b38cfda35fa6f0ee1358d63428737"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime.cpp",
+      "size": 77041,
+      "sha256": "9b594e2b71eecc91d4bb12c2e22fccb6d82f50f61877d559470ec8095e449c2e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime.h",
+      "size": 511,
+      "sha256": "2007cbf6ea43a0d97f46e046f1449ab752ff35cc42caa09a22195dbe06656143"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime1_kernels.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime1_kernels.cpp",
+      "size": 50342,
+      "sha256": "ea1170753bdaca75d629001d7e820ec315bbd54511c37d1ed4c9347eda67bc46"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime2_kernels.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime2_kernels.cpp",
+      "size": 291755,
+      "sha256": "98b9f38041ead963baf59628167979d667f44c52570cb80d9340efce775fae73"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime_env.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime_env.cpp",
+      "size": 12208,
+      "sha256": "5f31bd7195f7daffe278e7394c7c84327ec6cce421a2f035b9a0ba4edfd53b2c"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime_env.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime_env.h",
+      "size": 1810,
+      "sha256": "2d8b0529166cefb919715e87ca2ed56ef6f0739a6ba008a4e98b2db9545c8295"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/ime_kernels.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/ime_kernels.h",
+      "size": 7962,
+      "sha256": "84da9984cab8de6430cb99088a1ae85443678e98f99ab09b050804f907deabb2"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/repack.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/repack.cpp",
+      "size": 75008,
+      "sha256": "65a3e0359ebc9949bac6ea6f9b4b44af811a8160464f394a659e5c4f39cf5a2d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/repack.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/repack.h",
+      "size": 316,
+      "sha256": "70f7c5aae3b7972841bbb68e05acb84f299c08af61ea8608ab233fc432db8920"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/rvv_kernels.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/rvv_kernels.cpp",
+      "size": 154759,
+      "sha256": "4c1e7f76aaeab7247767c7849121dc2450539a1916fe23fd908f24c4f9240179"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/rvv_kernels.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/rvv_kernels.h",
+      "size": 4380,
+      "sha256": "666e988d3700b733dad9a406b1575f521f75186fad942a27edd0792f2b4165e7"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/spine_barrier.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/spine_barrier.h",
+      "size": 1007,
+      "sha256": "ddba450200089601aac492a45d6be7881eeef02cd0a4abedf69db5c4b9dfe134"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/spine_mem_pool.cpp",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/spine_mem_pool.cpp",
+      "size": 27104,
+      "sha256": "3ca25e1b06f9aa8144d15e4382b40a1561609e65518119da876765bd6fc1aeed"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/spine_mem_pool.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/spine_mem_pool.h",
+      "size": 920,
+      "sha256": "8f441ca61472aef8ee16f88fe0f640c188ff036e4c80bb5657b1c0a4c204d889"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/spacemit/spine_tcm.h",
+      "local": "llama/ggml/src/ggml-cpu/spacemit/spine_tcm.h",
+      "size": 13965,
+      "sha256": "8bfe1bfa04a24f88d79610e209047de81f867d12c7dce8bf16402fcb3f67b0c8"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/traits.cpp",
+      "local": "llama/ggml/src/ggml-cpu/traits.cpp",
+      "size": 1231,
+      "sha256": "a85bd3ff50c91cb67d14221988544664dfe5975db0811b330dc4a2f385239de4"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/traits.h",
+      "local": "llama/ggml/src/ggml-cpu/traits.h",
+      "size": 1157,
+      "sha256": "26e1b41879091a663325848aa82a4023b459fd1e688b3b0e2a9bde3e72a3a764"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/unary-ops.cpp",
+      "local": "llama/ggml/src/ggml-cpu/unary-ops.cpp",
+      "size": 11555,
+      "sha256": "e63b382766f1b8c5ded1577be9704e85cb4e9cd24584f3e1474911a40146df33"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/unary-ops.h",
+      "local": "llama/ggml/src/ggml-cpu/unary-ops.h",
+      "size": 2442,
+      "sha256": "280b7979055079d43bdde7790a7290bf04f75640481c59abc2364c46d6ac6d8e"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/vec.cpp",
+      "local": "llama/ggml/src/ggml-cpu/vec.cpp",
+      "size": 25309,
+      "sha256": "cda0babb53f9c8ff1faa7459b2c49019d15e5970dfe0c613d58e2659e919f524"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-cpu/vec.h",
+      "local": "llama/ggml/src/ggml-cpu/vec.h",
+      "size": 66060,
+      "sha256": "926330bae1c5d003bd654035426e31381fafcdca23ffcc23201d219dbb97cbeb"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-impl.h",
+      "local": "llama/ggml/src/ggml-impl.h",
+      "size": 25604,
+      "sha256": "2ed56e264202906d107e26d08eabb242d3107b026ebfb78096fa1e5f94bdbbb8"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-opt.cpp",
+      "local": "llama/ggml/src/ggml-opt.cpp",
+      "size": 42081,
+      "sha256": "e35fd27856e37f3611d3bc6f17ee963be51bfe92bec96fad0a9fa2c7ebbe9c46"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-quants.c",
+      "local": "llama/ggml/src/ggml-quants.c",
+      "size": 228250,
+      "sha256": "07143d7068936ae46b3c528b2f3d4bbb666e74d88992165716174d243573965d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-quants.h",
+      "local": "llama/ggml/src/ggml-quants.h",
+      "size": 9803,
+      "sha256": "28ae5fca1f3be636b36cd6c4fa2ca74fd42d229bfbd5352eaf66f3727bb8a6da"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-threading.cpp",
+      "local": "llama/ggml/src/ggml-threading.cpp",
+      "size": 250,
+      "sha256": "13a18d885393722b7c9f42d4cf8575a4d41699926d656f78a867fa4fac9dad20"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml-threading.h",
+      "local": "llama/ggml/src/ggml-threading.h",
+      "size": 198,
+      "sha256": "9652729043ed91482392c1aa08af5d813190d0ace2e7982d2539d28240ab8d8b"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml.c",
+      "local": "llama/ggml/src/ggml.c",
+      "size": 256847,
+      "sha256": "b77e56c7ff5d80be968db0ac111c405e287a168a44fdb8c8bc94f11b41391da0"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/ggml.cpp",
+      "local": "llama/ggml/src/ggml.cpp",
+      "size": 738,
+      "sha256": "64e6b5c8d716ae8697e45481a7153540be01f721be2dc7e753aa47b36a69c753"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "ggml/src/gguf.cpp",
+      "local": "llama/ggml/src/gguf.cpp",
+      "size": 57509,
+      "sha256": "cc86dbbb4ea1a01b78e3aba879a8e0654dd23aa8d8d73ff56241443eb188bf6d"
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "commit": "803b7fcae893e9caaee3921779628fef83ac0965",
+      "path": "LICENSE",
+      "local": "llama/LICENSE",
+      "size": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "repo": "modelscope/FunASR",
+      "commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+      "path": "runtime/llama.cpp/funasr-common/funasr_audio.h",
+      "local": "funasr/funasr-common/funasr_audio.h",
+      "size": 2140,
+      "sha256": "9a807d7a4c40f04d4c70f9f06553151fc921aa113b37e12cacc2350df79ef200"
+    },
+    {
+      "repo": "modelscope/FunASR",
+      "commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+      "path": "runtime/llama.cpp/funasr-common/funasr_vad.h",
+      "local": "funasr/funasr-common/funasr_vad.h",
+      "size": 10698,
+      "sha256": "1fffde93c9df29dc63942dd8112a731441e2b73a21322b5a2d4a59dbc9d1d040"
+    },
+    {
+      "repo": "modelscope/FunASR",
+      "commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+      "path": "runtime/llama.cpp/funasr-common/funasr_srt.h",
+      "local": "funasr/funasr-common/funasr_srt.h",
+      "size": 872,
+      "sha256": "1d0d3b62bc2a6392ea1386eccb4b420adf6f2666154d9cb9e72e313b40058042"
+    },
+    {
+      "repo": "modelscope/FunASR",
+      "commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+      "path": "runtime/llama.cpp/funasr-common/miniaudio.h",
+      "local": "funasr/funasr-common/miniaudio.h",
+      "size": 4108168,
+      "sha256": "ac7af4de748b7e26b777f37e01cee313a308a7296a3eb080e2906b320cc55c89"
+    },
+    {
+      "repo": "modelscope/FunASR",
+      "commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+      "path": "runtime/llama.cpp/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp",
+      "local": "funasr/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp",
+      "size": 21366,
+      "sha256": "0f6c84e54229733098e4519f9776f43b285b09fdbf0f60aef2b64ce40fcf558f"
+    },
+    {
+      "repo": "modelscope/FunASR",
+      "commit": "a57c05bfe2a91b5e0cb0983479634eba3e28ede5",
+      "path": "LICENSE",
+      "local": "funasr/LICENSE",
+      "size": 1061,
+      "sha256": "f382b62dcc61fc566b9215b1e3b604b539bfd96ed52ae1eeff5090f6dc176057"
+    }
+  ]
+}

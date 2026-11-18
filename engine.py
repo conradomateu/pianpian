@@ -2,43 +2,62 @@
 
 The app itself is small. What it needs to make subtitles is installed on first run, after asking:
   1. Python 3.12 and the pipeline's packages, pinned with hashes in pipeline/requirements.txt
-     (`python3 dev.py lock`), into <data>/engine with uv;
-  2. the models you pick (pipeline/models.py), into <data>/models.
-<data> is ~/Library/Application Support/Pianpian unless you choose another folder. Downloads come from
-PyPI and python.org's builds, or from mirrors in mainland China when those are slow to reach.
-Settings live in ~/Library/Application Support/Pianpian/config.json. Standard library only.
+     (pipeline/requirements-windows.txt on Windows), into <data>/engine with uv;
+  2. the pinned llama.cpp build for translation (pipeline/runtimes.py),
+     into <data>/runtime;
+  3. the models you pick (pipeline/models.py), into <data>/models.
+<data> is ~/Library/Application Support/Pianpian on macOS and %LOCALAPPDATA%\\Pianpian on Windows,
+unless you choose another folder. Downloads come from PyPI and python-build-standalone, or from mirrors
+in mainland China when those are slow to reach. Settings stay in SUPPORT/config.json when data moves.
+Standard library only.
 """
 import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+WINDOWS = sys.platform == "win32"            # the one platform check on the app side; the pipeline's is backend.py
 HERE = Path(__file__).resolve().parent
-FROZEN = getattr(sys, "frozen", False)                       # running inside Pianpian.app (tools/build_app.py)
+FROZEN = getattr(sys, "frozen", False)                       # running inside the packaged app (tools/build_app.py)
 if FROZEN:
     # Python writes .pyc files next to the scripts it imports. Inside the app that changes a signed bundle after it was
     # installed: `codesign --verify` fails from then on (measured: valid after build, invalid after one run, valid again
     # without the __pycache__ folders). The variable is inherited by the pipeline's own Python processes.
     sys.dont_write_bytecode = True
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+
+
+def _support() -> Path:
+    if os.environ.get("PIANPIAN_HOME"):
+        return Path(os.environ["PIANPIAN_HOME"])
+    if WINDOWS:
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Pianpian"
+    return Path.home() / "Library" / "Application Support" / "Pianpian"
+
+
 # $PIANPIAN_HOME moves everything (settings, engine, models): for tests, or a second install
-SUPPORT = Path(os.environ.get("PIANPIAN_HOME") or (
-    Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Pianpian" if sys.platform == "win32"
-    else Path.home() / "Library" / "Application Support" / "Pianpian"))
+SUPPORT = _support()
 CONFIG = SUPPORT / "config.json"
-REQS = HERE / "pipeline" / "requirements.txt"
+# Capture user overrides before the app publishes its own paths (and GPU choice) into the worker environment.
+PATH_OVERRIDES = {key: os.environ.get(key) for key in ("PIANPIAN_MODELS", "PIANPIAN_CACHE", "PIANPIAN_RUNTIME", "PIANPIAN_ACCEL")}
+REQS = HERE / "pipeline" / ("requirements-windows.txt" if WINDOWS else "requirements.txt")
 MODELS_PY = HERE / "pipeline" / "models.py"
-CHECK = "import yt_dlp, pypinyin, jieba, zhconv, mlx_whisper, mlx_lm"
-ENGINE_MB = 650                                              # Python + packages on disk
+RUNTIMES_PY = HERE / "pipeline" / "runtimes.py"
+CHECK = "import yt_dlp, pypinyin, jieba, zhconv"
+ENGINE_MB = 230                          # Python + packages on disk: rough estimate, not download size
 # each source and its mirror in mainland China, with a file both serve to time them by
-PY_BUILD = "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz"
+PY_BUILD = ("20251014/cpython-3.12.12+20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz" if WINDOWS
+            else "20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz")
 SOURCES = {
     "UV_PYTHON_INSTALL_MIRROR": ("https://github.com/astral-sh/python-build-standalone/releases/download/" + PY_BUILD,
                                  "https://registry.npmmirror.com/-/binary/python-build-standalone/" + PY_BUILD,
@@ -49,29 +68,137 @@ SOURCES = {
 
 sys.path.insert(0, str(HERE / "pipeline"))
 import models  # noqa: E402
+import runtimes  # noqa: E402  (the pinned native translation builds)
+
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # the app is windowed: its own processes get no console
+PROCESSES = set()
+PROCESS_LOCK = threading.Lock()
+CLOSING = False
+
+
+@contextmanager
+def process(cmd, **kwargs):
+    """A tracked app process; a separate POSIX group lets shutdown include its children."""
+    if not WINDOWS:
+        kwargs["start_new_session"] = True
+    with PROCESS_LOCK:
+        if CLOSING:
+            raise RuntimeError("Pianpian is closing")
+        p = subprocess.Popen(cmd, **kwargs)
+        PROCESSES.add(p)
+    try:
+        yield p
+    finally:
+        with PROCESS_LOCK:
+            PROCESSES.discard(p)
+
+
+def run(cmd, **kwargs):
+    """subprocess.run() through the same registry, including timeout and check semantics."""
+    capture, check, timeout = kwargs.pop("capture_output", False), kwargs.pop("check", False), kwargs.pop("timeout", None)
+    if capture:
+        if "stdout" in kwargs or "stderr" in kwargs:
+            raise ValueError("stdout and stderr may not be used with capture_output")
+        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    with process(cmd, **kwargs) as p:
+        try:
+            stdout, stderr = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _stop_tree(p)
+            p.communicate()
+            raise
+    result = subprocess.CompletedProcess(cmd, p.returncode, stdout, stderr)
+    if check and result.returncode:
+        raise subprocess.CalledProcessError(result.returncode, cmd, output=stdout, stderr=stderr)
+    return result
+
+
+# The pipeline never imports the app. Its GPU probes use this tracked runner in the app, subprocess.run in the CLI.
+runtimes.probe_run = run
+
+
+def _stop_tree(p: subprocess.Popen) -> None:
+    try:
+        if WINDOWS:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=10, creationflags=NO_WINDOW)
+        else:
+            os.killpg(p.pid, signal.SIGTERM)
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            # The parent may exit quickly while a descendant ignores SIGTERM: always finish the group.
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        if not WINDOWS and p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    if p.poll() is None:
+        p.kill()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass                                      # shutdown stays bounded; the OS reaps at process exit
+
+
+def stop_processes() -> None:
+    """Reject new tracked processes and stop the active trees, without blocking app exit indefinitely."""
+    global CLOSING
+    with PROCESS_LOCK:
+        CLOSING = True
+        running = list(PROCESSES)
+    for p in running:
+        if p.poll() is None:
+            _stop_tree(p)
 
 
 # ---------------------------------------------------------------- settings
+def default_library() -> Path:
+    """Where videos live until someone chooses another folder in the setup."""
+    if WINDOWS:
+        return Path.home() / "Videos" / "Pianpian"
+    old = Path.home() / "Movies" / "mandarin"                # the library of the command-line days, if there is one
+    return old if old.exists() else Path.home() / "Movies" / "Pianpian"
+
+
 def config() -> dict:
     try:
         saved = json.loads(CONFIG.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         saved = {}
-    old = Path.home() / "Movies" / "mandarin"                # the library of the command-line days, if there is one
-    return {"library": saved.get("library") or str(old if old.exists() else Path.home() / "Movies" / "Pianpian"),
+    return {"library": saved.get("library") or str(default_library()),
             "data": saved.get("data") or str(SUPPORT), **{k: v for k, v in saved.items() if k not in ("library", "data")}}
 
 
+_CONFIG_LOCK = threading.Lock()                              # setup and Anki requests can save on different threads
+
+
 def save_config(**changes) -> dict:
-    cfg = {**config(), **{k: v for k, v in changes.items() if v is not None}}
-    SUPPORT.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
-    return cfg
+    with _CONFIG_LOCK:
+        cfg = {**config(), **{k: v for k, v in changes.items() if v is not None}}
+        SUPPORT.mkdir(parents=True, exist_ok=True)
+        # owner-only on POSIX (it holds the AnkiConnect key); Windows uses the folder's ACL, not this mode
+        tmp = CONFIG.with_name(CONFIG.name + ".tmp")
+        tmp.unlink(missing_ok=True)
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
+            f.write(json.dumps(cfg, indent=1))
+        os.replace(tmp, CONFIG)
+        return cfg
 
 
 def logs_dir() -> Path:
-    """macOS keeps app logs in ~/Library/Logs; with $PIANPIAN_HOME they stay next to everything else."""
-    d = SUPPORT / "logs" if os.environ.get("PIANPIAN_HOME") or sys.platform != "darwin" else Path.home() / "Library" / "Logs" / "Pianpian"
+    """macOS keeps app logs in ~/Library/Logs and Windows in <data>\\logs; with $PIANPIAN_HOME they stay
+    next to everything else."""
+    if not WINDOWS and not os.environ.get("PIANPIAN_HOME"):
+        d = Path.home() / "Library" / "Logs" / "Pianpian"
+    else:
+        d = SUPPORT / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -81,21 +208,33 @@ def data_dir() -> Path:
 
 
 def models_dir() -> Path:
-    return Path(os.environ.get("PIANPIAN_MODELS") or data_dir() / "models")
+    return Path(PATH_OVERRIDES["PIANPIAN_MODELS"] or data_dir() / "models")
 
 
 def cache_dir() -> Path:
     """The dictionary and other small downloads."""
-    return Path(os.environ.get("PIANPIAN_CACHE") or data_dir() / "cache")
+    return Path(PATH_OVERRIDES["PIANPIAN_CACHE"] or data_dir() / "cache")
+
+
+def runtime_dir() -> Path:
+    """The pinned llama.cpp translation builds."""
+    return Path(PATH_OVERRIDES["PIANPIAN_RUNTIME"] or data_dir() / "runtime")
 
 
 def pipeline_env() -> dict:
-    """Where the pipeline finds the models and the dictionary: set for every job and setup step."""
-    return {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir())}
+    """Model, dictionary and native-runtime paths and the saved accelerator, for every job/setup step."""
+    return {"PIANPIAN_MODELS": str(models_dir()), "PIANPIAN_CACHE": str(cache_dir()),
+            "PIANPIAN_RUNTIME": str(runtime_dir()),
+            "PIANPIAN_ACCEL": (PATH_OVERRIDES["PIANPIAN_ACCEL"] or config().get("accel") or runtimes.default_backend()).lower()}
 
 
 def engine_dir() -> Path:
     return data_dir() / "engine"
+
+
+def engine_python(root: Path) -> Path:
+    """Where a virtual environment keeps its Python on this platform."""
+    return root / ("Scripts/python.exe" if WINDOWS else "bin/python")
 
 
 def python() -> str:
@@ -103,30 +242,36 @@ def python() -> str:
     .venv (`python3 dev.py engine`), else the one running this."""
     if os.environ.get("PIANPIAN_PYTHON"):
         return os.environ["PIANPIAN_PYTHON"]
-    relative = Path("Scripts/python.exe") if sys.platform == "win32" else Path("bin/python")
-    for p in (engine_dir() / relative, HERE / ".venv" / relative):
+    for p in (engine_python(engine_dir()), engine_python(HERE / ".venv")):
         if p.exists():
             return str(p)
     # inside the packaged app, sys.executable is the app itself: running it would open a second window
-    return str(engine_dir() / relative) if FROZEN else sys.executable
+    return str(engine_python(engine_dir())) if FROZEN else sys.executable
 
 
 def uv() -> str | None:
-    """uv: the one inside the app, else one on this Mac."""
-    for p in (os.environ.get("PIANPIAN_UV"), Path(getattr(sys, "_MEIPASS", HERE)) / "uv", HERE / "bin" / "uv"):
+    """uv: the one inside the app, else one on this machine (or in the checkout's .venv)."""
+    exe = "uv.exe" if WINDOWS else "uv"
+    for p in (os.environ.get("PIANPIAN_UV"), Path(getattr(sys, "_MEIPASS", HERE)) / exe, HERE / "bin" / exe,
+              engine_python(HERE / ".venv").with_name(exe)):
         if p and Path(p).is_file() and os.access(p, os.X_OK):
             return str(p)
-    return shutil.which("uv")
+    return shutil.which(exe)
 
 
 def ffmpeg() -> str | None:
-    """Homebrew's ffmpeg, else the one in the engine (imageio-ffmpeg)."""
+    """A system ffmpeg (Homebrew, winget), else the one in the engine (imageio-ffmpeg)."""
     if exe := shutil.which("ffmpeg"):
         return exe
     root = Path(python()).parent.parent
-    candidates = list((root / "lib").glob("python3*/site-packages/imageio_ffmpeg/binaries/ffmpeg-*"))
-    candidates += list((root / "Lib" / "site-packages" / "imageio_ffmpeg" / "binaries").glob("ffmpeg-*.exe"))
-    return next((str(f) for f in sorted(candidates) if os.access(f, os.X_OK)), None)
+    libs = [root / "Lib" / "site-packages", root / "lib" / "site-packages",
+            *sorted((root / "lib").glob("python3*/site-packages"))]
+    pattern = "imageio_ffmpeg/binaries/ffmpeg-*.exe" if WINDOWS else "imageio_ffmpeg/binaries/ffmpeg-*"
+    for lib in libs:
+        for f in sorted(lib.glob(pattern)):
+            if f.is_file() and os.access(f, os.X_OK):
+                return str(f)
+    return None
 
 
 def requirements_id() -> str:
@@ -144,13 +289,27 @@ def check() -> dict:
     """Can the engine's Python run the pipeline, and was it installed from today's requirements?"""
     py = python()
     try:
-        ok = subprocess.run([py, "-c", CHECK], capture_output=True, timeout=120).returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+        ok = run([py, "-c", CHECK], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
         ok = False
     stamp = Path(py).parent.parent / ".pianpian-requirements"
     # an engine made by hand (the repository's .venv) is kept up to date by its owner
     STATE.update(engine=ok, current=(not stamp.exists() and ok) or (stamp.exists() and stamp.read_text().strip() == requirements_id()))
     return dict(STATE)
+
+
+def venv_starts(root: Path) -> bool:
+    """Is root a venv whose Python starts? A slow first start (Windows Defender scanning a fresh engine's
+    DLLs) counts as yes: only a missing file or a Python that exits with an error is a broken venv."""
+    py = engine_python(root)
+    if not (py.exists() and (root / "pyvenv.cfg").exists()):
+        return False
+    try:
+        return run([str(py), "-c", "pass"], capture_output=True, timeout=120, creationflags=NO_WINDOW).returncode == 0
+    except subprocess.TimeoutExpired:
+        return True
+    except (OSError, RuntimeError):
+        return False
 
 
 def free_bytes(path: Path) -> int:
@@ -161,6 +320,18 @@ def free_bytes(path: Path) -> int:
 
 
 # ---------------------------------------------------------------- the setup
+def model_choices(catalog: list[dict], chosen: list[str] | None) -> list[str] | None:
+    """Carry an existing opt-in to its replacement, without enabling a previously skipped task."""
+    replacements = {old: m["id"] for m in catalog
+                    for old in ([m["replaces"]] if isinstance(m.get("replaces"), str) else m.get("replaces", []))}
+    return list(dict.fromkeys(replacements.get(repo, repo) for repo in chosen)) if chosen is not None else None
+
+
+def runtime_tools(catalog: list[dict], chosen: list[str] | None) -> list[str]:
+    tasks = {m["task"] for m in catalog if chosen is None or m["id"] in chosen}
+    return ["llama"] if "translate" in tasks else []
+
+
 class Setup:
     """Installs the engine and the models in a thread; the page polls public()."""
 
@@ -178,23 +349,47 @@ class Setup:
     def plan(self) -> dict:
         """What the setup would do, for the page to show before anything is downloaded."""
         cfg, st = config(), (STATE if STATE["engine"] is not None else check())
-        os.environ.setdefault("PIANPIAN_MODELS", str(models_dir()))
+        os.environ.update(pipeline_env())
         catalog = models.status()
-        chosen = cfg.get("models")                          # what was picked last time; a model left out is not asked for again
+        chosen = model_choices(catalog, cfg.get("models"))
+        cfg = {**cfg, "models": chosen}
         missing = [m for m in catalog if not m["ready"] and (chosen is None or m["id"] in chosen)]
-        os.environ["PIANPIAN_MODELS"] = str(models_dir())
-        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(),
-                "free": free_bytes(Path(cfg["data"])), "needed": not st["engine"] or not st["current"] or bool(missing)}
+        runtime = runtimes.status(which=runtime_tools(catalog, chosen))
+        return {"config": cfg, "engine": st, "uv": bool(uv()), "engineMB": ENGINE_MB, "models": catalog, "old": models.unused(include_pending=True) + old_engines(),
+                "runtime": runtime, "accelLocked": bool(PATH_OVERRIDES["PIANPIAN_ACCEL"]),
+                "runtimeOptions": {b: runtimes.status(backend=b, which=runtime_tools(catalog, None)) for b in runtimes.available_backends()},
+                "free": free_bytes(Path(cfg["data"])),
+                "needed": not st["engine"] or not st["current"] or bool(missing) or bool(runtime and not runtime["ready"])}
 
-    def start(self, library: str | None, data: str | None, want: list[str], cleanup: bool = False) -> None:
+    def start(self, library: str | None, data: str | None, want: list[str], cleanup: bool = False, accel: str | None = None) -> None:
         with self.lock:
             if self.state == "running":
                 raise RuntimeError("the setup is already running")
-            save_config(library=library, data=data, models=want)
+            if accel is not None and accel not in runtimes.available_backends():
+                raise ValueError("unknown acceleration choice")
+            previous_python, before = python(), _moveable()
+            old_data = data_dir()
+            want = model_choices(models.CATALOG, want)
+            save_config(library=library, data=data, models=want,
+                        accel=accel or config().get("accel") or runtimes.default_backend())
+            if data_dir() != old_data:                      # the old engine can't move (absolute paths): offered for cleanup
+                save_config(moved_from=sorted(d for d in {*config().get("moved_from", []), str(old_data)} if Path(d) != data_dir()))
+            os.environ.update(pipeline_env())
+            # the models, runtime and dictionary follow the data folder instead of being downloaded again
+            self.moves = [(src, dst) for src, dst in zip(before, _moveable())
+                          if src != dst and src.is_dir() and not dst.is_relative_to(src)
+                          and not (dst.exists() and any(dst.iterdir()))]
+            if python() != previous_python:
+                STATE.update(engine=False, current=False)
             self.state, self.error = "running", ""
             self.steps = [{"id": "engine", "label": "Engine: Python and the pipeline's tools", "state": "waiting", "done": 0, "total": 0}]
+            catalog = models.status()
+            self.runtime_tools = runtime_tools(catalog, want)
+            if self.runtime_tools:
+                r = runtimes.status(which=self.runtime_tools)
+                self.steps.append({"id": "runtime", "label": r["label"], "state": "waiting", "done": 0, "total": r["size"]})
             self.steps += [{"id": m["id"], "label": m["about"], "state": "waiting", "done": 0, "total": m.get("size") or 0}
-                           for m in models.status() if m["id"] in want]
+                           for m in catalog if m["id"] in want]
             self.log.clear()
         self.cleanup = cleanup
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -211,24 +406,51 @@ class Setup:
 
     def _exec(self, cmd: list[str], env: dict, sid: str) -> None:
         self._say("$ " + " ".join(Path(cmd[0]).name if i == 0 else c for i, c in enumerate(cmd)))
-        p = subprocess.Popen(cmd, env={**os.environ, **env}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-        for line in p.stdout:
-            if line.startswith("@progress "):
-                try:
-                    d = json.loads(line[10:])
-                    with self.lock:
-                        s = next(s for s in self.steps if s["id"] == sid)
-                        s["files"] = {**s.get("files", {}), d["file"]: d["done"]}
-                        s["done"] = sum(s["files"].values())
-                except (ValueError, KeyError, StopIteration):
-                    pass
-                continue
-            self._say(line)
-        if p.wait():
-            raise RuntimeError(f"{Path(cmd[0]).name} stopped (exit {p.returncode}); see the log")
+        with process(cmd, env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **env},
+                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                     errors="replace", bufsize=1, creationflags=NO_WINDOW) as p:
+            for line in p.stdout:
+                if line.startswith("@progress "):
+                    try:
+                        d = json.loads(line[10:])
+                        with self.lock:
+                            s = next(s for s in self.steps if s["id"] == sid)
+                            s["files"] = {**s.get("files", {}), d["file"]: d["done"]}
+                            s["done"] = sum(s["files"].values())
+                    except (ValueError, KeyError, StopIteration):
+                        pass
+                    continue
+                self._say(line)
+            if p.wait():
+                raise RuntimeError(f"{Path(cmd[0]).name} stopped (exit {p.returncode}); see the log")
+
+    def _uv(self, cmd: list[str], env: dict) -> None:
+        if WINDOWS:
+            return self._exec(cmd, env, "engine")
+        # uv's optional dylib rewrite triggers Apple's developer-tools installer (#14893).
+        # Our engine builds no native extensions: leave Python's signed library untouched.
+        data_dir().mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="uv-tools-", dir=data_dir()) as folder:
+            Path(folder, "install_name_tool").symlink_to("/usr/bin/false")
+            self._exec(cmd, {**env, "PATH": folder + os.pathsep + env.get("PATH", os.environ.get("PATH", os.defpath))}, "engine")
 
     def _run(self) -> None:
         try:
+            if WINDOWS and self.runtime_tools and not PATH_OVERRIDES["PIANPIAN_ACCEL"]:
+                # Optional GPU checks stay in the worker so setup admission remains quick.
+                chosen = config().get("accel", "cpu")
+                # Vulkan can be chosen manually without vulkaninfo; backend startup still checks it.
+                usable = chosen != "cuda" or runtimes.nvidia()
+                if not usable:
+                    self._say(f"{chosen} could not be confirmed; using the smaller CPU runtime instead")
+                    save_config(accel="cpu")
+                    os.environ.update(pipeline_env())
+            for src, dst in getattr(self, "moves", []):
+                self._say(f"moving {src} to {dst}")
+                if dst.is_dir():
+                    dst.rmdir()                             # empty (checked in start)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(dst))             # a rename on one disk, a copy then delete across disks
             self._say("checking which download sources are fastest from here")
             net = mirror_env()
             for k, v in net.items():
@@ -238,27 +460,47 @@ class Setup:
             if not (STATE["engine"] and STATE["current"]):
                 exe = uv()
                 if not exe:
-                    raise RuntimeError("uv was not found (it comes inside Pianpian.app; for the source version: brew install uv)")
+                    raise RuntimeError("uv was not found (it comes inside the app; for the source version install uv)")
                 self._step("engine", state="running")
                 eng = engine_dir()
-                if not (eng / "bin" / "python").exists():
-                    self._exec([exe, "venv", "--python", "3.12", str(eng)], env, "engine")
+                py = engine_python(eng)
+                if not venv_starts(eng):
+                    # missing, or a venv whose Python can't start: made again (`uv venv --clear` refuses a folder
+                    # without pyvenv.cfg, uv 0.13.7). engine/ holds only the venv and its stamp, so nothing else is
+                    # lost. Failing imports are not a reason: the sync below repairs the packages
+                    if eng.exists():
+                        if not ((eng / "pyvenv.cfg").exists() or (eng / ".pianpian-requirements").exists() or not any(eng.iterdir())):
+                            raise RuntimeError(f"{eng} is not Pianpian's engine: move it away, or choose another data folder")
+                        self._say(f"the engine in {eng} can't start: making it again")
+                        shutil.rmtree(eng)
+                    self._uv([exe, "venv", "--python", "3.12", str(eng)], env)
                 # sync, not install: the engine ends up exactly as pinned, packages no longer listed are removed
-                self._exec([exe, "pip", "sync", "--python", str(eng / "bin" / "python"), str(REQS)], env, "engine")
+                self._uv([exe, "pip", "sync", "--python", str(py), str(REQS)], env)
                 (eng / ".pianpian-requirements").write_text(requirements_id() + "\n")
                 self._say("fetching the dictionary (CC-CEDICT)")
-                self._exec([str(eng / "bin" / "python"), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",
+                self._exec([str(py), "-c", "import sys; sys.path.insert(0, sys.argv[1]); import srt_tool; srt_tool.ensure_cedict()",
                             str(HERE / "pipeline")], {"PYTHONWARNINGS": "ignore::SyntaxWarning", **pipeline_env()}, "engine")
             self._say("checking the engine (the first start prepares its packages: about a minute)")
-            check()
+            checked = check()
+            if not (checked["engine"] and checked["current"]):
+                raise RuntimeError("engine is not installed or could not start after setup")
             self._step("engine", state="done")
-            for s in self.steps[1:]:
+            if self.runtime_tools:
+                r = runtimes.status(which=self.runtime_tools)
+                self._step("runtime", label=r["label"], total=r["size"], state="running")
+                self._exec([python(), str(RUNTIMES_PY), "ensure", *self.runtime_tools], pipeline_env(), "runtime")
+                self._step("runtime", state="done", done=r["size"])
+            for s in [x for x in self.steps if x["id"] not in ("engine", "runtime")]:
                 self._step(s["id"], state="running")
                 self._exec([python(), str(MODELS_PY), "ensure", s["id"]], pipeline_env(), s["id"])
                 self._step(s["id"], state="done", done=s["total"])
             if getattr(self, "cleanup", False):
-                os.environ["PIANPIAN_MODELS"] = str(models_dir())
-                self._say(f"deleted old models: {models.remove_unused() / 1e9:.1f} GB freed")
+                freed = models.remove_unused()
+                for o in old_engines():
+                    shutil.rmtree(o["path"])
+                    freed += o["bytes"]
+                save_config(moved_from=[])
+                self._say(f"deleted old files: {freed / 1e9:.1f} GB freed")
             with self.lock:
                 self.state = "done"
         except Exception as e:                                # shown on the page, with the log
@@ -267,6 +509,23 @@ class Setup:
                 for s in self.steps:
                     if s["state"] == "running":
                         s["state"] = "failed"
+
+
+def _moveable() -> list[Path]:
+    """The downloads that can follow the data folder: models, runtime, dictionary (unless set by hand)."""
+    return [models_dir(), runtime_dir(), cache_dir()]
+
+
+def old_engines() -> list[dict]:
+    """The engine and Python left in data folders the setup moved away from (plan()["old"], the cleanup)."""
+    out = []
+    for d in config().get("moved_from", []):
+        for sub, ours in (("engine", ".pianpian-requirements"), ("python", "cpython-*")):
+            p = Path(d) / sub
+            if p.is_dir() and Path(d) != data_dir() and any(p.glob(ours)):   # only what the setup made there
+                out.append({"name": f"{sub} in {d}", "path": str(p),
+                            "bytes": sum(f.stat().st_size for f in p.rglob("*") if f.is_file() and not f.is_symlink())})
+    return out
 
 
 def speed(url: str, size: int = 400_000, seconds: float = 5.0) -> float:
@@ -303,3 +562,41 @@ def mirror_env() -> dict:
 
 
 SETUP = Setup()
+
+
+# ---------------------------------------------------------------- the desktop
+def reveal(path: Path) -> None:
+    """Show a folder in the file manager (Explorer on Windows, Finder on macOS)."""
+    if WINDOWS:
+        os.startfile(str(path))                             # noqa: S606  (Explorer, no shell command)
+    else:
+        subprocess.Popen(["open", str(path)])
+
+
+# the browsers yt-dlp can borrow a Bilibili login from (--cookies-from-browser): key -> macOS app
+BROWSERS = {"safari": "Safari", "chrome": "Google Chrome", "brave": "Brave Browser", "firefox": "Firefox",
+            "edge": "Microsoft Edge", "chromium": "Chromium", "opera": "Opera", "vivaldi": "Vivaldi"}
+
+
+def installed_browsers() -> list[str]:
+    """The browsers on this machine that yt-dlp can borrow a Bilibili login from."""
+    if not WINDOWS:                                         # macOS: the apps in /Applications (Safari is always there)
+        apps = [Path("/Applications"), Path.home() / "Applications"]
+        return [k for k, name in BROWSERS.items() if k == "safari" or any((a / f"{name}.app").exists() for a in apps)]
+    local = Path(os.environ.get("LOCALAPPDATA", ""))
+    pf = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+    pf86 = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+    homes = {
+        "chrome": [local / "Google/Chrome/Application/chrome.exe", pf / "Google/Chrome/Application/chrome.exe",
+                   pf86 / "Google/Chrome/Application/chrome.exe"],
+        "edge": [pf86 / "Microsoft/Edge/Application/msedge.exe", pf / "Microsoft/Edge/Application/msedge.exe"],
+        "brave": [local / "BraveSoftware/Brave-Browser/Application/brave.exe",
+                  pf / "BraveSoftware/Brave-Browser/Application/brave.exe"],
+        "firefox": [pf / "Mozilla Firefox/firefox.exe", pf86 / "Mozilla Firefox/firefox.exe"],
+        "chromium": [local / "Chromium/Application/chrome.exe", pf / "Chromium/Application/chrome.exe"],
+        "opera": [local / "Programs/Opera/opera.exe", pf / "Opera/opera.exe"],
+        "vivaldi": [local / "Vivaldi/Application/vivaldi.exe", pf / "Vivaldi/Application/vivaldi.exe"],
+    }
+    which = {"chrome": "chrome", "edge": "msedge", "brave": "brave", "firefox": "firefox",
+             "chromium": "chromium", "opera": "opera", "vivaldi": "vivaldi"}
+    return [k for k, paths in homes.items() if any(p.is_file() for p in paths) or shutil.which(which[k])]

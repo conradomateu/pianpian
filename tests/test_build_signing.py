@@ -90,6 +90,8 @@ def test_release_artifacts_include_stapled_app(monkeypatch, tmp_path, signed):
     monkeypatch.setattr(build.shutil, "which", lambda _: "/path/to/uv")
     monkeypatch.setattr(build, "signing_identity", lambda: IDENTITY)
     monkeypatch.setattr(build, "icon", lambda _: Path("icon.icns"))
+    monkeypatch.setattr(build, "speech_payload", lambda folder: (folder / "pianpian-sensevoice", []))
+    monkeypatch.setattr(build, "alignment_payload", lambda folder: (folder / "pianpian-align", []))
     (tmp_path / "pipeline").mkdir()
     calls = []
 
@@ -126,6 +128,10 @@ def test_release_artifacts_include_stapled_app(monkeypatch, tmp_path, signed):
         assert "--options" in signing[0] and "runtime" in signing[0]
         assert len([args for args in calls if "submit" in args]) == 2
         assert len([args for args in calls if args[:3] == ("xcrun", "stapler", "validate")]) == 2
+        first_submission = next(i for i, args in enumerate(calls) if "submit" in args)
+        for helper in ("pianpian-sensevoice", "pianpian-align"):
+            probe = (str(build.APP / "Contents" / "Resources" / "pipeline" / "bin" / helper), "--help")
+            assert calls.index(probe) < first_submission
     else:
         assert not any("notarytool" in args for args in calls)
         assert signing == [("codesign", "--force", "--deep", "--sign", "-", str(build.APP))]

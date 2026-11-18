@@ -6,7 +6,6 @@
     python pipeline/study.py ~/Movies/clip.mp4                            # a file: works in clip_study/
 
     AUTO_EN=1     also translate to English with the local model (FORCE_EN=1 replaces existing English)
-    HARDSUBS=1    the Chinese is burned into the picture: read it with OCR (macOS Vision) instead of Whisper
     RESPLIT=1 SPLIT_MAX=12   cut the lines again (0 = as transcribed)
 
 Run it with the app's Python environment (pyproject.toml, group "runtime"): every step calls the
@@ -31,7 +30,7 @@ import links  # noqa: E402
 import models  # noqa: E402
 
 PY = sys.executable
-MODEL = os.environ.get("WHISPER_MODEL") or models.default("transcribe")
+MODEL = os.environ.get("ASR_MODEL") or models.default("transcribe")
 FIXES = HERE / "pinyin_fixes.txt"
 os.environ.setdefault("PYTHONWARNINGS", "ignore::SyntaxWarning")   # jieba 0.42 on Python 3.12+
 
@@ -133,9 +132,10 @@ def get_video(src: str, browser: str) -> Path:
 
 
 def transcribe(video: str) -> None:
+    # the audio first: a video ffmpeg cannot read fails in seconds, not after the speech model has downloaded
+    run(ffmpeg(), "-loglevel", "error", "-y", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "audio.wav")
     model = models.ensure(MODEL)
     print(f"transcribing with {MODEL}", flush=True)
-    run(ffmpeg(), "-loglevel", "error", "-y", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "audio.wav")
     backend.impl().transcribe(Path("audio.wav"), model, Path("zh.long.srt"), Path("zh.whisper.json"))
     Path("audio.wav").unlink(missing_ok=True)
     Path(".from-whisper").touch()
@@ -176,22 +176,17 @@ def main() -> None:
     work = get_video(src, browser)
     os.chdir(work)
     print(f"folder: {work}", flush=True)                     # server.py reads this line
-    if env("HARDSUBS"):
-        Path(".hardsubs").touch()                            # remembered for rebuilds
     hardsubs = Path(".hardsubs").exists()
     video = next(str(p) for p in sorted(Path(".").glob("source.*")) if p.suffix not in (".srt", ".vtt", ".xml", ".json"))
     auto_en, resplit = bool(env("AUTO_EN")), bool(env("RESPLIT"))
     split_max = env("SPLIT_MAX") or (Path(".split").read_text().strip() if Path(".split").exists() else "18")
 
-    # Chinese: the platform's subtitles, else OCR (burned in) or Whisper; zh.long.srt as made, zh.srt cut short
+    # Chinese: existing platform subtitles, otherwise SenseVoice. Preserve legacy .hardsubs layout only.
     if not Path("zh.srt").exists():
         existing = next((p for p in sorted(Path(".").glob("source.*.srt")) if "danmaku" not in p.name), None)
         if existing:
             print(f"using the platform's subtitles: {existing}", flush=True)
             shutil.copy2(existing, "zh.long.srt")
-        elif hardsubs:
-            print("Chinese is burned into the picture: reading it with macOS OCR (check zh.srt afterwards)", flush=True)
-            run(PY, HERE / "hardsubs_to_srt.py", video, "zh.long.srt", "--crop", "0.15", "--fps", "4")
         else:
             print("no Chinese subtitles found", flush=True)
             transcribe(video)
@@ -202,7 +197,7 @@ def main() -> None:
         if Path(".from-whisper").exists() and not Path("zh.whisper.json").exists():
             transcribe(video)                                 # Whisper folders made before word timestamps
         if Path("en.lines.txt").exists():                     # the line numbers change: the English is redone
-            Path("en.lines.txt").rename("en.lines.before-split.txt")
+            Path("en.lines.txt").replace("en.lines.before-split.txt")
             Path("zh.en.srt").unlink(missing_ok=True)
             auto_en = True
     if resplit:
@@ -211,28 +206,30 @@ def main() -> None:
         tool("split", "zh.long.srt", "--max", split_max, *words, "-o", "zh.srt")
         Path(".split").write_text(split_max + "\n")
 
-    # pinyin, the translation worksheet and the player's words (redone when zh.srt or the fixes change)
-    if not newer("zh.pinyin.srt", "zh.srt", FIXES) or not Path("zh.zh-pinyin.srt").exists():   # it writes both
+    # Segmentation upgrades invalidate both word tracks, without redoing Chinese or English.
+    if not newer("zh.pinyin.srt", "zh.srt", FIXES, HERE / "srt_tool.py") or not Path("zh.zh-pinyin.srt").exists():   # it writes both
         tool("pinyin", "zh.srt")
     if not newer("zh.lines.txt", "zh.srt"):
         tool("export", "zh.srt")
-    if not newer("zh.words.json", "zh.srt", FIXES):
+    if not newer("zh.words.json", "zh.srt", FIXES, HERE / "srt_tool.py", HERE / "grammar.py",
+                 HERE / "data" / "hsk3.json", "zh.whisper.json"):
         tool("words", "zh.srt")
 
     # English from the local model; written to a .part file first, so a failed run never loses English you had
     if auto_en and (not Path("en.lines.txt").exists() or env("FORCE_EN")):
         print("translating with a local model (translate_srt.py)", flush=True)
         run(PY, HERE / "translate_srt.py", "zh.srt", "-o", "en.lines.txt.part")
-        Path("en.lines.txt.part").rename("en.lines.txt")
+        Path("en.lines.txt.part").replace("en.lines.txt")     # replace, not rename: Windows rename won't overwrite (7 Nov 2026)
         Path(".english-auto").touch()
     if Path("en.lines.txt").exists() and not newer("zh.en.srt", "en.lines.txt", "zh.srt"):
         tool("import", "zh.srt", "en.lines.txt")
     if Path("zh.en.srt").exists():
         tool("stack", "zh.srt", "zh.pinyin.srt", "zh.en.srt", "-o", "zh.trilingual.srt")
         tool("ass", "zh.pinyin.srt", "zh.en.srt", "-o", "zh.pinyin-en.ass", "--margin-v", "190")
-        if not newer("zh.align.json", "zh.en.srt", "zh.srt"):  # English word ↔ Chinese word links
+        align = getattr(backend.impl(), "align", None)        # English word ↔ Chinese word links, where the backend can
+        if align and not newer("zh.align.json", "zh.en.srt", "zh.srt", "zh.words.json", HERE / "align_srt.py"):
             try:
-                run(PY, HERE / "align_srt.py", "zh.srt", "zh.en.srt")
+                align(Path("zh.srt"), Path("zh.en.srt"))
             except subprocess.CalledProcessError:
                 print("word links skipped (align_srt.py failed)", flush=True)
 

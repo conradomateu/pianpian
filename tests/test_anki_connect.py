@@ -134,6 +134,34 @@ def test_status_is_usable_authenticated_collection(service, monkeypatch):
     assert client.status()["state"] == "unsupported"
 
 
+def test_status_has_one_total_timeout_budget(monkeypatch):
+    now, timeouts = [0.0], []
+    monkeypatch.setattr(anki.time, "monotonic", lambda: now[0])
+
+    class Response:
+        status = 200
+        def __init__(self, result):
+            self.body = json.dumps({"result": result, "error": None}).encode()
+        def read(self, limit):
+            return self.body
+
+    class Connection:
+        def __init__(self, host, port, timeout):
+            timeouts.append(timeout)
+            now[0] += 4
+        def request(self, method, path, body, headers):
+            self.action = json.loads(body)["action"]
+        def getresponse(self):
+            result = 6 if self.action == "version" else "Study" if self.action == "getActiveProfile" else ["Default"]
+            return Response(result)
+        def close(self):
+            pass
+
+    monkeypatch.setattr(anki.http.client, "HTTPConnection", Connection)
+    assert anki.Client().status()["state"] == "connected"
+    assert timeouts == [10, 6, 2, pytest.approx(.1)]
+
+
 @pytest.mark.parametrize("body,status", [(b"<html>another service</html>", 200), (b"{}", 200),
                                         (b'{"result": 6, "error": null}', 302), (b"", 401),
                                         (b'{"error": "Only this local demo session can execute examples."}', 403),
@@ -247,7 +275,7 @@ def test_tones_preserve_escaped_text_and_literal_sentence_matches(service, highl
 
 def test_tone_palette_matches_kit_light_dark_and_is_scoped(service):
     collection, client = service
-    kit = (Path(__file__).resolve().parents[1] / "assets" / "kit.css").read_text()
+    kit = (Path(__file__).resolve().parents[1] / "assets" / "kit.css").read_text(encoding="utf-8")
     parts = [[str(tone), tone] for tone in range(1, 6)]
     client.export("Default", {"Expression": "你好", "Pinyin": "12345"}, "palette", tones={"pinyin": parts})
     value = collection.notes[1000]["fields"]["Pinyin"]["value"]

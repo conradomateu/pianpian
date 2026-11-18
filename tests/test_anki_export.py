@@ -122,6 +122,25 @@ def test_failed_retime_does_not_reuse_truncated_bounds(media, monkeypatch):
     assert "k" in json.loads(words.read_text())["cues"][0]
 
 
+
+def test_retime_ignores_a_whisper_file_linked_from_outside(media, tmp_path, monkeypatch):
+    # GET zh.words.json runs the retime; a zh.whisper.json link out of the video folder must not feed it
+    (tmp_path / "elsewhere.json").write_text("{}")
+    (media / "zh.whisper.json").symlink_to(tmp_path / "elsewhere.json")
+    monkeypatch.setattr(anki_export.engine, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("retime ran")))
+    assert anki_export.study_words(media) == json.loads((media / "zh.words.json").read_text())
+
+
+def test_retime_runs_once_per_change_of_the_files(media, monkeypatch):
+    # GET zh.words.json is reachable by any page (a plain <img> request): repeating it must not repeat the subprocess
+    (media / "zh.whisper.json").write_text("{}")
+    out = (media / "zh.words.json").read_text()
+    runs = []
+    monkeypatch.setattr(anki_export.engine, "run", lambda *a, **kw: runs.append(a) or subprocess.CompletedProcess(a, 0, out, ""))
+    for _ in range(5):
+        anki_export.study_words(media)
+    assert len(runs) == 1
+
 def test_edited_subtitles_cannot_reuse_stale_word_identity(media):
     selection = {**request_data()["selection"], "sentence": "你好，中文", "expression": "你好"}
     original = anki_export.selection_anchor(media, selection)
@@ -161,6 +180,23 @@ def test_duration_rounding_cannot_reverse_interval(media, monkeypatch):
         anki_export.bounds(media / "source.wav", {"start": 3.141, "end": 3.144})
 
 
+def test_render_uses_fast_input_seek_and_keeps_clip_duration(media, monkeypatch):
+    seen = []
+    real_run = subprocess.run
+
+    def run(cmd, **kwargs):
+        seen.append(cmd)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(anki_export.engine, "run", run)
+    clip = anki_export.render_clip(media / "source.wav", 2, 2.5)
+    assert seen[-1].index("-ss") < seen[-1].index("-i")
+    assert clip.suffix == ".mp3" and clip.stat().st_size > 0
+    duration = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                        "-of", "csv=p=0", str(clip)], text=True)
+    assert abs(float(duration) - .5) < .1
+
+
 def test_export_chooses_the_playing_video_over_audio_sidecar(media):
     (media / "source.mp3").touch()
     (media / "source.mp4").touch()
@@ -190,7 +226,7 @@ def test_anki_http_requires_guard_and_returns_readable_validation(media, monkeyp
 
 def test_windows_engine_executable_layout(tmp_path, monkeypatch):
     monkeypatch.delenv("PIANPIAN_PYTHON", raising=False)
-    monkeypatch.setattr(engine.sys, "platform", "win32")
+    monkeypatch.setattr(engine, "WINDOWS", True)                # computed at import: patch the flag, not sys.platform
     monkeypatch.setattr(engine, "engine_dir", lambda: tmp_path)
     py = tmp_path / "Scripts" / "python.exe"
     py.parent.mkdir()

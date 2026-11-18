@@ -32,6 +32,9 @@ def test_share_text_and_phone_links():
     assert n("看这个 (https://www.bilibili.com/video/BV13x41117TL/)，很好") == "https://www.bilibili.com/video/BV13x41117TL/"
     assert n("https://m.bilibili.com/video/BV13x41117TL?share_source=copy_web") == "https://www.bilibili.com/video/BV13x41117TL"
     assert n("  https://www.bilibili.com/video/BV13x41117TL  ") == "https://www.bilibili.com/video/BV13x41117TL"
+    # the language switcher's locale segment: /ru/video/BV… is the same page, and yt-dlp only matches /video/…
+    assert n("https://www.bilibili.com/ru/video/BV1884g6mE8K/?spm_id_from=333.337") == "https://www.bilibili.com/video/BV1884g6mE8K/"
+    assert n("https://www.bilibili.com/bangumi/play/ep2008926") == "https://www.bilibili.com/bangumi/play/ep2008926"  # no locale: untouched
 
 
 def test_no_link_is_an_error():

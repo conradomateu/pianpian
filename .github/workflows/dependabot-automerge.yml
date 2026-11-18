@@ -1,6 +1,6 @@
 # Merges Dependabot's pull requests by itself once the required checks pass.
-# Needs "Allow auto-merge" on, and `check` as a required status check on main:
-# without that, GitHub merges at once instead of waiting.
+# Needs "Allow auto-merge" on, and `check` + `check-windows` as required status checks on main:
+# without that, GitHub merges at once instead of waiting. check-windows also builds the installer.
 name: dependabot-automerge
 on: pull_request
 permissions:

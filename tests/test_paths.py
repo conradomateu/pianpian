@@ -8,7 +8,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "pipeline")]
 
 def test_percent_in_a_folder_is_not_a_template():
     import study
-    assert study.literal(Path("/Users/a b/100% 中文")) == "/Users/a b/100%% 中文"
+    assert study.literal(Path("100% 中文")) == "100%% 中文"
 
 
 def test_hugging_face_cache_follows_hf_home(monkeypatch, tmp_path):
@@ -27,11 +27,16 @@ def test_the_app_tells_the_pipeline_where_its_data_is(monkeypatch, tmp_path):
     monkeypatch.setenv("PIANPIAN_HOME", str(tmp_path))
     monkeypatch.delenv("PIANPIAN_MODELS", raising=False)
     monkeypatch.delenv("PIANPIAN_CACHE", raising=False)
+    monkeypatch.delenv("PIANPIAN_RUNTIME", raising=False)
+    monkeypatch.delenv("PIANPIAN_ACCEL", raising=False)
     import importlib
     import engine
     importlib.reload(engine)
     env = engine.pipeline_env()
-    assert env == {"PIANPIAN_MODELS": str(tmp_path / "models"), "PIANPIAN_CACHE": str(tmp_path / "cache")}
+    expected = {"PIANPIAN_MODELS": str(tmp_path / "models"), "PIANPIAN_CACHE": str(tmp_path / "cache")}
+    expected["PIANPIAN_RUNTIME"] = str(tmp_path / "runtime")
+    expected["PIANPIAN_ACCEL"] = engine.runtimes.default_backend()
+    assert env == expected
 
 
 def test_no_personal_paths_in_what_ships():

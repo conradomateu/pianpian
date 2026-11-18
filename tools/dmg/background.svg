@@ -5,5 +5,4 @@
   <text x="330" y="86" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Helvetica,sans-serif" font-size="14" fill="#8A7F74">片片 · one slice a day</text>
   <path d="M264 190 H382" stroke="#DE3B26" stroke-width="5" stroke-linecap="round" stroke-dasharray="0.1 13"/>
   <path d="M368 171 L394 190 L368 209" fill="none" stroke="#DE3B26" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="330" y="338" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Helvetica,sans-serif" font-size="12" fill="#8A7F74">First time? If macOS says it can't check the app: System Settings → Privacy &amp; Security → Open Anyway.</text>
 </svg>

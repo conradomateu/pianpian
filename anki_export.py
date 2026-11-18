@@ -54,10 +54,12 @@ def study_words(folder):
         if cached and cached[0] == stamp:
             return cached[1]
         data = json.loads(words.read_text(encoding="utf-8"))
-        if raw.exists():
+        if raw.exists() and raw.resolve().is_relative_to(folder.resolve()):   # a link out of the folder is ignored
             try:
-                result = subprocess.run([engine.python(), str(engine.HERE / "pipeline" / "srt_tool.py"), "retime", str(words),
-                                         "--whisper", str(raw)], capture_output=True, text=True, encoding="utf-8", timeout=30, check=True)
+                result = engine.run([engine.python(), str(engine.HERE / "pipeline" / "srt_tool.py"), "retime", str(words),
+                                         "--whisper", str(raw)], capture_output=True, text=True, encoding="utf-8", timeout=30, check=True,
+                                        env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **engine.pipeline_env()},
+                                        creationflags=engine.NO_WINDOW)
                 data = json.loads(result.stdout)
             except (OSError, subprocess.SubprocessError, ValueError):
                 # Old word bounds can truncate speech; sentence preview remains available without the engine.
@@ -96,8 +98,9 @@ def _ffmpeg():
 def duration(path):
     stamp = _fingerprint(path)
     if stamp not in _DURATIONS:
-        result = subprocess.run([_ffmpeg(), "-nostdin", "-hide_banner", "-i", str(path)],
-                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        result = engine.run([_ffmpeg(), "-nostdin", "-hide_banner", "-i", str(path)],
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                                creationflags=engine.NO_WINDOW)
         match = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
         if not match or "Audio:" not in result.stderr:
             raise ValueError("This source has no readable audio track.")
@@ -154,9 +157,9 @@ def render_clip(path, start, end):
         if not dest.exists():
             with tempfile.TemporaryDirectory(dir=folder) as tmp:
                 output = Path(tmp) / "clip.mp3"
-                result = subprocess.run([_ffmpeg(), "-nostdin", "-v", "error", "-i", str(path),
-                    "-ss", f"{start:.3f}", "-t", f"{end-start:.3f}", "-map", "0:a:0", "-vn",
-                    "-map_metadata", "-1", "-c:a", "libmp3lame", "-q:a", "2", str(output)], capture_output=True, timeout=60)
+                result = engine.run([_ffmpeg(), "-nostdin", "-v", "error", "-ss", f"{start:.3f}", "-i", str(path),
+                    "-t", f"{end-start:.3f}", "-map", "0:a:0", "-vn",
+                    "-map_metadata", "-1", "-c:a", "libmp3lame", "-q:a", "2", str(output)], capture_output=True, timeout=60, creationflags=engine.NO_WINDOW)
                 if result.returncode or not output.exists() or output.stat().st_size == 0:
                     raise ValueError("Could not extract this audio. Check the selected times and source file.")
                 os.replace(output, dest)

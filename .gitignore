@@ -19,3 +19,6 @@ build/
 
 # personal notes for AI agents on this Mac (AGENTS.md and CLAUDE.md are the shared ones)
 CLAUDE.local.md
+
+# Native speech helper built locally; release builds compile and bundle their own.
+pipeline/bin/
