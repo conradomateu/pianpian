@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/conradomateu/pianpian/compare/pianpian-v0.3.0...pianpian-v0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* accept Apple Metal when starting Mac setup ([9815cfa](https://github.com/conradomateu/pianpian/commit/9815cfa8b2346794d7aa442b864e507457d96099))
+
 ## [0.3.0](https://github.com/conradomateu/pianpian/compare/pianpian-v0.2.0...pianpian-v0.3.0) (2026-11-16)
 
 
