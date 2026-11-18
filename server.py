@@ -514,7 +514,7 @@ class Handler(BaseHTTPRequestHandler):
                 for d in (library, folder):
                     if d and not Path(d).expanduser().is_absolute():
                         return self.fail(400, f"not a full folder path: {d}")
-                if data.get("accel") not in (None, "cpu", "cuda", "vulkan"):
+                if data.get("accel") is not None and data["accel"] not in engine.runtimes.available_backends():
                     return self.fail(400, "unknown acceleration choice")
                 with STARTING:
                     if ANKI_ACTIVE:
