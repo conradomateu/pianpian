@@ -139,14 +139,20 @@ The certificate is reused across releases; each build warns when it expires with
 CSR/key generation can be automated, but Apple's public API does not issue Developer ID certificates:
 use Apple Developer or Xcode to issue a replacement, then update the two certificate secrets.
 
-Verified on 18 Nov 2026 on the development Mac: importing the password-protected PKCS#12 into
-a fresh temporary keychain and signing a disposable executable with Developer ID, hardened runtime
-and an Apple timestamp. Its signature, Team ID and timestamp passed verification. This tests the
-identity and import process, not the packaged app.
-Also verified on 18 Nov 2026 on that Mac: the complete build, Apple notarization of the app and
-DMG (both Accepted), stapled tickets, strict signature checks and Gatekeeper acceptance as
-`Notarized Developer ID`. Not tested yet: a GitHub Actions signing run and launching the resulting
-signed app on a clean Mac. Unit tests simulate Apple's commands; the local build used the real service.
+Verified on 18 Nov 2026:
+
+- On the development Mac, a fresh temporary keychain imported the protected PKCS#12 and signed
+  a disposable executable with Developer ID, hardened runtime and an Apple timestamp.
+- The initial v0.1.4 build passed real Apple notarization, stapling, strict signature checks and
+  Gatekeeper acceptance for both app and DMG. The signed app opened its setup screen on that Mac.
+- The current v0.3.2 source plus signing changes passed the complete
+  [GitHub Actions build](https://github.com/conradomateu/pianpian/actions/runs/44271008449)
+  on macOS 15 ARM64: native helper startup, signing, notarization, stapling, Gatekeeper checks,
+  first-run setup with developer commands blocked, artifact upload and credential cleanup.
+  This was a manual test run; it did not publish or replace a release.
+
+Not tested: interactive installation and launch of the final GitHub artifact on a clean Mac.
+Unit tests simulate Apple's commands; the local and GitHub builds used the real service.
 
 Releases: merging release-please's pull request tags a version and creates the GitHub release; then
 `.github/workflows/app.yml` builds the app on an Apple Silicon runner and attaches
